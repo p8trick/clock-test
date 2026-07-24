@@ -41,6 +41,13 @@
     display:flex; justify-content:space-between; align-items:center;
     font-size:11px; color:var(--ink-dim); letter-spacing:.03em; flex:0 0 auto; padding:2px 4px 8px;
   }
+  .syncstatusbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font:inherit; font-size:11px; padding:6px 10px; border-radius:8px;
+    display:flex; align-items:center; gap:2px;
+  }
+  .syncstatusbtn:active{background:var(--panel-edge);}
+  .refreshglyph{margin-left:5px; font-size:13px; color:var(--ink-dim);}
   .syncdot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle;}
   .sync-ok{background:var(--good); box-shadow:0 0 6px var(--good);}
   .sync-bad{background:var(--bad); box-shadow:0 0 6px var(--bad);}
@@ -166,8 +173,10 @@
 
   <div id="screenCapture" class="screen">
     <div class="minibar">
-      <span><span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span></span>
-      <button id="openSettingsBtn" class="gearbtn" aria-label="设置">\u2699\ufe0f</button>
+      <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
+        <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
+      </button>
+      <button id="openSettingsBtn" class="gearbtn" aria-label="设置">设置</button>
     </div>
 
     <div id="captureZone">
@@ -329,19 +338,27 @@
     document.getElementById('syncstatus').textContent = text;
   }
 
-  function trySyncSource(url, parseFn, timeoutMs){
+  var MAX_PLAUSIBLE_OFFSET_MS = 45000;
+
+  function trySyncSource(url, responseType, parseFn, timeoutMs){
     return new Promise(function(resolve, reject){
       var timer = setTimeout(function(){ reject(new Error('timeout')); }, timeoutMs);
       var t0 = performance.now();
-      fetch(url, {cache:'no-store'}).then(function(res){ return res.json(); }).then(function(json){
+      fetch(url, {cache:'no-store'}).then(function(res){
+        return responseType === 'text' ? res.text() : res.json();
+      }).then(function(body){
         clearTimeout(timer);
         var t1 = performance.now();
-        var serverMs = parseFn(json);
-        if(!serverMs){ reject(new Error('parse fail')); return; }
+        var serverMs = parseFn(body);
+        if(!serverMs || isNaN(serverMs)){ reject(new Error('parse fail')); return; }
         var rtt = t1 - t0;
         var estimatedServerNow = serverMs + rtt/2;
         var localNow = Date.now();
         var offset = estimatedServerNow - localNow;
+        if(Math.abs(offset) > MAX_PLAUSIBLE_OFFSET_MS){
+          reject(new Error('implausible offset ' + offset));
+          return;
+        }
         resolve({ offset: offset, rttMs: Math.round(rtt), source: url });
       }).catch(function(err){ clearTimeout(timer); reject(err); });
     });
@@ -352,15 +369,28 @@
     var sources = [
       function(){
         return trySyncSource(
-          'https://worldtimeapi.org/api/timezone/Etc/UTC',
-          function(j){ return j && j.unixtime ? j.unixtime*1000 + (j.raw_offset||0)*0 : null; },
+          'https://www.cloudflare.com/cdn-cgi/trace',
+          'text',
+          function(text){
+            var m = text && text.match(/ts=(\d+(?:\.\d+)?)/);
+            return m ? parseFloat(m[1]) * 1000 : null;
+          },
           4000
         );
       },
       function(){
         return trySyncSource(
           'https://timeapi.io/api/Time/current/zone?timeZone=UTC',
+          'json',
           function(j){ return j && j.dateTime ? Date.parse(j.dateTime + 'Z') : null; },
+          4000
+        );
+      },
+      function(){
+        return trySyncSource(
+          'https://worldtimeapi.org/api/timezone/Etc/UTC',
+          'json',
+          function(j){ return j && j.unixtime ? j.unixtime*1000 : null; },
           4000
         );
       }
@@ -974,6 +1004,7 @@
 
     document.getElementById('captureZone').addEventListener('click', capture);
     document.getElementById('resyncBtn').addEventListener('click', syncTime);
+    document.getElementById('syncStatusBtn').addEventListener('click', syncTime);
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('exportPredBtn').addEventListener('click', exportPrediction);
     document.getElementById('clearBtn').addEventListener('click', clearLog);
