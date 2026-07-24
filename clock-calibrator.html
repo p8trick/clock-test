@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>校准计时器 Clock Calibrator</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0d10">
+<link id="favicon" rel="icon" href="">
+<link id="appleicon" rel="apple-touch-icon" href="">
+<link id="manifestLink" rel="manifest" href="">
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#12151a;
+    --panel-edge:#1d2128;
+    --ink:#e9edf2;
+    --ink-dim:#7c8593;
+    --accent:#ff8a3d;
+    --accent-dim:#8a5330;
+    --good:#4fd48a;
+    --bad:#ff5c5c;
+    --mono:'SF Mono','Menlo','Consolas','Roboto Mono',monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',sans-serif;
+    overscroll-behavior:none; user-select:none; -webkit-user-select:none;
+  }
+  #app{
+    min-height:100vh; min-height:100dvh;
+    display:flex; flex-direction:column;
+    padding: max(14px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom));
+  }
+  .topbar{
+    display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px;
+    font-size:11px; color:var(--ink-dim); letter-spacing:.03em;
+    padding-bottom:10px; border-bottom:1px solid var(--panel-edge);
+  }
+  .syncdot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle;}
+  .sync-ok{background:var(--good); box-shadow:0 0 6px var(--good);}
+  .sync-bad{background:var(--bad); box-shadow:0 0 6px var(--bad);}
+  .sync-wait{background:var(--ink-dim);}
+  .iconbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:11px; padding:5px 10px; border-radius:6px; font-family:inherit;
+  }
+  .iconbtn:active{background:var(--panel-edge); color:var(--ink);}
+
+  .seasonrow{display:flex; gap:6px;}
+  .seasonbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:11px; padding:5px 9px; border-radius:6px; font-family:inherit;
+  }
+  .seasonbtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.08);}
+
+  .starwrap{position:relative; display:inline-block; font-size:15px; letter-spacing:2px; height:16px; vertical-align:middle;}
+  .star-bg{color:#2a2f38; white-space:nowrap;}
+  .star-fg{position:absolute; top:0; left:0; overflow:hidden; white-space:nowrap; color:var(--accent);}
+
+  .modelblock{margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--panel-edge);}
+  .modelblock:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+  .modelhead{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
+  .modelname{font-size:12px; color:var(--ink-dim); letter-spacing:.03em;}
+  .modelname.iscurrent{color:var(--accent);}
+  .predlist{font-size:12px; color:var(--ink-dim); line-height:1.6; margin-top:2px;}
+  .predlist b{color:var(--ink); font-weight:600;}
+  .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
+
+  #captureZone{
+    flex:1 1 auto; min-height:42vh; margin-top:14px;
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:16px;
+    padding:22px 10px 26px; text-align:center; position:relative;
+    display:flex; flex-direction:column; justify-content:center; align-items:center;
+    transition:background .08s, border-color .08s;
+  }
+  #captureZone.pressed{background:#1a1f27; border-color:var(--accent-dim);}
+  .datestr{font-size:14px; color:var(--ink-dim); letter-spacing:.05em; margin-bottom:6px; font-family:var(--mono);}
+  .timestr{
+    font-family:var(--mono); font-weight:600; letter-spacing:.01em;
+    font-size:16.5vw; line-height:1; color:var(--ink);
+    font-variant-numeric:tabular-nums; -webkit-font-feature-settings:"tnum";
+    display:flex; justify-content:center; align-items:baseline; flex-wrap:wrap;
+  }
+  .timestr .ms{font-size:7vw; color:var(--accent); margin-left:.15em;}
+  .taphint{font-size:11px; color:var(--ink-dim); margin-top:16px; letter-spacing:.03em;}
+
+  #captureBtn{
+    margin-top:16px; width:100%; padding:20px; border:none; border-radius:14px;
+    background:var(--accent); color:#1a0f04; font-size:17px; font-weight:700;
+    letter-spacing:.04em; font-family:inherit;
+  }
+  #captureBtn:active{background:#e57630;}
+
+  .toolrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+  .toolrow .iconbtn{flex:1 1 40%; padding:9px 4px; font-size:11.5px;}
+
+  #manualAddBtn{width:100%; margin-top:8px;}
+  .manualform{display:none; margin-top:10px; padding:12px; background:var(--panel); border:1px solid var(--panel-edge); border-radius:12px;}
+  .manualform.open{display:block;}
+  .manualform label.mtitle{font-size:11px; color:var(--ink-dim); display:block; margin-bottom:6px;}
+  .manualform .mfillrow{display:flex; gap:8px;}
+  .manualform input[type=text]{
+    flex:1; min-width:0; background:#1a1e25; color:var(--ink); border:1px solid var(--panel-edge);
+    border-radius:8px; padding:9px; font-family:var(--mono); font-size:13px; color-scheme:dark;
+  }
+  .manualform #manualFillNowBtn{flex:0 0 auto; padding:9px 10px; font-size:11px;}
+  .manualform .chkrow{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-dim); margin-top:10px;}
+  .manualform .mbtnrow{display:flex; gap:8px; margin-top:12px;}
+  .manualform .mbtnrow button{flex:1;}
+
+  #log{flex:1 1 auto; margin-top:16px; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  .logempty{color:var(--ink-dim); font-size:13px; text-align:center; padding:30px 10px;}
+  .logrow{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 12px; border-bottom:1px solid var(--panel-edge); font-size:13px;
+  }
+  .logrow .lt{font-family:var(--mono); color:var(--ink);}
+  .logrow .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px;}
+  .logrow .seasontag{display:inline-block; font-size:10px; padding:1px 5px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
+  .logrow .lx{background:none; border:none; color:var(--ink-dim); font-size:16px; padding:4px 8px; white-space:nowrap;}
+  .logrow .lx.lxconfirm{background:var(--bad); color:#fff; font-size:11px; font-weight:600; border-radius:6px; padding:5px 9px;}
+  .logrow.calmarked{background:rgba(255,138,61,.06);}
+  .noteinput{
+    width:100%; background:transparent; border:none; color:var(--ink-dim);
+    font-size:11px; font-family:inherit; padding:2px 0 0; outline:none;
+  }
+  .logbtnrow{display:flex; gap:8px; margin-top:4px;}
+  .clockrow{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;}
+  .clocklabel{font-size:11px; color:var(--ink-dim);}
+  .clockinput{
+    background:#1a1e25; color:var(--ink); border:1px solid var(--panel-edge);
+    border-radius:6px; padding:3px 6px; font-family:var(--mono); font-size:12px; color-scheme:dark;
+  }
+  .driftresult{font-size:11px; color:var(--accent); font-weight:600;}
+  .calbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:10px; padding:3px 8px; border-radius:5px; font-family:inherit; white-space:nowrap;
+  }
+  .calbtn.calactive{border-color:var(--accent); color:var(--accent);}
+
+  #statsPanel{
+    margin-top:12px; padding:14px; background:var(--panel);
+    border:1px solid var(--panel-edge); border-radius:12px;
+  }
+  .statstitle{font-size:11px; color:var(--ink-dim); letter-spacing:.03em; margin-bottom:8px;}
+  .statsline{font-size:13px; color:var(--ink); line-height:1.7;}
+  .statsbig{font-size:16px; font-weight:700; color:var(--accent); margin:2px 0;}
+
+  #settingsPanel{
+    display:none; margin-top:12px; padding:12px; background:var(--panel);
+    border:1px solid var(--panel-edge); border-radius:12px; font-size:12px; color:var(--ink-dim);
+  }
+  #settingsPanel.open{display:block;}
+  #settingsPanel h4{margin:0 0 8px; color:var(--ink); font-size:12px;}
+  #settingsPanel p{margin:4px 0; line-height:1.6;}
+  #settingsPanel code{color:var(--accent); font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div><span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span></div>
+    <div class="seasonrow">
+      <button class="seasonbtn" id="seasonSummerBtn">☀️ 夏季</button>
+      <button class="seasonbtn" id="seasonWinterBtn">❄️ 冬季</button>
+    </div>
+    <button id="settingsBtn" class="iconbtn">设置</button>
+  </div>
+
+  <div id="captureZone">
+    <div class="datestr" id="datestr">----年--月--日</div>
+    <div class="timestr" id="timestr">--:--:--<span class="ms" id="msstr">.---</span></div>
+    <div class="taphint">点击此区域 · 空格/回车键 · 蓝牙小键盘 均可记录</div>
+  </div>
+
+  <button id="captureBtn">记 录 CAPTURE</button>
+
+  <div class="toolrow">
+    <button class="iconbtn" id="resyncBtn">重新同步</button>
+    <button class="iconbtn" id="exportBtn">导出CSV</button>
+    <button class="iconbtn" id="exportPredBtn">导出预测JSON</button>
+    <button class="iconbtn" id="clearBtn">清空记录</button>
+  </div>
+
+  <button class="iconbtn" id="manualAddBtn">+ 手动补录一条历史记录(如已过去的校准时刻)</button>
+  <div class="manualform" id="manualForm">
+    <label class="mtitle">补录时刻(可手写到毫秒，格式: YYYY-MM-DD HH:MM:SS.mmm)</label>
+    <div class="mfillrow">
+      <input type="text" id="manualDT" inputmode="numeric" placeholder="2026-07-23 15:20:17.345">
+      <button class="iconbtn" id="manualFillNowBtn">填入当前</button>
+    </div>
+    <div class="chkrow">
+      <input type="checkbox" id="manualCalChk">
+      <label for="manualCalChk">标记为校准点(该时刻挂钟已被调至与真实时间一致)</label>
+    </div>
+    <div class="mbtnrow">
+      <button class="iconbtn" id="manualCancelBtn">取消</button>
+      <button class="iconbtn" id="manualConfirmBtn">确认添加</button>
+    </div>
+  </div>
+
+  <div id="statsPanel"></div>
+
+  <div id="settingsPanel">
+    <h4>说明</h4>
+    <p>时间来源: 每次打开自动从网络时间服务器同步一次(NTP式往返估算),之后按该偏移量持续走时,失败则回退到 iPhone 本机时钟。</p>
+    <p>iOS 系统本身不允许网页/PWA 拦截音量+/-键，这是系统限制。请改用 <code>空格 / 回车</code> 键，或蓝牙数字小键盘任意按键触发记录，效果与实体按键一致，且更可靠。</p>
+    <p>记录列表保存在本机 localStorage，可点导出为 CSV / JSON。</p>
+    <p>统计: 至少3条记录才会计算漂移趋势,建议间隔约1周做一次记录,间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
+    <p>季节模型: 室温影响机芯漂移速率,夏冬分开建模。顶部切换当前季节后,新记录会打上对应标签,两套模型各自独立回归、独立预测,互不干扰。校准点是全局的(对表这个物理动作影响两季),但对表之后各季节仍从各自最近数据重新起算。</p>
+    <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
+    <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
+    <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，支持手写到毫秒(格式 YYYY-MM-DD HH:MM:SS.mmm)，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
+  </div>
+
+  <div id="log"><div class="logempty">尚无记录</div></div>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var STORAGE_KEY = 'cc_records_v1';
+  var SEASON_KEY = 'cc_season_v1';
+  var HISTORY_KEY = 'cc_history_v1';
+  var offsetMs = 0;
+  var lastSyncInfo = null;
+  var records = [];
+  var seasonMode = 'summer';
+  var driftHistory = { summer: [], winter: [] };
+
+  function loadSeason(){
+    try{
+      var v = localStorage.getItem(SEASON_KEY);
+      seasonMode = (v === 'winter') ? 'winter' : 'summer';
+    }catch(e){ seasonMode = 'summer'; }
+  }
+
+  function saveSeason(){
+    try{ localStorage.setItem(SEASON_KEY, seasonMode); }catch(e){}
+  }
+
+  function loadHistory(){
+    try{
+      var raw = localStorage.getItem(HISTORY_KEY);
+      driftHistory = raw ? JSON.parse(raw) : { summer: [], winter: [] };
+      if(!driftHistory.summer){ driftHistory.summer = []; }
+      if(!driftHistory.winter){ driftHistory.winter = []; }
+    }catch(e){ driftHistory = { summer: [], winter: [] }; }
+  }
+
+  function saveHistory(){
+    try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(driftHistory)); }catch(e){}
+  }
+
+  function loadRecords(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      records = raw ? JSON.parse(raw) : [];
+    }catch(e){ records = []; }
+  }
+
+  function saveRecords(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }catch(e){}
+  }
+
+  function pad(n, len){
+    n = String(Math.floor(n));
+    while(n.length < len){ n = '0' + n; }
+    return n;
+  }
+
+  function nowCorrected(){
+    return Date.now() + offsetMs;
+  }
+
+  function formatDateStr(d){
+    var weekday = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+    return d.getFullYear() + '年' + pad(d.getMonth()+1,2) + '月' + pad(d.getDate(),2) + '日 ' + weekday;
+  }
+
+  function renderClock(){
+    var t = nowCorrected();
+    var d = new Date(t);
+    document.getElementById('datestr').textContent = formatDateStr(d);
+    document.getElementById('timestr').firstChild.textContent =
+      pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2);
+    document.getElementById('msstr').textContent = '.' + pad(d.getMilliseconds(),3);
+    requestAnimationFrame(renderClock);
+  }
+
+  function setSyncStatus(state, text){
+    var dot = document.getElementById('syncdot');
+    dot.className = 'syncdot ' + (state === 'ok' ? 'sync-ok' : state === 'bad' ? 'sync-bad' : 'sync-wait');
+    document.getElementById('syncstatus').textContent = text;
+  }
+
+  function trySyncSource(url, parseFn, timeoutMs){
+    return new Promise(function(resolve, reject){
+      var timer = setTimeout(function(){ reject(new Error('timeout')); }, timeoutMs);
+      var t0 = performance.now();
+      fetch(url, {cache:'no-store'}).then(function(res){ return res.json(); }).then(function(json){
+        clearTimeout(timer);
+        var t1 = performance.now();
+        var serverMs = parseFn(json);
+        if(!serverMs){ reject(new Error('parse fail')); return; }
+        var rtt = t1 - t0;
+        var estimatedServerNow = serverMs + rtt/2;
+        var localNow = Date.now();
+        var offset = estimatedServerNow - localNow;
+        resolve({ offset: offset, rttMs: Math.round(rtt), source: url });
+      }).catch(function(err){ clearTimeout(timer); reject(err); });
+    });
+  }
+
+  function syncTime(){
+    setSyncStatus('wait', '正在同步...');
+    var sources = [
+      function(){
+        return trySyncSource(
+          'https://worldtimeapi.org/api/timezone/Etc/UTC',
+          function(j){ return j && j.unixtime ? j.unixtime*1000 + (j.raw_offset||0)*0 : null; },
+          4000
+        );
+      },
+      function(){
+        return trySyncSource(
+          'https://timeapi.io/api/Time/current/zone?timeZone=UTC',
+          function(j){ return j && j.dateTime ? Date.parse(j.dateTime + 'Z') : null; },
+          4000
+        );
+      }
+    ];
+    attemptSources(sources, 0);
+  }
+
+  function attemptSources(sources, idx){
+    if(idx >= sources.length){
+      offsetMs = 0;
+      setSyncStatus('bad', '同步失败 · 使用本机时间');
+      lastSyncInfo = { offset:0, rttMs:null, source:'device', at:Date.now() };
+      return;
+    }
+    sources[idx]().then(function(result){
+      offsetMs = result.offset;
+      lastSyncInfo = { offset: result.offset, rttMs: result.rttMs, source: result.source, at: Date.now() };
+      var sign = result.offset >= 0 ? '+' : '';
+      setSyncStatus('ok', '已同步 偏移' + sign + Math.round(result.offset) + 'ms · 往返' + result.rttMs + 'ms');
+    }).catch(function(){
+      attemptSources(sources, idx+1);
+    });
+  }
+
+  function formatInterval(ms){
+    if(ms === null || ms === undefined){ return ''; }
+    var sign = ms < 0 ? '-' : '';
+    ms = Math.abs(ms);
+    var totalSec = Math.floor(ms/1000);
+    var days = Math.floor(totalSec/86400);
+    var hours = Math.floor((totalSec%86400)/3600);
+    var mins = Math.floor((totalSec%3600)/60);
+    var secs = totalSec%60;
+    var parts = [];
+    if(days > 0){ parts.push(days + '天'); }
+    if(days > 0 || hours > 0){ parts.push(hours + '小时'); }
+    if(days > 0 || hours > 0 || mins > 0){ parts.push(mins + '分'); }
+    if(days === 0 && hours === 0){ parts.push(secs + '秒'); }
+    return sign + parts.join('');
+  }
+
+  function nearestDisplayedTimestamp(trueT, hh, mm){
+    var d = new Date(trueT);
+    var candidate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0).getTime();
+    var diff = trueT - candidate;
+    if(diff > 12*3600000){ candidate += 86400000; }
+    else if(diff < -12*3600000){ candidate -= 86400000; }
+    return candidate;
+  }
+
+  function setClockDisplay(id, hhmm){
+    for(var i=0;i<records.length;i++){
+      if(records[i].id === id){
+        if(!hhmm){
+          records[i].clockDisplay = '';
+          records[i].explicitDriftMs = null;
+        } else {
+          var parts = hhmm.split(':');
+          var hh = parseInt(parts[0], 10);
+          var mm = parseInt(parts[1], 10);
+          if(!isNaN(hh) && !isNaN(mm)){
+            var displayedT = nearestDisplayedTimestamp(records[i].t, hh, mm);
+            records[i].clockDisplay = hhmm;
+            records[i].explicitDriftMs = records[i].t - displayedT;
+          }
+        }
+        break;
+      }
+    }
+    saveRecords();
+    renderLog();
+    renderStats();
+  }
+
+  function toFullTimestampText(t){
+    var d = new Date(t);
+    return d.getFullYear() + '-' + pad(d.getMonth()+1,2) + '-' + pad(d.getDate(),2) +
+      ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) +
+      '.' + pad(d.getMilliseconds(),3);
+  }
+
+  function parseFullTimestampText(str){
+    if(!str){ return NaN; }
+    var m = str.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:[.,](\d{1,3}))?$/);
+    if(!m){ return NaN; }
+    var ms = m[7] ? parseInt((m[7] + '00').slice(0,3), 10) : 0;
+    var d = new Date(
+      parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10),
+      parseInt(m[4],10), parseInt(m[5],10), parseInt(m[6],10), ms
+    );
+    return d.getTime();
+  }
+
+  function manualAddRecord(dtValue, markCal){
+    var t = parseFullTimestampText(dtValue);
+    if(isNaN(t)){ alert('时间格式无效，请按 YYYY-MM-DD HH:MM:SS.mmm 输入(毫秒部分可省略)'); return false; }
+    var d = new Date(t);
+    var sorted = records.slice().sort(function(a,b){ return a.t - b.t; });
+    var prevT = null;
+    for(var i=0;i<sorted.length;i++){ if(sorted[i].t < t){ prevT = sorted[i].t; } }
+    var rec = {
+      id: 'r' + t + '_' + Math.floor(Math.random()*1000) + '_m',
+      t: t,
+      display: formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3),
+      deltaMs: prevT !== null ? (t - prevT) : null,
+      syncSource: 'manual',
+      note: '手动补录',
+      isCalibration: !!markCal,
+      season: seasonMode,
+      clockDisplay: '',
+      explicitDriftMs: null
+    };
+    records.push(rec);
+    saveRecords();
+    renderLog();
+    renderStats();
+    return true;
+  }
+
+  function capture(){
+    var t = nowCorrected();
+    var d = new Date(t);
+    var prev = records.length ? records[records.length-1].t : null;
+    var rec = {
+      id: 'r' + t + '_' + Math.floor(Math.random()*1000),
+      t: t,
+      display: formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3),
+      deltaMs: prev ? (t - prev) : null,
+      syncSource: lastSyncInfo ? lastSyncInfo.source : 'device',
+      note: '',
+      isCalibration: false,
+      season: seasonMode,
+      clockDisplay: '',
+      explicitDriftMs: null
+    };
+    records.push(rec);
+    saveRecords();
+    renderLog();
+    renderStats();
+    trackHistory();
+    var zone = document.getElementById('captureZone');
+    zone.classList.add('pressed');
+    setTimeout(function(){ zone.classList.remove('pressed'); }, 90);
+  }
+
+  function deleteRecord(id){
+    records = records.filter(function(r){ return r.id !== id; });
+    saveRecords();
+    renderLog();
+    renderStats();
+  }
+
+  var pendingDeleteId = null;
+  var pendingDeleteTimer = null;
+
+  function requestDelete(id){
+    if(pendingDeleteId === id){
+      if(pendingDeleteTimer){ clearTimeout(pendingDeleteTimer); pendingDeleteTimer = null; }
+      pendingDeleteId = null;
+      deleteRecord(id);
+    } else {
+      pendingDeleteId = id;
+      if(pendingDeleteTimer){ clearTimeout(pendingDeleteTimer); }
+      pendingDeleteTimer = setTimeout(function(){
+        pendingDeleteId = null;
+        pendingDeleteTimer = null;
+        renderLog();
+      }, 3000);
+      renderLog();
+    }
+  }
+
+  function updateNote(id, val){
+    for(var i=0;i<records.length;i++){
+      if(records[i].id === id){ records[i].note = val; break; }
+    }
+    saveRecords();
+  }
+
+  function toggleCalibration(id){
+    for(var i=0;i<records.length;i++){
+      if(records[i].id === id){ records[i].isCalibration = !records[i].isCalibration; break; }
+    }
+    saveRecords();
+    renderLog();
+    renderStats();
+  }
+
+  function renderLog(){
+    var log = document.getElementById('log');
+    if(!records.length){
+      log.innerHTML = '<div class="logempty">尚无记录</div>';
+      return;
+    }
+    log.innerHTML = '';
+    for(var i = records.length - 1; i >= 0; i--){
+      (function(r){
+        var row = document.createElement('div');
+        row.className = 'logrow' + (r.isCalibration ? ' calmarked' : '');
+        var left = document.createElement('div');
+        left.style.flex = '1';
+        var lt = document.createElement('div');
+        lt.className = 'lt';
+        lt.textContent = r.display;
+        var ld = document.createElement('div');
+        ld.className = 'ld';
+        ld.textContent = (r.deltaMs !== null ? ('距上次 ' + formatInterval(r.deltaMs) + ' · ') : '') + '来源 ' + (r.syncSource === 'device' ? '本机' : (r.syncSource === 'manual' ? '手动补录' : '服务器'));
+        var stag = document.createElement('span');
+        stag.className = 'seasontag';
+        stag.textContent = (r.season === 'winter') ? '❄️冬' : '☀️夏';
+        ld.appendChild(stag);
+
+        var clockRow = document.createElement('div');
+        clockRow.className = 'clockrow';
+        var clockLabel = document.createElement('span');
+        clockLabel.className = 'clocklabel';
+        clockLabel.textContent = '挂钟显示';
+        var clockInput = document.createElement('input');
+        clockInput.type = 'time';
+        clockInput.className = 'clockinput';
+        clockInput.value = r.clockDisplay || '';
+        clockInput.addEventListener('change', function(){ setClockDisplay(r.id, clockInput.value); });
+        var driftSpan = document.createElement('span');
+        driftSpan.className = 'driftresult';
+        if(r.explicitDriftMs !== null && r.explicitDriftMs !== undefined){
+          var dsec = r.explicitDriftMs / 1000;
+          driftSpan.textContent = dsec >= 0
+            ? ('本次发现挂钟已漂移 ' + dsec.toFixed(1) + ' 秒(落后)')
+            : ('本次发现挂钟领先 ' + Math.abs(dsec).toFixed(1) + ' 秒');
+        } else {
+          driftSpan.textContent = '';
+        }
+        clockRow.appendChild(clockLabel);
+        clockRow.appendChild(clockInput);
+        clockRow.appendChild(driftSpan);
+
+        var note = document.createElement('input');
+        note.className = 'noteinput';
+        note.placeholder = '备注';
+        note.value = r.note || '';
+        note.addEventListener('change', function(){ updateNote(r.id, note.value); });
+        var btnrow = document.createElement('div');
+        btnrow.className = 'logbtnrow';
+        var calBtn = document.createElement('button');
+        calBtn.className = 'calbtn' + (r.isCalibration ? ' calactive' : '');
+        calBtn.textContent = r.isCalibration ? '\u2605 校准点(点击取消)' : '设为校准点';
+        calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
+        btnrow.appendChild(calBtn);
+        left.appendChild(lt); left.appendChild(ld); left.appendChild(clockRow); left.appendChild(note); left.appendChild(btnrow);
+        var del = document.createElement('button');
+        del.className = 'lx' + (pendingDeleteId === r.id ? ' lxconfirm' : '');
+        del.textContent = (pendingDeleteId === r.id) ? '确认删除' : '\u00d7';
+        del.addEventListener('click', function(){ requestDelete(r.id); });
+        row.appendChild(left); row.appendChild(del);
+        log.appendChild(row);
+      })(records[i]);
+    }
+  }
+
+  function getActiveRecords(season){
+    var sorted = records.slice().sort(function(a,b){ return a.t - b.t; });
+    var lastCalIdx = -1;
+    for(var i=0;i<sorted.length;i++){
+      if(sorted[i].isCalibration){ lastCalIdx = i; }
+    }
+    var afterCal = lastCalIdx >= 0 ? sorted.slice(lastCalIdx) : sorted;
+    if(!season){ return afterCal; }
+    return afterCal.filter(function(r){ return (r.season || 'summer') === season; });
+  }
+
+  function computeLagSeries(active){
+    var out = [];
+    var prevKnown = null;
+    for(var i=0;i<active.length;i++){
+      var r = active[i];
+      var y;
+      if(r.explicitDriftMs !== null && r.explicitDriftMs !== undefined){
+        y = r.explicitDriftMs;
+      } else {
+        var raw = r.t % 60000;
+        if(raw < 0){ raw += 60000; }
+        if(prevKnown === null){
+          y = raw;
+        } else {
+          var k = Math.ceil((prevKnown - raw) / 60000);
+          if(k < 0){ k = 0; }
+          y = raw + 60000*k;
+        }
+      }
+      out.push(y);
+      prevKnown = y;
+    }
+    return out;
+  }
+
+  var HALF_LIFE_DAYS = 35;
+
+  function computeWeights(active){
+    var lastT = active[active.length-1].t;
+    return active.map(function(r){
+      var ageDays = (lastT - r.t) / 86400000;
+      return Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
+    });
+  }
+
+  function weightedRegression(xs, ys, ws){
+    var n = xs.length;
+    var Sw=0, Swx=0, Swy=0, Swxx=0, Swxy=0;
+    for(var i=0;i<n;i++){
+      var w = ws[i];
+      Sw += w; Swx += w*xs[i]; Swy += w*ys[i];
+      Swxx += w*xs[i]*xs[i]; Swxy += w*xs[i]*ys[i];
+    }
+    var denom = (Sw*Swxx - Swx*Swx);
+    var slope = denom !== 0 ? (Sw*Swxy - Swx*Swy)/denom : 0;
+    var intercept = (Swy - slope*Swx)/Sw;
+    var yMean = Swy/Sw;
+    var ssTot=0, ssRes=0, sumW2=0;
+    for(var j=0;j<n;j++){
+      var pred = intercept + slope*xs[j];
+      ssRes += ws[j]*Math.pow(ys[j]-pred,2);
+      ssTot += ws[j]*Math.pow(ys[j]-yMean,2);
+      sumW2 += ws[j]*ws[j];
+    }
+    var r2 = ssTot !== 0 ? 1 - ssRes/ssTot : 1;
+    var effectiveN = sumW2 !== 0 ? (Sw*Sw)/sumW2 : n;
+    return { slope: slope, intercept: intercept, r2: r2, effectiveN: effectiveN };
+  }
+
+  function computeConfidence(active, reg){
+    var spanDays = (active[active.length-1].t - active[0].t) / 86400000;
+    var countScore = Math.min(1, (reg.effectiveN - 2) / 10);
+    var spanScore = Math.min(1, spanDays / 21);
+    var r2Clamped = Math.max(0, Math.min(1, reg.r2));
+    var combined = countScore*0.35 + spanScore*0.35 + r2Clamped*0.30;
+    var stars = Math.round(combined*5*2) / 2;
+    if(stars < 0.5){ stars = 0.5; }
+    return stars;
+  }
+
+  function starHtml(stars){
+    var pct = (stars/5)*100;
+    return '<span class="starwrap"><span class="star-bg">\u2605\u2605\u2605\u2605\u2605</span>' +
+      '<span class="star-fg" style="width:' + pct + '%">\u2605\u2605\u2605\u2605\u2605</span></span>' +
+      ' <span style="font-size:11px;color:var(--ink-dim)">' + stars.toFixed(1) + '</span>';
+  }
+
+  function computeStats(season){
+    var active = getActiveRecords(season);
+    if(active.length < 3){
+      return { ok:false, count: active.length, needed: 3 - active.length };
+    }
+    var t0 = active[0].t;
+    var xs = active.map(function(r){ return (r.t - t0) / 86400000; });
+    var ys = computeLagSeries(active);
+    var ws = computeWeights(active);
+    var reg = weightedRegression(xs, ys, ws);
+    if(reg.slope <= 0){
+      return { ok:false, count: active.length, noDrift:true };
+    }
+    var lastY = ys[ys.length-1];
+    var cycleDays = 60000 / reg.slope;
+    var target1 = (Math.floor(lastY/60000) + 1) * 60000;
+    var xTarget1 = (target1 - reg.intercept) / reg.slope;
+    var predictedTime1 = t0 + xTarget1*86400000;
+    var predictedTime2 = predictedTime1 + cycleDays*86400000;
+    var predictedTime3 = predictedTime2 + cycleDays*86400000;
+    var stars = computeConfidence(active, reg);
+    return {
+      ok:true,
+      count: active.length,
+      effectiveN: reg.effectiveN,
+      baselineT: t0,
+      driftSecPerDay: reg.slope / 1000,
+      r2: reg.r2,
+      cycleDays: cycleDays,
+      stars: stars,
+      predictedTime1: predictedTime1,
+      predictedTime2: predictedTime2,
+      predictedTime3: predictedTime3,
+      daysFromNow: (predictedTime1 - Date.now()) / 86400000
+    };
+  }
+
+  function trackHistory(){
+    var s = computeStats(seasonMode);
+    if(!s.ok){ return; }
+    var arr = driftHistory[seasonMode];
+    arr.push({ at: Date.now(), driftSecPerDay: s.driftSecPerDay, stars: s.stars, count: s.count });
+    if(arr.length > 10){ arr = arr.slice(arr.length - 10); driftHistory[seasonMode] = arr; }
+    saveHistory();
+  }
+
+  function shortDT(ms){
+    var d = new Date(ms);
+    return (d.getMonth()+1) + '/' + d.getDate() + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2);
+  }
+
+  function renderModelBlock(season, isCurrent){
+    var label = season === 'summer' ? '☀️ 夏季模型' : '❄️ 冬季模型';
+    var s = computeStats(season);
+    var html = '<div class="modelblock"><div class="modelhead"><span class="modelname' + (isCurrent ? ' iscurrent' : '') + '">' + label + (isCurrent ? '(当前生效)' : '') + '</span></div>';
+    if(!s.ok){
+      if(s.noDrift){
+        html += '<div class="statsline">暂无变慢趋势</div>';
+      } else {
+        html += '<div class="statsline">还需 ' + s.needed + ' 条记录(共需≥3条)，当前 ' + s.count + ' 条</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+    html += '<div class="statsline">' + starHtml(s.stars) + '</div>';
+    html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(2) + ' 秒 · 拟合优度 ' + Math.round(s.r2*100) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
+    html += '<div class="predlist">';
+    html += '第1次: <b>' + shortDT(s.predictedTime1) + '</b><br>';
+    html += '第2次: <b>' + shortDT(s.predictedTime2) + '</b><br>';
+    html += '第3次: <b>' + shortDT(s.predictedTime3) + '</b>';
+    html += '</div>';
+    var hist = driftHistory[season];
+    if(hist && hist.length >= 2){
+      var recent = hist.slice(-4);
+      html += '<div class="trendline">收敛趋势: ' + recent.map(function(h){ return h.driftSecPerDay.toFixed(2); }).join(' \u2192 ') + ' 秒/天</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderStats(){
+    var el = document.getElementById('statsPanel');
+    var html = renderModelBlock(seasonMode, true);
+    var otherSeason = seasonMode === 'summer' ? 'winter' : 'summer';
+    html += renderModelBlock(otherSeason, false);
+    el.innerHTML = html;
+  }
+
+  function exportPrediction(){
+    var summer = computeStats('summer');
+    var winter = computeStats('winter');
+    function pack(s){
+      if(!s.ok){ return { ok:false, count: s.count||0 }; }
+      return {
+        ok:true,
+        count: s.count,
+        baselineTime: s.baselineT,
+        driftSecPerDay: s.driftSecPerDay,
+        fitR2: s.r2,
+        confidenceStars: s.stars,
+        cycleDays: s.cycleDays,
+        nextCorrectionTime: s.predictedTime1,
+        nextNextCorrectionTime: s.predictedTime2,
+        thirdCorrectionTime: s.predictedTime3,
+        correctionAction: '+1 minute'
+      };
+    }
+    var summerPacked = pack(summer);
+    var winterPacked = pack(winter);
+    if(!summerPacked.ok && !winterPacked.ok){
+      alert('两个季节模型数据都不足，暂时无法生成预测(每个模型至少需要3条同季节记录)');
+      return;
+    }
+    var payload = {
+      generatedAt: Date.now(),
+      activeSeason: seasonMode,
+      models: { summer: summerPacked, winter: winterPacked }
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'clock-prediction-' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  }
+
+  function exportData(){
+    if(!records.length){ return; }
+    var lines = ['id,timestamp_ms,display,delta_ms,sync_source,season,clock_display,explicit_drift_ms,is_calibration,note'];
+    records.forEach(function(r){
+      var note = (r.note||'').replace(/,/g,'，').replace(/\n/g,' ');
+      lines.push([
+        r.id, r.t, r.display, r.deltaMs===null?'':r.deltaMs, r.syncSource, r.season||'',
+        r.clockDisplay||'', (r.explicitDriftMs===null||r.explicitDriftMs===undefined)?'':r.explicitDriftMs,
+        r.isCalibration?1:0, note
+      ].join(','));
+    });
+    var csv = lines.join('\n');
+    var blob = new Blob([csv], {type:'text/csv'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'clock-calibration-' + Date.now() + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  }
+
+  function clearLog(){
+    if(!records.length){ return; }
+    if(confirm('确定清空全部 ' + records.length + ' 条记录？此操作不可撤销。')){
+      records = [];
+      saveRecords();
+      renderLog();
+      renderStats();
+    }
+  }
+
+  function buildIconDataUrl(){
+    var canvas = document.createElement('canvas');
+    canvas.width = 192; canvas.height = 192;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0b0d10';
+    ctx.fillRect(0,0,192,192);
+    ctx.strokeStyle = '#ff8a3d';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(96,96,72,0,Math.PI*2);
+    ctx.stroke();
+    ctx.strokeStyle = '#e9edf2';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(96,96); ctx.lineTo(96,50);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(96,96); ctx.lineTo(128,110);
+    ctx.stroke();
+    return canvas.toDataURL('image/png');
+  }
+
+  function setupPWA(){
+    var iconUrl = buildIconDataUrl();
+    document.getElementById('favicon').href = iconUrl;
+    document.getElementById('appleicon').href = iconUrl;
+    var manifest = {
+      name: '校准计时器',
+      short_name: '校准计时器',
+      start_url: './',
+      display: 'standalone',
+      background_color: '#0b0d10',
+      theme_color: '#0b0d10',
+      icons: [{ src: iconUrl, sizes: '192x192', type: 'image/png' }]
+    };
+    var manifestBlob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+    document.getElementById('manifestLink').href = URL.createObjectURL(manifestBlob);
+
+    if('serviceWorker' in navigator){
+      var swCode = [
+        "self.addEventListener('install', function(e){ self.skipWaiting(); });",
+        "self.addEventListener('activate', function(e){ self.clients.claim(); });",
+        "self.addEventListener('fetch', function(e){});"
+      ].join('\n');
+      var swBlob = new Blob([swCode], {type:'application/javascript'});
+      var swUrl = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl).catch(function(){});
+    }
+  }
+
+  function renderSeasonButtons(){
+    var sBtn = document.getElementById('seasonSummerBtn');
+    var wBtn = document.getElementById('seasonWinterBtn');
+    sBtn.className = 'seasonbtn' + (seasonMode === 'summer' ? ' active' : '');
+    wBtn.className = 'seasonbtn' + (seasonMode === 'winter' ? ' active' : '');
+  }
+
+  function setSeason(mode){
+    seasonMode = mode;
+    saveSeason();
+    renderSeasonButtons();
+    renderStats();
+  }
+
+  function init(){
+    loadRecords();
+    loadSeason();
+    loadHistory();
+    renderLog();
+    renderSeasonButtons();
+    renderStats();
+    setupPWA();
+    requestAnimationFrame(renderClock);
+    syncTime();
+
+    document.getElementById('captureZone').addEventListener('click', capture);
+    document.getElementById('captureBtn').addEventListener('click', capture);
+    document.getElementById('resyncBtn').addEventListener('click', syncTime);
+    document.getElementById('exportBtn').addEventListener('click', exportData);
+    document.getElementById('exportPredBtn').addEventListener('click', exportPrediction);
+    document.getElementById('clearBtn').addEventListener('click', clearLog);
+    document.getElementById('seasonSummerBtn').addEventListener('click', function(){ setSeason('summer'); });
+    document.getElementById('seasonWinterBtn').addEventListener('click', function(){ setSeason('winter'); });
+
+    document.getElementById('manualAddBtn').addEventListener('click', function(){
+      var form = document.getElementById('manualForm');
+      document.getElementById('manualDT').value = toFullTimestampText(nowCorrected());
+      form.classList.add('open');
+    });
+    document.getElementById('manualFillNowBtn').addEventListener('click', function(){
+      document.getElementById('manualDT').value = toFullTimestampText(nowCorrected());
+    });
+    document.getElementById('manualCancelBtn').addEventListener('click', function(){
+      document.getElementById('manualForm').classList.remove('open');
+    });
+    document.getElementById('manualConfirmBtn').addEventListener('click', function(){
+      var dt = document.getElementById('manualDT').value;
+      var markCal = document.getElementById('manualCalChk').checked;
+      if(manualAddRecord(dt, markCal)){
+        document.getElementById('manualForm').classList.remove('open');
+        document.getElementById('manualCalChk').checked = false;
+      }
+    });
+
+    document.getElementById('settingsBtn').addEventListener('click', function(){
+      document.getElementById('settingsPanel').classList.toggle('open');
+    });
+
+    document.addEventListener('keydown', function(e){
+      var tag = (e.target && e.target.tagName) || '';
+      if(tag === 'INPUT' || tag === 'TEXTAREA'){ return; }
+      if(e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.key === '0'){
+        e.preventDefault();
+        capture();
+      }
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
