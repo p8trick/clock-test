@@ -31,19 +31,26 @@
     overscroll-behavior:none; user-select:none; -webkit-user-select:none;
   }
   #app{
-    min-height:100vh; min-height:100dvh;
+    height:100vh; height:100dvh;
     display:flex; flex-direction:column;
-    padding: max(14px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom));
+    padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
   }
-  .topbar{
-    display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px;
-    font-size:11px; color:var(--ink-dim); letter-spacing:.03em;
-    padding-bottom:10px; border-bottom:1px solid var(--panel-edge);
+  .screen{flex:1; min-height:0; display:flex; flex-direction:column;}
+
+  .minibar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11px; color:var(--ink-dim); letter-spacing:.03em; flex:0 0 auto; padding:2px 4px 8px;
   }
   .syncdot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle;}
   .sync-ok{background:var(--good); box-shadow:0 0 6px var(--good);}
   .sync-bad{background:var(--bad); box-shadow:0 0 6px var(--bad);}
   .sync-wait{background:var(--ink-dim);}
+  .gearbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:15px; padding:5px 11px; border-radius:8px; line-height:1;
+  }
+  .gearbtn:active{background:var(--panel-edge);}
+
   .iconbtn{
     background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
     font-size:11px; padding:5px 10px; border-radius:6px; font-family:inherit;
@@ -53,7 +60,7 @@
   .seasonrow{display:flex; gap:6px;}
   .seasonbtn{
     background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
-    font-size:11px; padding:5px 9px; border-radius:6px; font-family:inherit;
+    font-size:12px; padding:8px 12px; border-radius:8px; font-family:inherit; flex:1;
   }
   .seasonbtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.08);}
 
@@ -71,35 +78,41 @@
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
 
   #captureZone{
-    flex:1 1 auto; min-height:42vh; margin-top:14px;
-    background:var(--panel); border:1px solid var(--panel-edge); border-radius:16px;
-    padding:22px 10px 26px; text-align:center; position:relative;
+    flex:1 1 auto; margin-top:2px;
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:20px;
+    padding:16px 10px; text-align:center; position:relative;
     display:flex; flex-direction:column; justify-content:center; align-items:center;
     transition:background .08s, border-color .08s;
   }
   #captureZone.pressed{background:#1a1f27; border-color:var(--accent-dim);}
-  .datestr{font-size:14px; color:var(--ink-dim); letter-spacing:.05em; margin-bottom:6px; font-family:var(--mono);}
+  .datestr{font-size:14px; color:var(--ink-dim); letter-spacing:.05em; margin-bottom:8px; font-family:var(--mono);}
   .timestr{
     font-family:var(--mono); font-weight:600; letter-spacing:.01em;
-    font-size:16.5vw; line-height:1; color:var(--ink);
+    font-size:17vw; line-height:1; color:var(--ink);
     font-variant-numeric:tabular-nums; -webkit-font-feature-settings:"tnum";
     display:flex; justify-content:center; align-items:baseline; flex-wrap:wrap;
   }
   .timestr .ms{font-size:7vw; color:var(--accent); margin-left:.15em;}
-  .taphint{font-size:11px; color:var(--ink-dim); margin-top:16px; letter-spacing:.03em;}
+  .summaryline{font-size:12.5px; color:var(--ink-dim); margin-top:20px; letter-spacing:.02em; min-height:16px;}
+  .taphint{font-size:11px; color:var(--ink-dim); margin-top:10px; letter-spacing:.03em;}
 
-  #captureBtn{
-    margin-top:16px; width:100%; padding:20px; border:none; border-radius:14px;
-    background:var(--accent); color:#1a0f04; font-size:17px; font-weight:700;
-    letter-spacing:.04em; font-family:inherit;
+  .settopbar{display:flex; align-items:center; gap:10px; flex:0 0 auto; padding:2px 2px 10px;}
+  .settitle{font-size:14px; font-weight:600; color:var(--ink);}
+  #screenSettings{overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  .section{
+    margin-top:12px; padding:14px; background:var(--panel);
+    border:1px solid var(--panel-edge); border-radius:12px;
   }
-  #captureBtn:active{background:#e57630;}
+  .section h4{margin:0 0 10px; color:var(--ink); font-size:12px; letter-spacing:.03em;}
+  .section p{margin:4px 0; line-height:1.6; font-size:12px; color:var(--ink-dim);}
+  .section code{color:var(--accent); font-family:var(--mono);}
+  .versionfooter{text-align:center; font-size:11px; color:var(--ink-dim); padding:18px 0 6px; font-family:var(--mono);}
 
-  .toolrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+  .toolrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
   .toolrow .iconbtn{flex:1 1 40%; padding:9px 4px; font-size:11.5px;}
 
-  #manualAddBtn{width:100%; margin-top:8px;}
-  .manualform{display:none; margin-top:10px; padding:12px; background:var(--panel); border:1px solid var(--panel-edge); border-radius:12px;}
+  #manualAddBtn{width:100%;}
+  .manualform{display:none; margin-top:10px; padding:12px; background:#0e1116; border:1px solid var(--panel-edge); border-radius:12px;}
   .manualform.open{display:block;}
   .manualform label.mtitle{font-size:11px; color:var(--ink-dim); display:block; margin-bottom:6px;}
   .manualform .mfillrow{display:flex; gap:8px;}
@@ -112,12 +125,13 @@
   .manualform .mbtnrow{display:flex; gap:8px; margin-top:12px;}
   .manualform .mbtnrow button{flex:1;}
 
-  #log{flex:1 1 auto; margin-top:16px; overflow-y:auto; -webkit-overflow-scrolling:touch;}
-  .logempty{color:var(--ink-dim); font-size:13px; text-align:center; padding:30px 10px;}
+  #log{margin-top:4px;}
+  .logempty{color:var(--ink-dim); font-size:13px; text-align:center; padding:20px 10px;}
   .logrow{
     display:flex; justify-content:space-between; align-items:center;
-    padding:10px 12px; border-bottom:1px solid var(--panel-edge); font-size:13px;
+    padding:10px 0; border-bottom:1px solid var(--panel-edge); font-size:13px;
   }
+  .logrow:last-child{border-bottom:none;}
   .logrow .lt{font-family:var(--mono); color:var(--ink);}
   .logrow .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px;}
   .logrow .seasontag{display:inline-block; font-size:10px; padding:1px 5px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
@@ -142,83 +156,97 @@
   }
   .calbtn.calactive{border-color:var(--accent); color:var(--accent);}
 
-  #statsPanel{
-    margin-top:12px; padding:14px; background:var(--panel);
-    border:1px solid var(--panel-edge); border-radius:12px;
-  }
   .statstitle{font-size:11px; color:var(--ink-dim); letter-spacing:.03em; margin-bottom:8px;}
   .statsline{font-size:13px; color:var(--ink); line-height:1.7;}
   .statsbig{font-size:16px; font-weight:700; color:var(--accent); margin:2px 0;}
-
-  #settingsPanel{
-    display:none; margin-top:12px; padding:12px; background:var(--panel);
-    border:1px solid var(--panel-edge); border-radius:12px; font-size:12px; color:var(--ink-dim);
-  }
-  #settingsPanel.open{display:block;}
-  #settingsPanel h4{margin:0 0 8px; color:var(--ink); font-size:12px;}
-  #settingsPanel p{margin:4px 0; line-height:1.6;}
-  #settingsPanel code{color:var(--accent); font-family:var(--mono);}
 </style>
 </head>
 <body>
 <div id="app">
 
-  <div class="topbar">
-    <div><span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span></div>
-    <div class="seasonrow">
-      <button class="seasonbtn" id="seasonSummerBtn">☀️ 夏季</button>
-      <button class="seasonbtn" id="seasonWinterBtn">❄️ 冬季</button>
+  <div id="screenCapture" class="screen">
+    <div class="minibar">
+      <span><span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span></span>
+      <button id="openSettingsBtn" class="gearbtn" aria-label="设置">\u2699\ufe0f</button>
     </div>
-    <button id="settingsBtn" class="iconbtn">设置</button>
-  </div>
 
-  <div id="captureZone">
-    <div class="datestr" id="datestr">----年--月--日</div>
-    <div class="timestr" id="timestr">--:--:--<span class="ms" id="msstr">.---</span></div>
-    <div class="taphint">点击此区域 · 空格/回车键 · 蓝牙小键盘 均可记录</div>
-  </div>
-
-  <button id="captureBtn">记 录 CAPTURE</button>
-
-  <div class="toolrow">
-    <button class="iconbtn" id="resyncBtn">重新同步</button>
-    <button class="iconbtn" id="exportBtn">导出CSV</button>
-    <button class="iconbtn" id="exportPredBtn">导出预测JSON</button>
-    <button class="iconbtn" id="clearBtn">清空记录</button>
-  </div>
-
-  <button class="iconbtn" id="manualAddBtn">+ 手动补录一条历史记录(如已过去的校准时刻)</button>
-  <div class="manualform" id="manualForm">
-    <label class="mtitle">补录时刻(可手写到毫秒，格式: YYYY-MM-DD HH:MM:SS.mmm)</label>
-    <div class="mfillrow">
-      <input type="text" id="manualDT" inputmode="numeric" placeholder="2026-07-23 15:20:17.345">
-      <button class="iconbtn" id="manualFillNowBtn">填入当前</button>
-    </div>
-    <div class="chkrow">
-      <input type="checkbox" id="manualCalChk">
-      <label for="manualCalChk">标记为校准点(该时刻挂钟已被调至与真实时间一致)</label>
-    </div>
-    <div class="mbtnrow">
-      <button class="iconbtn" id="manualCancelBtn">取消</button>
-      <button class="iconbtn" id="manualConfirmBtn">确认添加</button>
+    <div id="captureZone">
+      <div class="datestr" id="datestr">----年--月--日</div>
+      <div class="timestr" id="timestr">--:--:--<span class="ms" id="msstr">.---</span></div>
+      <div class="summaryline" id="summaryLine"></div>
+      <div class="taphint">点击屏幕任意位置 · 空格/回车键 · 蓝牙小键盘 均可记录</div>
     </div>
   </div>
 
-  <div id="statsPanel"></div>
+  <div id="screenSettings" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="backBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">设置与记录</span>
+    </div>
 
-  <div id="settingsPanel">
-    <h4>说明</h4>
-    <p>时间来源: 每次打开自动从网络时间服务器同步一次(NTP式往返估算),之后按该偏移量持续走时,失败则回退到 iPhone 本机时钟。</p>
-    <p>iOS 系统本身不允许网页/PWA 拦截音量+/-键，这是系统限制。请改用 <code>空格 / 回车</code> 键，或蓝牙数字小键盘任意按键触发记录，效果与实体按键一致，且更可靠。</p>
-    <p>记录列表保存在本机 localStorage，可点导出为 CSV / JSON。</p>
-    <p>统计: 至少3条记录才会计算漂移趋势,建议间隔约1周做一次记录,间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
-    <p>季节模型: 室温影响机芯漂移速率,夏冬分开建模。顶部切换当前季节后,新记录会打上对应标签,两套模型各自独立回归、独立预测,互不干扰。校准点是全局的(对表这个物理动作影响两季),但对表之后各季节仍从各自最近数据重新起算。</p>
-    <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
-    <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
-    <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，支持手写到毫秒(格式 YYYY-MM-DD HH:MM:SS.mmm)，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
+    <div class="section">
+      <h4>季节模型</h4>
+      <div class="seasonrow">
+        <button class="seasonbtn" id="seasonSummerBtn">☀️ 夏季</button>
+        <button class="seasonbtn" id="seasonWinterBtn">❄️ 冬季</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>时间同步</h4>
+      <button class="iconbtn" id="resyncBtn" style="width:100%;">重新同步</button>
+    </div>
+
+    <div class="section">
+      <h4>记录管理</h4>
+      <button class="iconbtn" id="manualAddBtn">+ 手动补录一条历史记录(如已过去的校准时刻)</button>
+      <div class="manualform" id="manualForm">
+        <label class="mtitle">补录时刻(可手写到毫秒，格式: YYYY-MM-DD HH:MM:SS.mmm)</label>
+        <div class="mfillrow">
+          <input type="text" id="manualDT" inputmode="numeric" placeholder="2026-07-23 15:20:17.345">
+          <button class="iconbtn" id="manualFillNowBtn">填入当前</button>
+        </div>
+        <div class="chkrow">
+          <input type="checkbox" id="manualCalChk">
+          <label for="manualCalChk">标记为校准点(该时刻挂钟已被调至与真实时间一致)</label>
+        </div>
+        <div class="mbtnrow">
+          <button class="iconbtn" id="manualCancelBtn">取消</button>
+          <button class="iconbtn" id="manualConfirmBtn">确认添加</button>
+        </div>
+      </div>
+      <div class="toolrow">
+        <button class="iconbtn" id="exportBtn">导出CSV</button>
+        <button class="iconbtn" id="exportPredBtn">导出预测JSON</button>
+        <button class="iconbtn" id="clearBtn">清空记录</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>漂移统计</h4>
+      <div id="statsPanel"></div>
+    </div>
+
+    <div class="section">
+      <h4>历史记录</h4>
+      <div id="log"><div class="logempty">尚无记录</div></div>
+    </div>
+
+    <div class="section">
+      <h4>说明</h4>
+      <p>时间来源: 每次打开自动从网络时间服务器同步一次(NTP式往返估算),之后按该偏移量持续走时,失败则回退到 iPhone 本机时钟。</p>
+      <p>iOS 系统本身不允许网页/PWA 拦截音量+/-键，这是系统限制。请改用 <code>空格 / 回车</code> 键，或蓝牙数字小键盘任意按键触发记录，效果与实体按键一致，且更可靠。</p>
+      <p>记录列表保存在本机 localStorage，可点导出为 CSV / JSON。</p>
+      <p>统计: 至少3条记录才会计算漂移趋势,建议间隔约1周做一次记录,间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
+      <p>季节模型: 室温影响机芯漂移速率,夏冬分开建模,同时最近的记录权重更高(约5周半衰期指数衰减),模型会自动跟着最近的室温变化微调，不用精确判断换季时间点。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
+      <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
+      <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
+      <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，支持手写到毫秒(格式 YYYY-MM-DD HH:MM:SS.mmm)，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
+      <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
+    </div>
+
+    <div class="versionfooter">校准计时器 Clock Calibrator · v1.4.0</div>
   </div>
-
-  <div id="log"><div class="logempty">尚无记录</div></div>
 
 </div>
 
@@ -760,12 +788,27 @@
     return html;
   }
 
+  function renderSummaryLine(){
+    var el = document.getElementById('summaryLine');
+    if(!el){ return; }
+    var s = computeStats(seasonMode);
+    var seasonIcon = seasonMode === 'winter' ? '\u2744\ufe0f冬' : '\u2600\ufe0f夏';
+    if(!s.ok){
+      el.textContent = seasonIcon + ' · 还需更多记录才能预测(设置里补录/查看)';
+      return;
+    }
+    var pd = new Date(s.predictedTime1);
+    el.textContent = seasonIcon + ' · ' + s.stars.toFixed(1) + '\u2605 · 下次校正约 ' +
+      (pd.getMonth()+1) + '/' + pd.getDate() + ' ' + pad(pd.getHours(),2) + ':' + pad(pd.getMinutes(),2);
+  }
+
   function renderStats(){
     var el = document.getElementById('statsPanel');
     var html = renderModelBlock(seasonMode, true);
     var otherSeason = seasonMode === 'summer' ? 'winter' : 'summer';
     html += renderModelBlock(otherSeason, false);
     el.innerHTML = html;
+    renderSummaryLine();
   }
 
   function exportPrediction(){
@@ -905,6 +948,18 @@
     renderStats();
   }
 
+  var currentScreen = 'capture';
+
+  function showScreen(name){
+    currentScreen = name;
+    document.getElementById('screenCapture').style.display = (name === 'capture') ? 'flex' : 'none';
+    document.getElementById('screenSettings').style.display = (name === 'settings') ? 'flex' : 'none';
+    if(name === 'settings'){
+      renderLog();
+      renderStats();
+    }
+  }
+
   function init(){
     loadRecords();
     loadSeason();
@@ -915,9 +970,9 @@
     setupPWA();
     requestAnimationFrame(renderClock);
     syncTime();
+    showScreen('capture');
 
     document.getElementById('captureZone').addEventListener('click', capture);
-    document.getElementById('captureBtn').addEventListener('click', capture);
     document.getElementById('resyncBtn').addEventListener('click', syncTime);
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('exportPredBtn').addEventListener('click', exportPrediction);
@@ -945,11 +1000,11 @@
       }
     });
 
-    document.getElementById('settingsBtn').addEventListener('click', function(){
-      document.getElementById('settingsPanel').classList.toggle('open');
-    });
+    document.getElementById('openSettingsBtn').addEventListener('click', function(){ showScreen('settings'); });
+    document.getElementById('backBtn').addEventListener('click', function(){ showScreen('capture'); });
 
     document.addEventListener('keydown', function(e){
+      if(currentScreen !== 'capture'){ return; }
       var tag = (e.target && e.target.tagName) || '';
       if(tag === 'INPUT' || tag === 'TEXTAREA'){ return; }
       if(e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.key === '0'){
