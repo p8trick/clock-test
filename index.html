@@ -121,13 +121,16 @@
   #manualAddBtn{width:100%;}
   .manualform{display:none; margin-top:10px; padding:12px; background:#0e1116; border:1px solid var(--panel-edge); border-radius:12px;}
   .manualform.open{display:block;}
-  .manualform label.mtitle{font-size:11px; color:var(--ink-dim); display:block; margin-bottom:6px;}
-  .manualform .mfillrow{display:flex; gap:8px;}
-  .manualform input[type=text]{
-    flex:1; min-width:0; background:#1a1e25; color:var(--ink); border:1px solid var(--panel-edge);
-    border-radius:8px; padding:9px; font-family:var(--mono); font-size:13px; color-scheme:dark;
+  .manualform label.mtitle{font-size:11px; color:var(--ink-dim); display:block; margin-bottom:8px; line-height:1.5;}
+  .segrow{display:flex; align-items:center; gap:2px;}
+  .seg{
+    min-width:0; flex:1 1 0; text-align:center; background:#1a1e25; color:var(--ink);
+    border:1px solid var(--panel-edge); border-radius:6px; padding:10px 2px;
+    font-family:var(--mono); font-size:15px; color-scheme:dark;
   }
-  .manualform #manualFillNowBtn{flex:0 0 auto; padding:9px 10px; font-size:11px;}
+  .seg:focus{border-color:var(--accent); outline:none;}
+  .seg-s3{flex:1.4 1 0;}
+  .segsep{color:var(--ink-dim); font-family:var(--mono); font-size:14px; padding:0 2px; flex:0 0 auto;}
   .manualform .chkrow{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-dim); margin-top:10px;}
   .manualform .mbtnrow{display:flex; gap:8px; margin-top:12px;}
   .manualform .mbtnrow button{flex:1;}
@@ -210,11 +213,24 @@
       <h4>记录管理</h4>
       <button class="iconbtn" id="manualAddBtn">+ 手动补录一条历史记录(如已过去的校准时刻)</button>
       <div class="manualform" id="manualForm">
-        <label class="mtitle">补录时刻(可手写到毫秒，格式: YYYY-MM-DD HH:MM:SS.mmm)</label>
-        <div class="mfillrow">
-          <input type="text" id="manualDT" inputmode="numeric" placeholder="2026-07-23 15:20:17.345">
-          <button class="iconbtn" id="manualFillNowBtn">填入当前</button>
+        <label class="mtitle">补录时刻(可精确到毫秒，每格只填数字，分隔符固定不会被删掉)</label>
+        <div class="segrow">
+          <input type="text" inputmode="numeric" maxlength="4" class="seg seg-y" id="segY" placeholder="YYYY">
+          <span class="segsep">-</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segMo" placeholder="MM">
+          <span class="segsep">-</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segD" placeholder="DD">
         </div>
+        <div class="segrow" style="margin-top:8px;">
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segH" placeholder="HH">
+          <span class="segsep">:</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segMi" placeholder="MM">
+          <span class="segsep">:</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segS" placeholder="SS">
+          <span class="segsep">.</span>
+          <input type="text" inputmode="numeric" maxlength="3" class="seg seg-s3" id="segMs" placeholder="mmm">
+        </div>
+        <button class="iconbtn" id="manualFillNowBtn" style="width:100%; margin-top:8px;">填入当前</button>
         <div class="chkrow">
           <input type="checkbox" id="manualCalChk">
           <label for="manualCalChk">标记为校准点(该时刻挂钟已被调至与真实时间一致)</label>
@@ -243,14 +259,14 @@
 
     <div class="section">
       <h4>说明</h4>
-      <p>时间来源: 每次打开自动从网络时间服务器同步一次(NTP式往返估算),之后按该偏移量持续走时,失败则回退到 iPhone 本机时钟。</p>
+      <p>时间来源: iPhone 系统时钟本身已通过蜂窝/WiFi网络做过高精度校时,通常比任何网页API单次往返估算都准。所以每次打开会并行查询3个独立网络时间源做"交叉验证"而非直接采信——如果多个来源互相一致且都确认本机时间准确，不做任何修正；只有多个独立来源一致地指向本机时间确有明显偏差时才修正；来源之间对不上（网络抖动）或只有一个来源响应时，同样保守地信任本机时间，避免把网络噪声引入显示。</p>
       <p>iOS 系统本身不允许网页/PWA 拦截音量+/-键，这是系统限制。请改用 <code>空格 / 回车</code> 键，或蓝牙数字小键盘任意按键触发记录，效果与实体按键一致，且更可靠。</p>
       <p>记录列表保存在本机 localStorage，可点导出为 CSV / JSON。</p>
       <p>统计: 至少3条记录才会计算漂移趋势,建议间隔约1周做一次记录,间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
       <p>季节模型: 室温影响机芯漂移速率,夏冬分开建模,同时最近的记录权重更高(约5周半衰期指数衰减),模型会自动跟着最近的室温变化微调，不用精确判断换季时间点。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
       <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
       <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
-      <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，支持手写到毫秒(格式 YYYY-MM-DD HH:MM:SS.mmm)，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
+      <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
@@ -338,7 +354,9 @@
     document.getElementById('syncstatus').textContent = text;
   }
 
-  var MAX_PLAUSIBLE_OFFSET_MS = 45000;
+  var GARBAGE_OFFSET_MS = 10*60000;
+  var AGREEMENT_TOLERANCE_MS = 1500;
+  var TRUST_DEVICE_THRESHOLD_MS = 1500;
 
   function trySyncSource(url, responseType, parseFn, timeoutMs){
     return new Promise(function(resolve, reject){
@@ -355,8 +373,8 @@
         var estimatedServerNow = serverMs + rtt/2;
         var localNow = Date.now();
         var offset = estimatedServerNow - localNow;
-        if(Math.abs(offset) > MAX_PLAUSIBLE_OFFSET_MS){
-          reject(new Error('implausible offset ' + offset));
+        if(Math.abs(offset) > GARBAGE_OFFSET_MS){
+          reject(new Error('garbage offset ' + offset));
           return;
         }
         resolve({ offset: offset, rttMs: Math.round(rtt), source: url });
@@ -366,53 +384,72 @@
 
   function syncTime(){
     setSyncStatus('wait', '正在同步...');
-    var sources = [
-      function(){
-        return trySyncSource(
-          'https://www.cloudflare.com/cdn-cgi/trace',
-          'text',
-          function(text){
-            var m = text && text.match(/ts=(\d+(?:\.\d+)?)/);
-            return m ? parseFloat(m[1]) * 1000 : null;
-          },
-          4000
-        );
-      },
-      function(){
-        return trySyncSource(
-          'https://timeapi.io/api/Time/current/zone?timeZone=UTC',
-          'json',
-          function(j){ return j && j.dateTime ? Date.parse(j.dateTime + 'Z') : null; },
-          4000
-        );
-      },
-      function(){
-        return trySyncSource(
-          'https://worldtimeapi.org/api/timezone/Etc/UTC',
-          'json',
-          function(j){ return j && j.unixtime ? j.unixtime*1000 : null; },
-          4000
-        );
-      }
+    var jobs = [
+      trySyncSource(
+        'https://www.cloudflare.com/cdn-cgi/trace',
+        'text',
+        function(text){
+          var m = text && text.match(/ts=(\d+(?:\.\d+)?)/);
+          return m ? parseFloat(m[1]) * 1000 : null;
+        },
+        4000
+      ),
+      trySyncSource(
+        'https://timeapi.io/api/Time/current/zone?timeZone=UTC',
+        'json',
+        function(j){ return j && j.dateTime ? Date.parse(j.dateTime + 'Z') : null; },
+        4000
+      ),
+      trySyncSource(
+        'https://worldtimeapi.org/api/timezone/Etc/UTC',
+        'json',
+        function(j){ return j && j.unixtime ? j.unixtime*1000 : null; },
+        4000
+      )
     ];
-    attemptSources(sources, 0);
+    Promise.allSettled(jobs).then(function(results){
+      var offsets = [];
+      results.forEach(function(r){
+        if(r.status === 'fulfilled'){ offsets.push(r.value.offset); }
+      });
+      evaluateSyncResults(offsets);
+    });
   }
 
-  function attemptSources(sources, idx){
-    if(idx >= sources.length){
+  function evaluateSyncResults(offsets){
+    if(offsets.length === 0){
       offsetMs = 0;
-      setSyncStatus('bad', '同步失败 · 使用本机时间');
+      setSyncStatus('bad', '网络时间源均不可用 · 使用本机时间');
       lastSyncInfo = { offset:0, rttMs:null, source:'device', at:Date.now() };
       return;
     }
-    sources[idx]().then(function(result){
-      offsetMs = result.offset;
-      lastSyncInfo = { offset: result.offset, rttMs: result.rttMs, source: result.source, at: Date.now() };
-      var sign = result.offset >= 0 ? '+' : '';
-      setSyncStatus('ok', '已同步 偏移' + sign + Math.round(result.offset) + 'ms · 往返' + result.rttMs + 'ms');
-    }).catch(function(){
-      attemptSources(sources, idx+1);
-    });
+    if(offsets.length === 1){
+      offsetMs = 0;
+      var single = Math.round(offsets[0]);
+      setSyncStatus('ok', '仅1个来源响应(' + (single>=0?'+':'') + single + 'ms) · 无法交叉验证 · 使用本机时间');
+      lastSyncInfo = { offset:0, rttMs:null, source:'device', at:Date.now() };
+      return;
+    }
+    var maxV = Math.max.apply(null, offsets);
+    var minV = Math.min.apply(null, offsets);
+    var spread = maxV - minV;
+    if(spread > AGREEMENT_TOLERANCE_MS){
+      offsetMs = 0;
+      setSyncStatus('bad', offsets.length + '个来源结果不一致(差' + Math.round(spread) + 'ms) · 使用本机时间');
+      lastSyncInfo = { offset:0, rttMs:null, source:'device-conflict', at:Date.now() };
+      return;
+    }
+    var avg = offsets.reduce(function(a,b){ return a+b; }, 0) / offsets.length;
+    if(Math.abs(avg) <= TRUST_DEVICE_THRESHOLD_MS){
+      offsetMs = 0;
+      setSyncStatus('ok', offsets.length + '个来源一致确认本机时间准确 · 未做修正');
+      lastSyncInfo = { offset:0, rttMs:null, source:'device-confirmed', at:Date.now() };
+    } else {
+      offsetMs = avg;
+      var sign = avg >= 0 ? '+' : '';
+      setSyncStatus('ok', offsets.length + '个来源一致 · 已修正本机偏差 ' + sign + Math.round(avg) + 'ms');
+      lastSyncInfo = { offset: avg, rttMs:null, source:'network-agreed', at:Date.now() };
+    }
   }
 
   function formatInterval(ms){
@@ -442,51 +479,91 @@
   }
 
   function setClockDisplay(id, hhmm){
+    var rec = null;
     for(var i=0;i<records.length;i++){
       if(records[i].id === id){
+        rec = records[i];
         if(!hhmm){
-          records[i].clockDisplay = '';
-          records[i].explicitDriftMs = null;
+          rec.clockDisplay = '';
+          rec.explicitDriftMs = null;
         } else {
           var parts = hhmm.split(':');
           var hh = parseInt(parts[0], 10);
           var mm = parseInt(parts[1], 10);
           if(!isNaN(hh) && !isNaN(mm)){
-            var displayedT = nearestDisplayedTimestamp(records[i].t, hh, mm);
-            records[i].clockDisplay = hhmm;
-            records[i].explicitDriftMs = records[i].t - displayedT;
+            var displayedT = nearestDisplayedTimestamp(rec.t, hh, mm);
+            rec.clockDisplay = hhmm;
+            rec.explicitDriftMs = rec.t - displayedT;
           }
         }
         break;
       }
     }
     saveRecords();
-    renderLog();
+    var driftEl = document.getElementById('drift-' + id);
+    if(driftEl && rec){
+      if(rec.explicitDriftMs !== null && rec.explicitDriftMs !== undefined){
+        var dsec = rec.explicitDriftMs / 1000;
+        driftEl.textContent = dsec >= 0
+          ? ('本次发现挂钟已漂移 ' + dsec.toFixed(1) + ' 秒(落后)')
+          : ('本次发现挂钟领先 ' + Math.abs(dsec).toFixed(1) + ' 秒');
+      } else {
+        driftEl.textContent = '';
+      }
+    }
     renderStats();
   }
 
-  function toFullTimestampText(t){
+  var SEG_IDS = ['segY','segMo','segD','segH','segMi','segS','segMs'];
+  var SEG_MAXLEN = { segY:4, segMo:2, segD:2, segH:2, segMi:2, segS:2, segMs:3 };
+
+  function fillSegmentsFromTime(t){
     var d = new Date(t);
-    return d.getFullYear() + '-' + pad(d.getMonth()+1,2) + '-' + pad(d.getDate(),2) +
-      ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) +
-      '.' + pad(d.getMilliseconds(),3);
+    document.getElementById('segY').value = String(d.getFullYear());
+    document.getElementById('segMo').value = pad(d.getMonth()+1, 2);
+    document.getElementById('segD').value = pad(d.getDate(), 2);
+    document.getElementById('segH').value = pad(d.getHours(), 2);
+    document.getElementById('segMi').value = pad(d.getMinutes(), 2);
+    document.getElementById('segS').value = pad(d.getSeconds(), 2);
+    document.getElementById('segMs').value = pad(d.getMilliseconds(), 3);
   }
 
-  function parseFullTimestampText(str){
-    if(!str){ return NaN; }
-    var m = str.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:[.,](\d{1,3}))?$/);
-    if(!m){ return NaN; }
-    var ms = m[7] ? parseInt((m[7] + '00').slice(0,3), 10) : 0;
-    var d = new Date(
-      parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10),
-      parseInt(m[4],10), parseInt(m[5],10), parseInt(m[6],10), ms
-    );
-    return d.getTime();
+  function setupSegmentedInputs(){
+    SEG_IDS.forEach(function(id, idx){
+      var el = document.getElementById(id);
+      el.addEventListener('input', function(){
+        el.value = el.value.replace(/[^0-9]/g, '').slice(0, SEG_MAXLEN[id]);
+        if(el.value.length >= SEG_MAXLEN[id] && idx < SEG_IDS.length - 1){
+          document.getElementById(SEG_IDS[idx+1]).focus();
+        }
+      });
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Backspace' && el.value.length === 0 && idx > 0){
+          e.preventDefault();
+          var prev = document.getElementById(SEG_IDS[idx-1]);
+          prev.value = prev.value.slice(0, -1);
+          prev.focus();
+        }
+      });
+    });
   }
 
-  function manualAddRecord(dtValue, markCal){
-    var t = parseFullTimestampText(dtValue);
-    if(isNaN(t)){ alert('时间格式无效，请按 YYYY-MM-DD HH:MM:SS.mmm 输入(毫秒部分可省略)'); return false; }
+  function parseSegmentsToTimestamp(){
+    var y = parseInt(document.getElementById('segY').value, 10);
+    var mo = parseInt(document.getElementById('segMo').value, 10);
+    var d = parseInt(document.getElementById('segD').value, 10);
+    var h = parseInt(document.getElementById('segH').value, 10);
+    var mi = parseInt(document.getElementById('segMi').value, 10);
+    var s = parseInt(document.getElementById('segS').value, 10);
+    var msRaw = document.getElementById('segMs').value;
+    var ms = msRaw.length ? parseInt((msRaw + '00').slice(0,3), 10) : 0;
+    if(isNaN(y) || isNaN(mo) || isNaN(d) || isNaN(h) || isNaN(mi) || isNaN(s)){ return NaN; }
+    if(mo<1 || mo>12 || d<1 || d>31 || h<0 || h>23 || mi<0 || mi>59 || s<0 || s>59){ return NaN; }
+    return new Date(y, mo-1, d, h, mi, s, ms).getTime();
+  }
+
+  function manualAddRecord(t, markCal){
+    if(isNaN(t)){ alert('时间不完整或无效，请检查每一格数字'); return false; }
     var d = new Date(t);
     var sorted = records.slice().sort(function(a,b){ return a.t - b.t; });
     var prevT = null;
@@ -597,7 +674,12 @@
         lt.textContent = r.display;
         var ld = document.createElement('div');
         ld.className = 'ld';
-        ld.textContent = (r.deltaMs !== null ? ('距上次 ' + formatInterval(r.deltaMs) + ' · ') : '') + '来源 ' + (r.syncSource === 'device' ? '本机' : (r.syncSource === 'manual' ? '手动补录' : '服务器'));
+        var srcLabel = '本机';
+        if(r.syncSource === 'manual'){ srcLabel = '手动补录'; }
+        else if(r.syncSource === 'network-agreed'){ srcLabel = '本机(已按网络核实修正)'; }
+        else if(r.syncSource === 'device-conflict'){ srcLabel = '本机(网络来源不一致)'; }
+        else if(r.syncSource === 'device-confirmed'){ srcLabel = '本机(已核实准确)'; }
+        ld.textContent = (r.deltaMs !== null ? ('距上次 ' + formatInterval(r.deltaMs) + ' · ') : '') + '来源 ' + srcLabel;
         var stag = document.createElement('span');
         stag.className = 'seasontag';
         stag.textContent = (r.season === 'winter') ? '❄️冬' : '☀️夏';
@@ -615,6 +697,7 @@
         clockInput.addEventListener('change', function(){ setClockDisplay(r.id, clockInput.value); });
         var driftSpan = document.createElement('span');
         driftSpan.className = 'driftresult';
+        driftSpan.id = 'drift-' + r.id;
         if(r.explicitDriftMs !== null && r.explicitDriftMs !== undefined){
           var dsec = r.explicitDriftMs / 1000;
           driftSpan.textContent = dsec >= 0
@@ -675,7 +758,7 @@
         if(prevKnown === null){
           y = raw;
         } else {
-          var k = Math.ceil((prevKnown - raw) / 60000);
+          var k = Math.round((prevKnown - raw) / 60000);
           if(k < 0){ k = 0; }
           y = raw + 60000*k;
         }
@@ -1011,21 +1094,23 @@
     document.getElementById('seasonSummerBtn').addEventListener('click', function(){ setSeason('summer'); });
     document.getElementById('seasonWinterBtn').addEventListener('click', function(){ setSeason('winter'); });
 
+    setupSegmentedInputs();
+
     document.getElementById('manualAddBtn').addEventListener('click', function(){
       var form = document.getElementById('manualForm');
-      document.getElementById('manualDT').value = toFullTimestampText(nowCorrected());
+      fillSegmentsFromTime(nowCorrected());
       form.classList.add('open');
     });
     document.getElementById('manualFillNowBtn').addEventListener('click', function(){
-      document.getElementById('manualDT').value = toFullTimestampText(nowCorrected());
+      fillSegmentsFromTime(nowCorrected());
     });
     document.getElementById('manualCancelBtn').addEventListener('click', function(){
       document.getElementById('manualForm').classList.remove('open');
     });
     document.getElementById('manualConfirmBtn').addEventListener('click', function(){
-      var dt = document.getElementById('manualDT').value;
+      var t = parseSegmentsToTimestamp();
       var markCal = document.getElementById('manualCalChk').checked;
-      if(manualAddRecord(dt, markCal)){
+      if(manualAddRecord(t, markCal)){
         document.getElementById('manualForm').classList.remove('open');
         document.getElementById('manualCalChk').checked = false;
       }
