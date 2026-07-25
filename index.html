@@ -95,6 +95,29 @@
   .diagrow{font-size:11px; font-family:var(--mono); padding:4px 0; line-height:1.5;}
   .diag-ok{color:var(--good);}
   .diag-bad{color:var(--bad);}
+
+  .cameraStage{
+    position:relative; width:100%; aspect-ratio:3/4; background:#000;
+    border-radius:14px; overflow:hidden; margin-top:4px; flex:0 0 auto;
+  }
+  #cameraVideo{width:100%; height:100%; object-fit:cover; display:block;}
+  .roiGuide{
+    position:absolute; top:35%; left:15%; width:70%; height:20%;
+    border:2px solid var(--accent); border-radius:8px; box-shadow:0 0 0 2000px rgba(0,0,0,.35);
+    pointer-events:none;
+  }
+  .cameraStatusBadge{
+    position:absolute; top:10px; left:10px; background:rgba(0,0,0,.6); color:var(--ink);
+    font-size:11px; padding:5px 10px; border-radius:6px; font-family:var(--mono);
+  }
+  .cameraTimeOverlay{
+    position:absolute; top:10px; right:10px; background:rgba(0,0,0,.6); color:var(--ink);
+    font-size:13px; padding:5px 10px; border-radius:6px; font-family:var(--mono);
+    font-variant-numeric:tabular-nums;
+  }
+  .cameraTimeOverlay .cameraMs{color:var(--accent);}
+  .flashOverlay{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;}
+  .diaglive{font-size:12px; color:var(--ink-dim); font-family:var(--mono); margin-top:10px; text-align:center;}
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
 
   #captureZone{
@@ -192,6 +215,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
+      <button id="openCameraBtn" class="gearbtn" aria-label="摄像头精确捕获">📷</button>
       <button id="openSettingsBtn" class="gearbtn" aria-label="设置">设置</button>
     </div>
 
@@ -201,6 +225,45 @@
       <div class="summaryline" id="summaryLine"></div>
       <div class="taphint">点击屏幕任意位置 · 空格/回车键 · 蓝牙小键盘 均可记录</div>
     </div>
+  </div>
+
+  <div id="screenCamera" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="cameraBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">摄像头精确捕获</span>
+    </div>
+
+    <div class="cameraStage">
+      <video id="cameraVideo" playsinline muted autoplay></video>
+      <div class="roiGuide" id="roiGuide"></div>
+      <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
+      <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
+      <div class="flashOverlay" id="flashOverlay"></div>
+    </div>
+
+    <div class="section">
+      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量减小抖动、避免反光。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，并全屏闪白提示已抓取。</p>
+      <label class="mtitle">灵敏度(数值越小越容易触发，LED数码管跳变反差大，环境有干扰可适当调大)</label>
+      <div class="segrow">
+        <input type="range" id="sensitivitySlider" min="3" max="40" value="20" style="flex:1;">
+        <span id="sensitivityVal" style="width:32px; text-align:right; font-family:var(--mono); font-size:12px; color:var(--ink-dim);">20</span>
+      </div>
+      <div class="diaglive" id="diagLive">差异分数: --</div>
+      <div class="mbtnrow" style="margin-top:12px;">
+        <button class="iconbtn" id="cameraStartBtn">开始监测</button>
+        <button class="iconbtn" id="cameraManualBtn">手动立即截取</button>
+      </div>
+    </div>
+
+    <div class="section" id="cameraResultSection" style="display:none;">
+      <h4>已捕获</h4>
+      <div class="statsline" id="cameraResultText"></div>
+      <div class="mbtnrow" style="margin-top:10px;">
+        <button class="iconbtn" id="cameraContinueBtn">继续监测下一次</button>
+      </div>
+    </div>
+
+    <canvas id="cameraCanvas" style="display:none;"></canvas>
   </div>
 
   <div id="screenSettings" class="screen" style="display:none;">
@@ -293,12 +356,13 @@
       <p>季节模型: 室温影响机芯漂移速率,夏冬分开建模,同时最近的记录权重更高(约5周半衰期指数衰减),模型会自动跟着最近的室温变化微调，不用精确判断换季时间点。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
       <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
       <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
-      <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。导出预测JSON时已按设置的秒数提前扣除，配合relayFireTimes字段直接触发，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
+      <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。统计面板里"①②③"这三个时刻、以及主界面摘要行显示的"下次校正"，现在都已经按这里设置的秒数实时扣除，改完点保存立刻能看到面板数字变化；导出的预测JSON里relayFireTimes字段是同一套算法，可直接给继电器用，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
+      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)，把分钟数字对准取景框后点"开始监测"，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳并全屏闪白提示，避免人眼反应延迟带来的误差。LED七段数码管跳变是瞬间通断，差异分数会是尖锐的单帧脉冲，默认灵敏度20通常够用，不易被环境光小幅波动误触发；如果是LCD液晶屏则跳变有渐变过程，可能需要调低灵敏度。"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可。检测失败或误触发时用"手动立即截取"兜底。离开此界面会自动关闭摄像头。</p>
       <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v1.4.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v1.9.1</div>
   </div>
 
 </div>
@@ -386,6 +450,11 @@
     document.getElementById('timestr').firstChild.textContent =
       pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2);
     document.getElementById('msstr').textContent = '.' + pad(d.getMilliseconds(),3);
+    var camTimeEl = document.getElementById('cameraTimeOverlay');
+    if(camTimeEl){
+      camTimeEl.firstChild.textContent = pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2);
+      document.getElementById('cameraMsOverlay').textContent = '.' + pad(d.getMilliseconds(),3);
+    }
     requestAnimationFrame(renderClock);
   }
 
@@ -675,8 +744,7 @@
     return true;
   }
 
-  function capture(){
-    var t = nowCorrected();
+  function addRecordAtTime(t, sourceTag){
     var d = new Date(t);
     var prev = records.length ? records[records.length-1].t : null;
     var rec = {
@@ -684,7 +752,7 @@
       t: t,
       display: formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3),
       deltaMs: prev ? (t - prev) : null,
-      syncSource: lastSyncInfo ? lastSyncInfo.source : 'device',
+      syncSource: sourceTag || (lastSyncInfo ? lastSyncInfo.source : 'device'),
       note: '',
       isCalibration: false,
       season: seasonMode,
@@ -696,9 +764,157 @@
     renderLog();
     renderStats();
     trackHistory();
+    return rec;
+  }
+
+  function capture(){
+    var t = nowCorrected();
+    addRecordAtTime(t, null);
     var zone = document.getElementById('captureZone');
     zone.classList.add('pressed');
     setTimeout(function(){ zone.classList.remove('pressed'); }, 90);
+  }
+
+  var cameraStream = null;
+  var cameraState = 'idle';
+  var cameraLoopActive = false;
+  var prevFrameData = null;
+  var sensitivityThreshold = 20;
+  var cameraRafId = null;
+  var cooldownTimer = null;
+
+  function updateCameraBadge(text){
+    var el = document.getElementById('cameraStatusBadge');
+    if(el){ el.textContent = text; }
+  }
+
+  function startCamera(){
+    if(cameraStream){ return; }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      updateCameraBadge('浏览器不支持摄像头');
+      return;
+    }
+    updateCameraBadge('请求摄像头权限...');
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: {ideal:1280}, height: {ideal:960} },
+      audio: false
+    }).then(function(stream){
+      cameraStream = stream;
+      var video = document.getElementById('cameraVideo');
+      video.srcObject = stream;
+      updateCameraBadge('预览中，未开始监测');
+    }).catch(function(err){
+      updateCameraBadge('无法访问摄像头');
+      alert('无法打开摄像头: ' + ((err && err.message) || '未知错误') + '。请检查系统设置里是否已授权摄像头权限。');
+    });
+  }
+
+  function stopCamera(){
+    if(cameraStream){
+      cameraStream.getTracks().forEach(function(tr){ tr.stop(); });
+      cameraStream = null;
+    }
+    var video = document.getElementById('cameraVideo');
+    if(video){ video.srcObject = null; }
+    cameraState = 'idle';
+    cameraLoopActive = false;
+    prevFrameData = null;
+    if(cameraRafId){ cancelAnimationFrame(cameraRafId); cameraRafId = null; }
+    if(cooldownTimer){ clearTimeout(cooldownTimer); cooldownTimer = null; }
+    updateCameraBadge('未启动');
+    var diag = document.getElementById('diagLive');
+    if(diag){ diag.textContent = '差异分数: --'; }
+    var resultSection = document.getElementById('cameraResultSection');
+    if(resultSection){ resultSection.style.display = 'none'; }
+  }
+
+  function armCameraDetection(){
+    if(!cameraStream){ startCamera(); }
+    cameraState = 'armed';
+    prevFrameData = null;
+    updateCameraBadge('监测中...');
+    document.getElementById('cameraResultSection').style.display = 'none';
+    if(!cameraLoopActive){
+      cameraLoopActive = true;
+      runCameraLoop();
+    }
+  }
+
+  function runCameraLoop(){
+    var video = document.getElementById('cameraVideo');
+    if(!video){ cameraLoopActive = false; return; }
+    if(video.requestVideoFrameCallback){
+      video.requestVideoFrameCallback(function(){
+        processCameraFrame(nowCorrected());
+        if(cameraLoopActive){ runCameraLoop(); }
+      });
+    } else {
+      cameraRafId = requestAnimationFrame(function(){
+        processCameraFrame(nowCorrected());
+        if(cameraLoopActive){ runCameraLoop(); }
+      });
+    }
+  }
+
+  function processCameraFrame(captureT){
+    var video = document.getElementById('cameraVideo');
+    if(!video || !video.videoWidth){ return; }
+    var sampleW = 60, sampleH = 20;
+    var canvas = document.getElementById('cameraCanvas');
+    canvas.width = sampleW;
+    canvas.height = sampleH;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    var sx = video.videoWidth * 0.15;
+    var sy = video.videoHeight * 0.35;
+    var sw = video.videoWidth * 0.70;
+    var sh = video.videoHeight * 0.20;
+
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
+    var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
+
+    if(prevFrameData){
+      var diffSum = 0;
+      for(var i=0; i<frame.length; i+=4){
+        diffSum += Math.abs(frame[i]-prevFrameData[i]) + Math.abs(frame[i+1]-prevFrameData[i+1]) + Math.abs(frame[i+2]-prevFrameData[i+2]);
+      }
+      var avgDiff = diffSum / (sampleW*sampleH*3);
+      var diagEl = document.getElementById('diagLive');
+      if(diagEl){ diagEl.textContent = '差异分数: ' + avgDiff.toFixed(1) + ' (阈值 ' + sensitivityThreshold + ')'; }
+
+      if(cameraState === 'armed' && avgDiff > sensitivityThreshold){
+        onCameraDetected(captureT);
+      }
+    }
+    prevFrameData = frame;
+  }
+
+  function triggerFlash(){
+    var el = document.getElementById('flashOverlay');
+    if(!el){ return; }
+    el.style.transition = 'none';
+    el.style.opacity = '0.9';
+    requestAnimationFrame(function(){
+      el.style.transition = 'opacity .4s ease-out';
+      el.style.opacity = '0';
+    });
+  }
+
+  function onCameraDetected(t, sourceTag){
+    cameraState = 'cooldown';
+    updateCameraBadge('已捕获，冷却中');
+    triggerFlash();
+    addRecordAtTime(t, sourceTag || 'camera');
+    var d = new Date(t);
+    document.getElementById('cameraResultText').textContent =
+      formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3);
+    document.getElementById('cameraResultSection').style.display = 'block';
+    cooldownTimer = setTimeout(function(){
+      if(cameraState === 'cooldown'){
+        cameraState = 'idle';
+        updateCameraBadge('已停止(点"继续监测下一次"开始)');
+      }
+    }, 3000);
   }
 
   function deleteRecord(id){
@@ -764,6 +980,8 @@
         ld.className = 'ld';
         var srcLabel = '本机';
         if(r.syncSource === 'manual'){ srcLabel = '手动补录'; }
+        else if(r.syncSource === 'camera'){ srcLabel = '📷摄像头自动检测'; }
+        else if(r.syncSource === 'camera-manual'){ srcLabel = '📷摄像头模式手动截取'; }
         else if(r.syncSource === 'network-agreed'){ srcLabel = '本机(已按网络核实修正)'; }
         else if(r.syncSource === 'device-conflict'){ srcLabel = '本机(网络来源不一致)'; }
         else if(r.syncSource === 'device-confirmed'){ srcLabel = '本机(已核实准确)'; }
@@ -990,10 +1208,15 @@
     html += '<div class="progresswrap"><div class="progresslabel">本周期已漂移进度 ' + Math.round(s.progressPct) + '%</div>';
     html += '<div class="progressbar"><div class="progressfill" style="width:' + s.progressPct.toFixed(1) + '%"></div></div></div>';
 
+    var delayMs = delaySec * 1000;
+    var relay1 = s.predictedTime1 - delayMs;
+    var relay2 = s.predictedTime2 - delayMs;
+    var relay3 = s.predictedTime3 - delayMs;
     html += '<div class="predlist">';
-    html += '① ' + shortDT(s.predictedTime1) + ' <span class="predrel">(' + relDays(s.predictedTime1) + ')</span><br>';
-    html += '② ' + shortDT(s.predictedTime2) + ' <span class="predrel">(' + relDays(s.predictedTime2) + ')</span><br>';
-    html += '③ ' + shortDT(s.predictedTime3) + ' <span class="predrel">(' + relDays(s.predictedTime3) + ')</span>';
+    html += '<div style="font-size:10px;color:var(--ink-dim);margin-bottom:2px;">继电器建议触发时刻(已扣除执行延迟' + delaySec + '秒)</div>';
+    html += '① ' + shortDT(relay1) + ' <span class="predrel">(' + relDays(relay1) + ')</span><br>';
+    html += '② ' + shortDT(relay2) + ' <span class="predrel">(' + relDays(relay2) + ')</span><br>';
+    html += '③ ' + shortDT(relay3) + ' <span class="predrel">(' + relDays(relay3) + ')</span>';
     html += '</div>';
 
     var hist = driftHistory[season];
@@ -1014,7 +1237,7 @@
       el.textContent = seasonIcon + ' · 还需更多记录才能预测(设置里补录/查看)';
       return;
     }
-    var pd = new Date(s.predictedTime1);
+    var pd = new Date(s.predictedTime1 - delaySec*1000);
     el.textContent = seasonIcon + ' · ' + s.stars.toFixed(1) + '\u2605 · 下次校正约 ' +
       (pd.getMonth()+1) + '/' + pd.getDate() + ' ' + pad(pd.getHours(),2) + ':' + pad(pd.getMinutes(),2);
   }
@@ -1182,10 +1405,16 @@
     currentScreen = name;
     document.getElementById('screenCapture').style.display = (name === 'capture') ? 'flex' : 'none';
     document.getElementById('screenSettings').style.display = (name === 'settings') ? 'flex' : 'none';
+    document.getElementById('screenCamera').style.display = (name === 'camera') ? 'flex' : 'none';
     if(name === 'settings'){
       renderLog();
       renderStats();
       document.getElementById('delaySecInput').value = String(delaySec);
+    }
+    if(name === 'camera'){
+      startCamera();
+    } else {
+      stopCamera();
     }
   }
 
@@ -1250,6 +1479,17 @@
     });
 
     document.getElementById('openSettingsBtn').addEventListener('click', function(){ showScreen('settings'); });
+    document.getElementById('openCameraBtn').addEventListener('click', function(){ showScreen('camera'); });
+    document.getElementById('cameraBackBtn').addEventListener('click', function(){ showScreen('capture'); });
+    document.getElementById('cameraStartBtn').addEventListener('click', function(){ armCameraDetection(); });
+    document.getElementById('cameraContinueBtn').addEventListener('click', function(){ armCameraDetection(); });
+    document.getElementById('cameraManualBtn').addEventListener('click', function(){
+      onCameraDetected(nowCorrected(), 'camera-manual');
+    });
+    document.getElementById('sensitivitySlider').addEventListener('input', function(e){
+      sensitivityThreshold = parseInt(e.target.value, 10);
+      document.getElementById('sensitivityVal').textContent = String(sensitivityThreshold);
+    });
     document.getElementById('backBtn').addEventListener('click', function(){ showScreen('capture'); });
 
     document.getElementById('delaySaveBtn').addEventListener('click', function(){
@@ -1257,6 +1497,7 @@
       if(isNaN(v) || v < 0){ alert('请输入0或正数(秒)'); return; }
       delaySec = v;
       saveDelay();
+      renderStats();
       document.getElementById('delaySaveBtn').textContent = '已保存';
       setTimeout(function(){ document.getElementById('delaySaveBtn').textContent = '保存'; }, 1500);
     });
