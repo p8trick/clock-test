@@ -80,8 +80,14 @@
   .modelhead{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
   .modelname{font-size:12px; color:var(--ink-dim); letter-spacing:.03em;}
   .modelname.iscurrent{color:var(--accent);}
-  .predlist{font-size:12px; color:var(--ink-dim); line-height:1.6; margin-top:2px;}
+  .predlist{font-size:12px; color:var(--ink); line-height:1.9; margin-top:2px;}
   .predlist b{color:var(--ink); font-weight:600;}
+  .predrel{color:var(--ink-dim); font-size:11px;}
+  .progresswrap{margin-top:8px;}
+  .progresslabel{font-size:11px; color:var(--ink-dim); margin-bottom:4px;}
+  .progressbar{height:8px; background:#1a1e25; border-radius:4px; overflow:hidden; border:1px solid var(--panel-edge);}
+  .progressfill{height:100%; background:var(--accent); border-radius:4px; transition:width .3s;}
+  .delayrow{display:flex; align-items:center; gap:8px; margin-top:8px;}
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
 
   #captureZone{
@@ -210,6 +216,16 @@
     </div>
 
     <div class="section">
+      <h4>继电器执行延迟补偿</h4>
+      <p style="margin-top:0;">Tuya继电器从收到指令到真正按下按键完成+1分钟动作，本身有延迟。导出预测JSON时会自动提前扣除这段时间，让继电器实际执行完成的那一刻正好补满60秒，避免每个周期都残留几秒误差。</p>
+      <div class="delayrow">
+        <input type="text" inputmode="decimal" id="delaySecInput" class="seg" style="flex:0 0 70px;">
+        <span style="font-size:12px;color:var(--ink-dim);">秒</span>
+        <button class="iconbtn" id="delaySaveBtn" style="margin-left:auto;">保存</button>
+      </div>
+    </div>
+
+    <div class="section">
       <h4>记录管理</h4>
       <button class="iconbtn" id="manualAddBtn">+ 手动补录一条历史记录(如已过去的校准时刻)</button>
       <div class="manualform" id="manualForm">
@@ -266,6 +282,7 @@
       <p>季节模型: 室温影响机芯漂移速率,夏冬分开建模,同时最近的记录权重更高(约5周半衰期指数衰减),模型会自动跟着最近的室温变化微调，不用精确判断换季时间点。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
       <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
       <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
+      <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。导出预测JSON时已按设置的秒数提前扣除，配合relayFireTimes字段直接触发，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
       <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
@@ -282,11 +299,24 @@
   var STORAGE_KEY = 'cc_records_v1';
   var SEASON_KEY = 'cc_season_v1';
   var HISTORY_KEY = 'cc_history_v1';
+  var DELAY_KEY = 'cc_delay_v1';
   var offsetMs = 0;
   var lastSyncInfo = null;
   var records = [];
   var seasonMode = 'summer';
   var driftHistory = { summer: [], winter: [] };
+  var delaySec = 8;
+
+  function loadDelay(){
+    try{
+      var v = parseFloat(localStorage.getItem(DELAY_KEY));
+      delaySec = isNaN(v) ? 8 : v;
+    }catch(e){ delaySec = 8; }
+  }
+
+  function saveDelay(){
+    try{ localStorage.setItem(DELAY_KEY, String(delaySec)); }catch(e){}
+  }
 
   function loadSeason(){
     try{
@@ -842,6 +872,9 @@
     var predictedTime2 = predictedTime1 + cycleDays*86400000;
     var predictedTime3 = predictedTime2 + cycleDays*86400000;
     var stars = computeConfidence(active, reg);
+    var xNow = (Date.now() - t0) / 86400000;
+    var projectedNowY = reg.intercept + reg.slope*xNow;
+    var progressPct = Math.max(0, Math.min(100, ((projectedNowY % 60000) / 60000) * 100));
     return {
       ok:true,
       count: active.length,
@@ -851,6 +884,7 @@
       r2: reg.r2,
       cycleDays: cycleDays,
       stars: stars,
+      progressPct: progressPct,
       predictedTime1: predictedTime1,
       predictedTime2: predictedTime2,
       predictedTime3: predictedTime3,
@@ -872,6 +906,13 @@
     return (d.getMonth()+1) + '/' + d.getDate() + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2);
   }
 
+  function relDays(ms){
+    var d = (ms - Date.now()) / 86400000;
+    if(d < 0){ return '已过期'; }
+    if(d < 1){ return '今天内'; }
+    return '还有' + Math.round(d) + '天';
+  }
+
   function renderModelBlock(season, isCurrent){
     var label = season === 'summer' ? '☀️ 夏季模型' : '❄️ 冬季模型';
     var s = computeStats(season);
@@ -887,15 +928,20 @@
     }
     html += '<div class="statsline">' + starHtml(s.stars) + '</div>';
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(2) + ' 秒 · 拟合优度 ' + Math.round(s.r2*100) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
+
+    html += '<div class="progresswrap"><div class="progresslabel">本周期已漂移进度 ' + Math.round(s.progressPct) + '%</div>';
+    html += '<div class="progressbar"><div class="progressfill" style="width:' + s.progressPct.toFixed(1) + '%"></div></div></div>';
+
     html += '<div class="predlist">';
-    html += '第1次: <b>' + shortDT(s.predictedTime1) + '</b><br>';
-    html += '第2次: <b>' + shortDT(s.predictedTime2) + '</b><br>';
-    html += '第3次: <b>' + shortDT(s.predictedTime3) + '</b>';
+    html += '① ' + shortDT(s.predictedTime1) + ' <span class="predrel">(' + relDays(s.predictedTime1) + ')</span><br>';
+    html += '② ' + shortDT(s.predictedTime2) + ' <span class="predrel">(' + relDays(s.predictedTime2) + ')</span><br>';
+    html += '③ ' + shortDT(s.predictedTime3) + ' <span class="predrel">(' + relDays(s.predictedTime3) + ')</span>';
     html += '</div>';
+
     var hist = driftHistory[season];
     if(hist && hist.length >= 2){
       var recent = hist.slice(-4);
-      html += '<div class="trendline">收敛趋势: ' + recent.map(function(h){ return h.driftSecPerDay.toFixed(2); }).join(' \u2192 ') + ' 秒/天</div>';
+      html += '<div class="trendline">收敛趋势(近' + recent.length + '次测量): ' + recent.map(function(h){ return h.driftSecPerDay.toFixed(2); }).join(' \u2192 ') + ' 秒/天</div>';
     }
     html += '</div>';
     return html;
@@ -927,6 +973,7 @@
   function exportPrediction(){
     var summer = computeStats('summer');
     var winter = computeStats('winter');
+    var delayMs = delaySec * 1000;
     function pack(s){
       if(!s.ok){ return { ok:false, count: s.count||0 }; }
       return {
@@ -937,10 +984,19 @@
         fitR2: s.r2,
         confidenceStars: s.stars,
         cycleDays: s.cycleDays,
-        nextCorrectionTime: s.predictedTime1,
-        nextNextCorrectionTime: s.predictedTime2,
-        thirdCorrectionTime: s.predictedTime3,
-        correctionAction: '+1 minute'
+        correctionAction: '+1 minute',
+        theoreticalCorrectionTimes: {
+          note: '模型算出的漂移满60秒的理论时刻,未扣除继电器执行延迟',
+          first: s.predictedTime1,
+          second: s.predictedTime2,
+          third: s.predictedTime3
+        },
+        relayFireTimes: {
+          note: '已扣除executionDelaySec,继电器可直接在这个时刻发指令,执行完成时理论上正好补满60秒',
+          first: s.predictedTime1 - delayMs,
+          second: s.predictedTime2 - delayMs,
+          third: s.predictedTime3 - delayMs
+        }
       };
     }
     var summerPacked = pack(summer);
@@ -952,6 +1008,7 @@
     var payload = {
       generatedAt: Date.now(),
       activeSeason: seasonMode,
+      executionDelaySec: delaySec,
       models: { summer: summerPacked, winter: winterPacked }
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -1070,6 +1127,7 @@
     if(name === 'settings'){
       renderLog();
       renderStats();
+      document.getElementById('delaySecInput').value = String(delaySec);
     }
   }
 
@@ -1077,6 +1135,7 @@
     loadRecords();
     loadSeason();
     loadHistory();
+    loadDelay();
     renderLog();
     renderSeasonButtons();
     renderStats();
@@ -1118,6 +1177,15 @@
 
     document.getElementById('openSettingsBtn').addEventListener('click', function(){ showScreen('settings'); });
     document.getElementById('backBtn').addEventListener('click', function(){ showScreen('capture'); });
+
+    document.getElementById('delaySaveBtn').addEventListener('click', function(){
+      var v = parseFloat(document.getElementById('delaySecInput').value);
+      if(isNaN(v) || v < 0){ alert('请输入0或正数(秒)'); return; }
+      delaySec = v;
+      saveDelay();
+      document.getElementById('delaySaveBtn').textContent = '已保存';
+      setTimeout(function(){ document.getElementById('delaySaveBtn').textContent = '保存'; }, 1500);
+    });
 
     document.addEventListener('keydown', function(e){
       if(currentScreen !== 'capture'){ return; }
