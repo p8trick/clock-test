@@ -88,6 +88,13 @@
   .progressbar{height:8px; background:#1a1e25; border-radius:4px; overflow:hidden; border:1px solid var(--panel-edge);}
   .progressfill{height:100%; background:var(--accent); border-radius:4px; transition:width .3s;}
   .delayrow{display:flex; align-items:center; gap:8px; margin-top:8px;}
+  .sourcetogglerow{display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--panel-edge); font-size:12px; color:var(--ink-dim);}
+  .sourcetogglerow:last-child{border-bottom:none;}
+  .sourcetogglerow label{flex:1;}
+  .diagempty{color:var(--ink-dim); font-size:11px; padding:6px 0;}
+  .diagrow{font-size:11px; font-family:var(--mono); padding:4px 0; line-height:1.5;}
+  .diag-ok{color:var(--good);}
+  .diag-bad{color:var(--bad);}
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
 
   #captureZone{
@@ -213,6 +220,10 @@
     <div class="section">
       <h4>时间同步</h4>
       <button class="iconbtn" id="resyncBtn" style="width:100%;">重新同步</button>
+      <p style="margin-top:10px;">勾选想启用的时间源，至少2个来源互相一致才会用于修正本机时间，否则保守地信任本机。关掉一直失败的来源可以加快同步速度。</p>
+      <div id="sourceToggleList"></div>
+      <label class="mtitle" style="margin-top:12px;">最近一次同步诊断</label>
+      <div id="sourceDiagList"><div class="diagempty">尚未同步</div></div>
     </div>
 
     <div class="section">
@@ -275,7 +286,7 @@
 
     <div class="section">
       <h4>说明</h4>
-      <p>时间来源: iPhone 系统时钟本身已通过蜂窝/WiFi网络做过高精度校时,通常比任何网页API单次往返估算都准。所以每次打开会并行查询3个独立网络时间源做"交叉验证"而非直接采信——如果多个来源互相一致且都确认本机时间准确，不做任何修正；只有多个独立来源一致地指向本机时间确有明显偏差时才修正；来源之间对不上（网络抖动）或只有一个来源响应时，同样保守地信任本机时间，避免把网络噪声引入显示。</p>
+      <p>时间来源: iPhone 系统时钟本身已通过蜂窝/WiFi网络做过高精度校时,通常比任何网页API单次往返估算都准。所以每次打开会并行查询已启用的独立网络时间源(共5个候选,可在"时间同步"里勾选启用哪些)做"交叉验证"而非直接采信——如果多个来源互相一致且都确认本机时间准确，不做任何修正；只有多个独立来源一致地指向本机时间确有明显偏差时才修正；来源之间对不上（网络抖动）或只有一个来源响应时，同样保守地信任本机时间，避免把网络噪声引入显示。哪个来源总是失败可以在诊断列表里看到，直接关掉即可。</p>
       <p>iOS 系统本身不允许网页/PWA 拦截音量+/-键，这是系统限制。请改用 <code>空格 / 回车</code> 键，或蓝牙数字小键盘任意按键触发记录，效果与实体按键一致，且更可靠。</p>
       <p>记录列表保存在本机 localStorage，可点导出为 CSV / JSON。</p>
       <p>统计: 至少3条记录才会计算漂移趋势,建议间隔约1周做一次记录,间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
@@ -387,63 +398,110 @@
   var GARBAGE_OFFSET_MS = 10*60000;
   var AGREEMENT_TOLERANCE_MS = 1500;
   var TRUST_DEVICE_THRESHOLD_MS = 1500;
+  var SOURCES_KEY = 'cc_sources_v1';
 
-  function trySyncSource(url, responseType, parseFn, timeoutMs){
+  function cfTraceParse(text){
+    var m = text && text.match(/ts=(\d+(?:\.\d+)?)/);
+    return m ? parseFloat(m[1]) * 1000 : null;
+  }
+
+  var SOURCE_DEFS = [
+    { id:'cf-www', label:'Cloudflare (cloudflare.com)', url:'https://www.cloudflare.com/cdn-cgi/trace', type:'text', parse: cfTraceParse },
+    { id:'cf-1111', label:'Cloudflare (1.1.1.1)', url:'https://1.1.1.1/cdn-cgi/trace', type:'text', parse: cfTraceParse },
+    { id:'cf-1001', label:'Cloudflare (1.0.0.1)', url:'https://1.0.0.1/cdn-cgi/trace', type:'text', parse: cfTraceParse },
+    { id:'timeapi', label:'timeapi.io', url:'https://timeapi.io/api/Time/current/zone?timeZone=UTC', type:'json', parse: function(j){ return j && j.dateTime ? Date.parse(j.dateTime + 'Z') : null; } },
+    { id:'worldtimeapi', label:'worldtimeapi.org', url:'https://worldtimeapi.org/api/timezone/Etc/UTC', type:'json', parse: function(j){ return j && j.unixtime ? j.unixtime*1000 : null; } }
+  ];
+
+  var enabledSourceIds = SOURCE_DEFS.map(function(s){ return s.id; });
+  var lastSyncDiagnostics = [];
+
+  function loadEnabledSources(){
+    try{
+      var raw = localStorage.getItem(SOURCES_KEY);
+      var arr = raw ? JSON.parse(raw) : null;
+      if(Array.isArray(arr) && arr.length){ enabledSourceIds = arr; }
+    }catch(e){}
+  }
+
+  function saveEnabledSources(){
+    try{ localStorage.setItem(SOURCES_KEY, JSON.stringify(enabledSourceIds)); }catch(e){}
+  }
+
+  function toggleSourceEnabled(id){
+    var idx = enabledSourceIds.indexOf(id);
+    if(idx >= 0){ enabledSourceIds.splice(idx, 1); }
+    else { enabledSourceIds.push(id); }
+    saveEnabledSources();
+  }
+
+  function trySyncSource(def, timeoutMs){
     return new Promise(function(resolve, reject){
       var timer = setTimeout(function(){ reject(new Error('timeout')); }, timeoutMs);
       var t0 = performance.now();
-      fetch(url, {cache:'no-store'}).then(function(res){
-        return responseType === 'text' ? res.text() : res.json();
+      fetch(def.url, {cache:'no-store'}).then(function(res){
+        return def.type === 'text' ? res.text() : res.json();
       }).then(function(body){
         clearTimeout(timer);
         var t1 = performance.now();
-        var serverMs = parseFn(body);
+        var serverMs = def.parse(body);
         if(!serverMs || isNaN(serverMs)){ reject(new Error('parse fail')); return; }
         var rtt = t1 - t0;
         var estimatedServerNow = serverMs + rtt/2;
         var localNow = Date.now();
         var offset = estimatedServerNow - localNow;
         if(Math.abs(offset) > GARBAGE_OFFSET_MS){
-          reject(new Error('garbage offset ' + offset));
+          reject(new Error('garbage offset ' + Math.round(offset) + 'ms'));
           return;
         }
-        resolve({ offset: offset, rttMs: Math.round(rtt), source: url });
+        resolve({ offset: offset, rttMs: Math.round(rtt) });
       }).catch(function(err){ clearTimeout(timer); reject(err); });
     });
   }
 
   function syncTime(){
     setSyncStatus('wait', '正在同步...');
-    var jobs = [
-      trySyncSource(
-        'https://www.cloudflare.com/cdn-cgi/trace',
-        'text',
-        function(text){
-          var m = text && text.match(/ts=(\d+(?:\.\d+)?)/);
-          return m ? parseFloat(m[1]) * 1000 : null;
-        },
-        4000
-      ),
-      trySyncSource(
-        'https://timeapi.io/api/Time/current/zone?timeZone=UTC',
-        'json',
-        function(j){ return j && j.dateTime ? Date.parse(j.dateTime + 'Z') : null; },
-        4000
-      ),
-      trySyncSource(
-        'https://worldtimeapi.org/api/timezone/Etc/UTC',
-        'json',
-        function(j){ return j && j.unixtime ? j.unixtime*1000 : null; },
-        4000
-      )
-    ];
+    var activeDefs = SOURCE_DEFS.filter(function(d){ return enabledSourceIds.indexOf(d.id) >= 0; });
+    if(activeDefs.length === 0){
+      offsetMs = 0;
+      setSyncStatus('bad', '未启用任何时间源 · 使用本机时间');
+      lastSyncInfo = { offset:0, rttMs:null, source:'device', at:Date.now() };
+      lastSyncDiagnostics = [];
+      renderSourceDiagnostics();
+      return;
+    }
+    var jobs = activeDefs.map(function(def){ return trySyncSource(def, 4000); });
     Promise.allSettled(jobs).then(function(results){
       var offsets = [];
-      results.forEach(function(r){
-        if(r.status === 'fulfilled'){ offsets.push(r.value.offset); }
+      lastSyncDiagnostics = [];
+      results.forEach(function(r, idx){
+        var def = activeDefs[idx];
+        if(r.status === 'fulfilled'){
+          offsets.push(r.value.offset);
+          lastSyncDiagnostics.push({ label: def.label, ok:true, offset: Math.round(r.value.offset), rtt: r.value.rttMs });
+        } else {
+          lastSyncDiagnostics.push({ label: def.label, ok:false, error: (r.reason && r.reason.message) || '失败' });
+        }
       });
       evaluateSyncResults(offsets);
+      renderSourceDiagnostics();
     });
+  }
+
+  function renderSourceDiagnostics(){
+    var el = document.getElementById('sourceDiagList');
+    if(!el){ return; }
+    if(!lastSyncDiagnostics.length){
+      el.innerHTML = '<div class="diagempty">尚未同步</div>';
+      return;
+    }
+    el.innerHTML = lastSyncDiagnostics.map(function(d){
+      if(d.ok){
+        var sign = d.offset >= 0 ? '+' : '';
+        return '<div class="diagrow diag-ok">\u2713 ' + d.label + ' · ' + sign + d.offset + 'ms · 往返' + d.rtt + 'ms</div>';
+      }
+      return '<div class="diagrow diag-bad">\u2717 ' + d.label + ' · ' + d.error + '</div>';
+    }).join('');
   }
 
   function evaluateSyncResults(offsets){
@@ -1131,14 +1189,30 @@
     }
   }
 
+  function renderSourceToggleList(){
+    var el = document.getElementById('sourceToggleList');
+    el.innerHTML = SOURCE_DEFS.map(function(def){
+      var checked = enabledSourceIds.indexOf(def.id) >= 0 ? 'checked' : '';
+      return '<div class="sourcetogglerow"><input type="checkbox" id="src-' + def.id + '" ' + checked + '><label for="src-' + def.id + '">' + def.label + '</label></div>';
+    }).join('');
+    SOURCE_DEFS.forEach(function(def){
+      document.getElementById('src-' + def.id).addEventListener('change', function(){
+        toggleSourceEnabled(def.id);
+      });
+    });
+  }
+
   function init(){
     loadRecords();
     loadSeason();
     loadHistory();
     loadDelay();
+    loadEnabledSources();
     renderLog();
     renderSeasonButtons();
     renderStats();
+    renderSourceToggleList();
+    renderSourceDiagnostics();
     setupPWA();
     requestAnimationFrame(renderClock);
     syncTime();
