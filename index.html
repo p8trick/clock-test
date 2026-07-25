@@ -100,11 +100,21 @@
     position:relative; width:100%; aspect-ratio:3/4; background:#000;
     border-radius:14px; overflow:hidden; margin-top:4px; flex:0 0 auto;
   }
-  #cameraVideo{width:100%; height:100%; object-fit:cover; display:block;}
+  #cameraVideo{width:100%; height:100%; object-fit:cover; display:block; transform-origin:center center; transition:transform .1s linear;}
   .roiGuide{
     position:absolute; top:35%; left:15%; width:70%; height:20%;
     border:2px solid var(--accent); border-radius:8px; box-shadow:0 0 0 2000px rgba(0,0,0,.35);
-    pointer-events:none;
+    touch-action:none; cursor:move;
+  }
+  .roiResizeHandle{
+    position:absolute; right:-14px; bottom:-14px; width:28px; height:28px;
+    background:var(--accent); border-radius:50%; border:2px solid #1a0f04;
+    touch-action:none; cursor:nwse-resize;
+  }
+  .roiResetBtn{
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.6); color:var(--ink); font-size:11px; padding:5px 10px;
+    border-radius:6px; border:none; font-family:inherit;
   }
   .cameraStatusBadge{
     position:absolute; top:10px; left:10px; background:rgba(0,0,0,.6); color:var(--ink);
@@ -118,6 +128,26 @@
   .cameraTimeOverlay .cameraMs{color:var(--accent);}
   .flashOverlay{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;}
   .diaglive{font-size:12px; color:var(--ink-dim); font-family:var(--mono); margin-top:10px; text-align:center;}
+  .diagToggleBtn{
+    display:block; margin:8px auto 0; background:none; border:none; color:var(--ink-dim);
+    font-size:11px; font-family:inherit; padding:4px;
+  }
+  .cameraDiagDetail{
+    margin-top:6px; padding:10px; background:#0e1116; border:1px solid var(--panel-edge);
+    border-radius:8px; font-size:11px; font-family:var(--mono); color:var(--ink-dim);
+  }
+  .cameraDiagDetail .diagrow{padding:2px 0;}
+  .cameraBigBtnRow{display:flex; gap:8px; margin-top:10px;}
+  .bigCamBtn{
+    flex:1; padding:18px 8px; border-radius:12px; border:1px solid var(--panel-edge);
+    background:var(--panel); color:var(--ink); font-size:14px; font-weight:600; font-family:inherit;
+  }
+  .bigCamBtn:active{background:var(--panel-edge);}
+  .bigCamBtn-primary{background:var(--accent); color:#1a0f04; border-color:var(--accent);}
+  .bigCamBtn-primary:active{background:#e57630;}
+  .zoomRow{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:11px; color:var(--ink-dim);}
+  .zoomlabel{flex:0 0 auto; white-space:nowrap;}
+  .zoomval{flex:0 0 auto; width:34px; text-align:right; font-family:var(--mono);}
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
 
   #captureZone{
@@ -235,24 +265,32 @@
 
     <div class="cameraStage">
       <video id="cameraVideo" playsinline muted autoplay></video>
-      <div class="roiGuide" id="roiGuide"></div>
+      <div class="roiGuide" id="roiGuide">
+        <div class="roiResizeHandle" id="roiResizeHandle"></div>
+      </div>
+      <button class="roiResetBtn" id="roiResetBtn">重置取景框</button>
       <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
       <div class="flashOverlay" id="flashOverlay"></div>
     </div>
 
-    <div class="section">
-      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量减小抖动、避免反光。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，并全屏闪白提示已抓取。</p>
-      <label class="mtitle">灵敏度(数值越小越容易触发，LED数码管跳变反差大，环境有干扰可适当调大)</label>
-      <div class="segrow">
-        <input type="range" id="sensitivitySlider" min="3" max="40" value="20" style="flex:1;">
-        <span id="sensitivityVal" style="width:32px; text-align:right; font-family:var(--mono); font-size:12px; color:var(--ink-dim);">20</span>
-      </div>
-      <div class="diaglive" id="diagLive">差异分数: --</div>
-      <div class="mbtnrow" style="margin-top:12px;">
-        <button class="iconbtn" id="cameraStartBtn">开始监测</button>
-        <button class="iconbtn" id="cameraManualBtn">手动立即截取</button>
-      </div>
+    <div class="zoomRow" id="hwZoomRow" style="display:none;">
+      <span class="zoomlabel">硬件变焦</span>
+      <input type="range" id="hwZoomSlider" style="flex:1;">
+      <span id="hwZoomVal" class="zoomval">1.0x</span>
+    </div>
+    <div class="zoomRow">
+      <span class="zoomlabel">预览放大(仅显示，不影响精度)</span>
+      <input type="range" id="previewZoomSlider" min="1" max="4" step="0.1" value="1" style="flex:1;">
+      <span id="previewZoomVal" class="zoomval">1.0x</span>
+    </div>
+
+    <div class="cameraBigBtnRow">
+      <button class="bigCamBtn bigCamBtn-primary" id="cameraStartBtn">开始监测</button>
+      <button class="bigCamBtn" id="cameraManualBtn">手动立即截取</button>
+    </div>
+    <div class="cameraBigBtnRow" id="focusBtnRow" style="display:none;">
+      <button class="bigCamBtn" id="focusLockBtn">尝试锁定对焦</button>
     </div>
 
     <div class="section" id="cameraResultSection" style="display:none;">
@@ -261,6 +299,19 @@
       <div class="mbtnrow" style="margin-top:10px;">
         <button class="iconbtn" id="cameraContinueBtn">继续监测下一次</button>
       </div>
+    </div>
+
+    <div class="section">
+      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，并全屏闪白提示已抓取；如果连续两帧都超过阈值才会真正判定为跳变，减少单次手抖误触发。</p>
+      <label class="mtitle">灵敏度(数值越大越容易触发；LED数码管跳变反差大，环境有干扰可适当调低)</label>
+      <div class="segrow">
+        <input type="range" id="sensitivitySlider" min="1" max="40" value="23" style="flex:1;">
+        <span id="sensitivityVal" style="width:32px; text-align:right; font-family:var(--mono); font-size:12px; color:var(--ink-dim);">23</span>
+      </div>
+      <div class="diaglive" id="diagLive">差异分数: --</div>
+      <div class="diaglive" id="estLatencyDisplay" style="margin-top:2px;">系统估算延迟: --</div>
+      <button class="diagToggleBtn" id="diagToggleBtn">查看诊断详情 ▾</button>
+      <div class="cameraDiagDetail" id="cameraDiagDetail" style="display:none;"></div>
     </div>
 
     <canvas id="cameraCanvas" style="display:none;"></canvas>
@@ -357,12 +408,12 @@
       <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
       <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
       <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。统计面板里"①②③"这三个时刻、以及主界面摘要行显示的"下次校正"，现在都已经按这里设置的秒数实时扣除，改完点保存立刻能看到面板数字变化；导出的预测JSON里relayFireTimes字段是同一套算法，可直接给继电器用，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
-      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)，把分钟数字对准取景框后点"开始监测"，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳并全屏闪白提示，避免人眼反应延迟带来的误差。LED七段数码管跳变是瞬间通断，差异分数会是尖锐的单帧脉冲，默认灵敏度20通常够用，不易被环境光小幅波动误触发；如果是LCD液晶屏则跳变有渐变过程，可能需要调低灵敏度。"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可。检测失败或误触发时用"手动立即截取"兜底。离开此界面会自动关闭摄像头。</p>
+      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳并全屏闪白提示，避免人眼反应延迟带来的误差。LED七段数码管跳变是瞬间通断，差异分数会是尖锐的单帧脉冲，默认灵敏度23通常够用；如果是LCD液晶屏则跳变有渐变过程，可能需要调高灵敏度。"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、丢帧和分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据，平时不用管，检测效果不理想时用来排查是相机跟不上还是分析跑不过来。检测失败或误触发时用"手动立即截取"兜底。离开此界面会自动关闭摄像头。</p>
       <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v1.9.1</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v2.2.0</div>
   </div>
 
 </div>
@@ -775,13 +826,110 @@
     setTimeout(function(){ zone.classList.remove('pressed'); }, 90);
   }
 
+  var ROI_KEY = 'cc_roi_v1';
+  var ROI_DEFAULT = { left:15, top:35, width:70, height:20 };
+  var roiState = { left:15, top:35, width:70, height:20 };
+
+  function loadROI(){
+    try{
+      var raw = localStorage.getItem(ROI_KEY);
+      var v = raw ? JSON.parse(raw) : null;
+      if(v && typeof v.left === 'number' && typeof v.top === 'number' && typeof v.width === 'number' && typeof v.height === 'number'){
+        roiState = v;
+      }
+    }catch(e){}
+  }
+
+  function saveROI(){
+    try{ localStorage.setItem(ROI_KEY, JSON.stringify(roiState)); }catch(e){}
+  }
+
+  function clampROI(){
+    roiState.width = Math.max(8, Math.min(96, roiState.width));
+    roiState.height = Math.max(6, Math.min(96, roiState.height));
+    roiState.left = Math.max(0, Math.min(100 - roiState.width, roiState.left));
+    roiState.top = Math.max(0, Math.min(100 - roiState.height, roiState.top));
+  }
+
+  function applyROIStyle(){
+    var el = document.getElementById('roiGuide');
+    if(!el){ return; }
+    el.style.left = roiState.left + '%';
+    el.style.top = roiState.top + '%';
+    el.style.width = roiState.width + '%';
+    el.style.height = roiState.height + '%';
+  }
+
+  function setupROIInteraction(){
+    var stage = document.querySelector('.cameraStage');
+    var guide = document.getElementById('roiGuide');
+    var handle = document.getElementById('roiResizeHandle');
+    var mode = null;
+    var startX = 0, startY = 0, startState = null;
+
+    function onDown(e, m){
+      mode = m;
+      startX = e.clientX; startY = e.clientY;
+      startState = { left: roiState.left, top: roiState.top, width: roiState.width, height: roiState.height };
+      try{ e.target.setPointerCapture(e.pointerId); }catch(err){}
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    guide.addEventListener('pointerdown', function(e){
+      if(e.target === handle){ return; }
+      onDown(e, 'drag');
+    });
+    handle.addEventListener('pointerdown', function(e){
+      onDown(e, 'resize');
+    });
+
+    function onMove(e){
+      if(!mode){ return; }
+      var rect = stage.getBoundingClientRect();
+      var dxPct = (e.clientX - startX) / rect.width * 100;
+      var dyPct = (e.clientY - startY) / rect.height * 100;
+      if(mode === 'drag'){
+        roiState.left = startState.left + dxPct;
+        roiState.top = startState.top + dyPct;
+      } else if(mode === 'resize'){
+        roiState.width = startState.width + dxPct;
+        roiState.height = startState.height + dyPct;
+      }
+      clampROI();
+      applyROIStyle();
+    }
+
+    function onUp(){
+      if(mode){ saveROI(); }
+      mode = null;
+    }
+
+    guide.addEventListener('pointermove', onMove);
+    guide.addEventListener('pointerup', onUp);
+    guide.addEventListener('pointercancel', onUp);
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+
+    document.getElementById('roiResetBtn').addEventListener('click', function(){
+      roiState = { left: ROI_DEFAULT.left, top: ROI_DEFAULT.top, width: ROI_DEFAULT.width, height: ROI_DEFAULT.height };
+      saveROI();
+      applyROIStyle();
+    });
+  }
+
   var cameraStream = null;
   var cameraState = 'idle';
   var cameraLoopActive = false;
   var prevFrameData = null;
-  var sensitivityThreshold = 20;
+  var SENSITIVITY_MAX = 43;
+  var sensitivityThreshold = SENSITIVITY_MAX - 23;
   var cameraRafId = null;
   var cooldownTimer = null;
+  var consecutiveHits = 0;
+  var firstHitTimestamp = null;
+  var REQUIRED_CONSECUTIVE_HITS = 2;
 
   function updateCameraBadge(text){
     var el = document.getElementById('cameraStatusBadge');
@@ -803,11 +951,66 @@
       var video = document.getElementById('cameraVideo');
       video.srcObject = stream;
       updateCameraBadge('预览中，未开始监测');
+      trySetupFocusLock(stream);
+      trySetupZoom(stream);
     }).catch(function(err){
       updateCameraBadge('无法访问摄像头');
       alert('无法打开摄像头: ' + ((err && err.message) || '未知错误') + '。请检查系统设置里是否已授权摄像头权限。');
     });
   }
+
+  function trySetupFocusLock(stream){
+    var row = document.getElementById('focusBtnRow');
+    row.style.display = 'none';
+    var track = stream.getVideoTracks()[0];
+    if(!track || !track.getCapabilities){ return; }
+    var caps;
+    try{ caps = track.getCapabilities(); }catch(e){ return; }
+    if(!caps || !caps.focusMode || caps.focusMode.indexOf('manual') === -1){ return; }
+    row.style.display = 'flex';
+    var btn = document.getElementById('focusLockBtn');
+    btn.onclick = function(){
+      track.applyConstraints({ advanced: [{ focusMode: 'manual' }] })
+        .then(function(){ btn.textContent = '已锁定对焦'; })
+        .catch(function(){ alert('这台设备/浏览器不支持手动锁定对焦，请让镜头静置几秒等自动对焦稳定后再开始监测。'); });
+    };
+  }
+
+  function trySetupZoom(stream){
+    var row = document.getElementById('hwZoomRow');
+    row.style.display = 'none';
+    var track = stream.getVideoTracks()[0];
+    if(!track || !track.getCapabilities){ return; }
+    var caps;
+    try{ caps = track.getCapabilities(); }catch(e){ return; }
+    if(!caps || !caps.zoom){ return; }
+    row.style.display = 'flex';
+    var slider = document.getElementById('hwZoomSlider');
+    var valEl = document.getElementById('hwZoomVal');
+    slider.min = caps.zoom.min;
+    slider.max = caps.zoom.max;
+    slider.step = caps.zoom.step || 0.1;
+    var settings = track.getSettings ? track.getSettings() : {};
+    slider.value = settings.zoom || caps.zoom.min;
+    valEl.textContent = parseFloat(slider.value).toFixed(1) + 'x';
+    slider.oninput = function(){
+      var v = parseFloat(slider.value);
+      valEl.textContent = v.toFixed(1) + 'x';
+      track.applyConstraints({ advanced: [{ zoom: v }] }).catch(function(){});
+    };
+  }
+
+  function setupPreviewZoom(){
+    var slider = document.getElementById('previewZoomSlider');
+    var valEl = document.getElementById('previewZoomVal');
+    var video = document.getElementById('cameraVideo');
+    slider.addEventListener('input', function(){
+      var v = parseFloat(slider.value);
+      valEl.textContent = v.toFixed(1) + 'x';
+      video.style.transform = 'scale(' + v + ')';
+    });
+  }
+
 
   function stopCamera(){
     if(cameraStream){
@@ -815,15 +1018,28 @@
       cameraStream = null;
     }
     var video = document.getElementById('cameraVideo');
-    if(video){ video.srcObject = null; }
+    if(video){ video.srcObject = null; video.style.transform = 'scale(1)'; }
+    var pzSlider = document.getElementById('previewZoomSlider');
+    if(pzSlider){ pzSlider.value = 1; }
+    var pzVal = document.getElementById('previewZoomVal');
+    if(pzVal){ pzVal.textContent = '1.0x'; }
     cameraState = 'idle';
     cameraLoopActive = false;
     prevFrameData = null;
+    consecutiveHits = 0;
+    firstHitTimestamp = null;
+    lastStatsSampleTime = 0;
+    analysisFrameCount = 0;
+    analysisTimeSamples = [];
+    lastTotalVideoFrames = 0;
+    lastDroppedVideoFrames = 0;
     if(cameraRafId){ cancelAnimationFrame(cameraRafId); cameraRafId = null; }
     if(cooldownTimer){ clearTimeout(cooldownTimer); cooldownTimer = null; }
     updateCameraBadge('未启动');
     var diag = document.getElementById('diagLive');
     if(diag){ diag.textContent = '差异分数: --'; }
+    var latEl = document.getElementById('estLatencyDisplay');
+    if(latEl){ latEl.textContent = '系统估算延迟: --'; }
     var resultSection = document.getElementById('cameraResultSection');
     if(resultSection){ resultSection.style.display = 'none'; }
   }
@@ -832,8 +1048,21 @@
     if(!cameraStream){ startCamera(); }
     cameraState = 'armed';
     prevFrameData = null;
+    consecutiveHits = 0;
+    firstHitTimestamp = null;
     updateCameraBadge('监测中...');
     document.getElementById('cameraResultSection').style.display = 'none';
+
+    lastStatsSampleTime = performance.now();
+    analysisFrameCount = 0;
+    analysisTimeSamples = [];
+    var video = document.getElementById('cameraVideo');
+    if(video && video.getVideoPlaybackQuality){
+      var q = video.getVideoPlaybackQuality();
+      lastTotalVideoFrames = q.totalVideoFrames || 0;
+      lastDroppedVideoFrames = q.droppedVideoFrames || 0;
+    }
+
     if(!cameraLoopActive){
       cameraLoopActive = true;
       runCameraLoop();
@@ -846,11 +1075,13 @@
     if(video.requestVideoFrameCallback){
       video.requestVideoFrameCallback(function(){
         processCameraFrame(nowCorrected());
+        sampleCameraStats();
         if(cameraLoopActive){ runCameraLoop(); }
       });
     } else {
       cameraRafId = requestAnimationFrame(function(){
         processCameraFrame(nowCorrected());
+        sampleCameraStats();
         if(cameraLoopActive){ runCameraLoop(); }
       });
     }
@@ -859,16 +1090,19 @@
   function processCameraFrame(captureT){
     var video = document.getElementById('cameraVideo');
     if(!video || !video.videoWidth){ return; }
+    analysisFrameCount++;
+    var perfStart = performance.now();
+
     var sampleW = 60, sampleH = 20;
     var canvas = document.getElementById('cameraCanvas');
     canvas.width = sampleW;
     canvas.height = sampleH;
     var ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    var sx = video.videoWidth * 0.15;
-    var sy = video.videoHeight * 0.35;
-    var sw = video.videoWidth * 0.70;
-    var sh = video.videoHeight * 0.20;
+    var sx = video.videoWidth * (roiState.left/100);
+    var sy = video.videoHeight * (roiState.top/100);
+    var sw = video.videoWidth * (roiState.width/100);
+    var sh = video.videoHeight * (roiState.height/100);
 
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
     var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
@@ -882,11 +1116,90 @@
       var diagEl = document.getElementById('diagLive');
       if(diagEl){ diagEl.textContent = '差异分数: ' + avgDiff.toFixed(1) + ' (阈值 ' + sensitivityThreshold + ')'; }
 
-      if(cameraState === 'armed' && avgDiff > sensitivityThreshold){
-        onCameraDetected(captureT);
+      if(cameraState === 'armed'){
+        if(avgDiff > sensitivityThreshold){
+          consecutiveHits++;
+          if(consecutiveHits === 1){
+            firstHitTimestamp = captureT;
+          }
+          if(consecutiveHits >= REQUIRED_CONSECUTIVE_HITS){
+            onCameraDetected(firstHitTimestamp);
+          }
+        } else {
+          consecutiveHits = 0;
+          firstHitTimestamp = null;
+        }
       }
     }
     prevFrameData = frame;
+
+    var analysisMs = performance.now() - perfStart;
+    analysisTimeSamples.push(analysisMs);
+    if(analysisTimeSamples.length > 30){ analysisTimeSamples.shift(); }
+  }
+
+  var STATS_SAMPLE_MS = 1000;
+  var analysisFrameCount = 0;
+  var analysisTimeSamples = [];
+  var lastStatsSampleTime = 0;
+  var lastTotalVideoFrames = 0;
+  var lastDroppedVideoFrames = 0;
+  var cameraDiagStats = { cameraFps:0, analysisFps:0, droppedFps:0, avgAnalysisMs:0, estLatencyMs:0 };
+
+  function sampleCameraStats(){
+    var video = document.getElementById('cameraVideo');
+    if(!video || !cameraStream){ return; }
+    var now = performance.now();
+    if(now - lastStatsSampleTime < STATS_SAMPLE_MS){ return; }
+    var elapsedSec = (now - lastStatsSampleTime) / 1000;
+    lastStatsSampleTime = now;
+
+    var totalFrames = 0, droppedFrames = 0;
+    if(video.getVideoPlaybackQuality){
+      var q = video.getVideoPlaybackQuality();
+      totalFrames = q.totalVideoFrames || 0;
+      droppedFrames = q.droppedVideoFrames || 0;
+    }
+    var cameraFps = elapsedSec > 0 ? (totalFrames - lastTotalVideoFrames) / elapsedSec : 0;
+    var droppedFps = elapsedSec > 0 ? (droppedFrames - lastDroppedVideoFrames) / elapsedSec : 0;
+    var analysisFps = elapsedSec > 0 ? analysisFrameCount / elapsedSec : 0;
+    lastTotalVideoFrames = totalFrames;
+    lastDroppedVideoFrames = droppedFrames;
+    analysisFrameCount = 0;
+
+    var avgAnalysisMs = analysisTimeSamples.length
+      ? analysisTimeSamples.reduce(function(a,b){ return a+b; }, 0) / analysisTimeSamples.length
+      : 0;
+
+    var effectiveFps = cameraFps > 0 ? cameraFps : analysisFps;
+    var quantizationMs = effectiveFps > 0 ? (1000/effectiveFps)/2 : 0;
+    var estLatencyMs = quantizationMs + avgAnalysisMs;
+
+    cameraDiagStats = {
+      cameraFps: cameraFps,
+      analysisFps: analysisFps,
+      droppedFps: droppedFps,
+      avgAnalysisMs: avgAnalysisMs,
+      estLatencyMs: estLatencyMs
+    };
+    renderCameraDiag();
+  }
+
+  function renderCameraDiag(){
+    var s = cameraDiagStats;
+    var latEl = document.getElementById('estLatencyDisplay');
+    if(latEl){
+      latEl.textContent = s.estLatencyMs > 0 ? ('系统估算延迟: 约' + Math.round(s.estLatencyMs) + 'ms') : '系统估算延迟: --';
+    }
+    var detailEl = document.getElementById('cameraDiagDetail');
+    if(detailEl){
+      detailEl.innerHTML =
+        '<div class="diagrow">相机帧率(Camera FPS): ' + s.cameraFps.toFixed(1) + '</div>' +
+        '<div class="diagrow">分析帧率(Analysis FPS): ' + s.analysisFps.toFixed(1) + '</div>' +
+        '<div class="diagrow">丢帧率(Dropped Frames/s): ' + s.droppedFps.toFixed(1) + '</div>' +
+        '<div class="diagrow">平均分析耗时(Avg Analysis Time): ' + s.avgAnalysisMs.toFixed(1) + 'ms</div>' +
+        '<div class="diagrow">估算检测延迟(Estimated Detection Latency): ' + Math.round(s.estLatencyMs) + 'ms</div>';
+    }
   }
 
   function triggerFlash(){
@@ -902,6 +1215,8 @@
 
   function onCameraDetected(t, sourceTag){
     cameraState = 'cooldown';
+    consecutiveHits = 0;
+    firstHitTimestamp = null;
     updateCameraBadge('已捕获，冷却中');
     triggerFlash();
     addRecordAtTime(t, sourceTag || 'camera');
@@ -1441,6 +1756,10 @@
     renderSeasonButtons();
     renderStats();
     renderSourceToggleList();
+    setupPreviewZoom();
+    loadROI();
+    applyROIStyle();
+    setupROIInteraction();
     renderSourceDiagnostics();
     setupPWA();
     requestAnimationFrame(renderClock);
@@ -1487,8 +1806,16 @@
       onCameraDetected(nowCorrected(), 'camera-manual');
     });
     document.getElementById('sensitivitySlider').addEventListener('input', function(e){
-      sensitivityThreshold = parseInt(e.target.value, 10);
-      document.getElementById('sensitivityVal').textContent = String(sensitivityThreshold);
+      var sliderVal = parseInt(e.target.value, 10);
+      sensitivityThreshold = SENSITIVITY_MAX - sliderVal;
+      document.getElementById('sensitivityVal').textContent = String(sliderVal);
+    });
+    document.getElementById('diagToggleBtn').addEventListener('click', function(){
+      var el = document.getElementById('cameraDiagDetail');
+      var btn = document.getElementById('diagToggleBtn');
+      var open = el.style.display !== 'none';
+      el.style.display = open ? 'none' : 'block';
+      btn.textContent = open ? '查看诊断详情 ▾' : '收起诊断详情 ▴';
     });
     document.getElementById('backBtn').addEventListener('click', function(){ showScreen('capture'); });
 
