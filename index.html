@@ -443,7 +443,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v2.6.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v2.6.1</div>
   </div>
 
 </div>
@@ -1047,6 +1047,7 @@
 
 
   function stopCamera(){
+    resetUndoBtnState();
     if(cameraStream){
       cameraStream.getTracks().forEach(function(tr){ tr.stop(); });
       cameraStream = null;
@@ -1084,6 +1085,7 @@
   function armCameraDetection(){
     if(!cameraStream){ startCamera(); }
     cameraState = 'armed';
+    resetUndoBtnState();
     prevBinaryMask = null;
     prevDilatedMask = null;
     consecutiveHits = 0;
@@ -1363,6 +1365,7 @@
     updateCameraBadge('已捕获，冷却中');
     document.getElementById('cameraStatusBadge').classList.add('captured');
     updateStartBtnLabel();
+    resetUndoBtnState();
     var tag = sourceTag || 'camera';
     var latencyForThisCapture = (tag === 'camera') ? cameraDiagStats.estLatencyMs : null;
     var rec = addRecordAtTime(t, tag, latencyForThisCapture);
@@ -1387,6 +1390,28 @@
     lastCameraRecordId = null;
     document.getElementById('cameraResultSection').style.display = 'none';
     document.getElementById('cameraStatusBadge').classList.remove('captured');
+  }
+
+  var pendingCameraUndo = false;
+  var pendingCameraUndoTimer = null;
+
+  function resetUndoBtnState(){
+    pendingCameraUndo = false;
+    if(pendingCameraUndoTimer){ clearTimeout(pendingCameraUndoTimer); pendingCameraUndoTimer = null; }
+    var btn = document.getElementById('cameraUndoBtn');
+    if(btn){ btn.textContent = '撤销这条记录'; }
+  }
+
+  function requestUndoLastCameraCapture(){
+    var btn = document.getElementById('cameraUndoBtn');
+    if(pendingCameraUndo){
+      resetUndoBtnState();
+      undoLastCameraCapture();
+    } else {
+      pendingCameraUndo = true;
+      if(btn){ btn.textContent = '确认撤销？'; }
+      pendingCameraUndoTimer = setTimeout(resetUndoBtnState, 3000);
+    }
   }
 
   function deleteRecord(id){
@@ -1962,7 +1987,7 @@
     document.getElementById('cameraBackBtn').addEventListener('click', function(){ showScreen('capture'); });
     document.getElementById('cameraStartBtn').addEventListener('click', function(){ toggleCameraArm(); });
     document.getElementById('cameraContinueBtn').addEventListener('click', function(){ armCameraDetection(); });
-    document.getElementById('cameraUndoBtn').addEventListener('click', function(){ undoLastCameraCapture(); });
+    document.getElementById('cameraUndoBtn').addEventListener('click', function(){ requestUndoLastCameraCapture(); });
     document.getElementById('cameraManualBtn').addEventListener('click', function(){
       onCameraDetected(nowCorrected(), 'camera-manual');
     });
