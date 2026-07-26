@@ -408,12 +408,12 @@
       <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
       <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
       <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。统计面板里"①②③"这三个时刻、以及主界面摘要行显示的"下次校正"，现在都已经按这里设置的秒数实时扣除，改完点保存立刻能看到面板数字变化；导出的预测JSON里relayFireTimes字段是同一套算法，可直接给继电器用，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
-      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳并全屏闪白提示，避免人眼反应延迟带来的误差。LED七段数码管跳变是瞬间通断，差异分数会是尖锐的单帧脉冲，默认灵敏度23通常够用；如果是LCD液晶屏则跳变有渐变过程，可能需要调高灵敏度。"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、丢帧和分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据，平时不用管，检测效果不理想时用来排查是相机跟不上还是分析跑不过来。检测失败或误触发时用"手动立即截取"兜底。离开此界面会自动关闭摄像头。</p>
+      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳并全屏闪白提示，避免人眼反应延迟带来的误差。LED七段数码管跳变是瞬间通断，差异分数会是尖锐的单帧脉冲，默认灵敏度23通常够用；如果是LCD液晶屏则跳变有渐变过程，可能需要调高灵敏度。"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据。相机帧率是靠实测每次真正拿到新画面的时间间隔算出来的，不依赖<code>getVideoPlaybackQuality</code>这个接口——它在Safari上对实时摄像头画面经常不增长，直接用会一直显示0.0，换了更可靠的测法。丢帧率如果显示"N/A(此浏览器不支持测量)"就是这个接口在你的Safari版本上确实不可用，不影响其他数字准确性。每条自动检测的相机记录会额外存一个"当次估算延迟"数值(原始时间戳本身不会被改写，保持如实记录)，统计计算漂移速率时会自动扣除这个延迟，日志列表和CSV导出里都能看到具体扣了多少毫秒，跟Tuya继电器那8秒执行延迟是同一个处理思路——只在计算这一层修正，不动原始观测数据。检测失败或误触发时用"手动立即截取"兜底，这种手动截取不经过相机分析流程，不会附带这项延迟修正。离开此界面会自动关闭摄像头。</p>
       <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v2.2.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v2.3.0</div>
   </div>
 
 </div>
@@ -795,7 +795,7 @@
     return true;
   }
 
-  function addRecordAtTime(t, sourceTag){
+  function addRecordAtTime(t, sourceTag, detectionLatencyMs){
     var d = new Date(t);
     var prev = records.length ? records[records.length-1].t : null;
     var rec = {
@@ -808,7 +808,8 @@
       isCalibration: false,
       season: seasonMode,
       clockDisplay: '',
-      explicitDriftMs: null
+      explicitDriftMs: null,
+      detectionLatencyMs: (typeof detectionLatencyMs === 'number' && detectionLatencyMs > 0) ? detectionLatencyMs : null
     };
     records.push(rec);
     saveRecords();
@@ -1031,6 +1032,7 @@
     lastStatsSampleTime = 0;
     analysisFrameCount = 0;
     analysisTimeSamples = [];
+    frameArrivalTimestamps = [];
     lastTotalVideoFrames = 0;
     lastDroppedVideoFrames = 0;
     if(cameraRafId){ cancelAnimationFrame(cameraRafId); cameraRafId = null; }
@@ -1056,6 +1058,7 @@
     lastStatsSampleTime = performance.now();
     analysisFrameCount = 0;
     analysisTimeSamples = [];
+    frameArrivalTimestamps = [];
     var video = document.getElementById('cameraVideo');
     if(video && video.getVideoPlaybackQuality){
       var q = video.getVideoPlaybackQuality();
@@ -1074,17 +1077,24 @@
     if(!video){ cameraLoopActive = false; return; }
     if(video.requestVideoFrameCallback){
       video.requestVideoFrameCallback(function(){
+        recordFrameArrival();
         processCameraFrame(nowCorrected());
         sampleCameraStats();
         if(cameraLoopActive){ runCameraLoop(); }
       });
     } else {
       cameraRafId = requestAnimationFrame(function(){
+        recordFrameArrival();
         processCameraFrame(nowCorrected());
         sampleCameraStats();
         if(cameraLoopActive){ runCameraLoop(); }
       });
     }
+  }
+
+  function recordFrameArrival(){
+    frameArrivalTimestamps.push(performance.now());
+    if(frameArrivalTimestamps.length > 40){ frameArrivalTimestamps.shift(); }
   }
 
   function processCameraFrame(captureT){
@@ -1144,6 +1154,8 @@
   var lastStatsSampleTime = 0;
   var lastTotalVideoFrames = 0;
   var lastDroppedVideoFrames = 0;
+  var frameArrivalTimestamps = [];
+  var droppedFramesSupported = null;
   var cameraDiagStats = { cameraFps:0, analysisFps:0, droppedFps:0, avgAnalysisMs:0, estLatencyMs:0 };
 
   function sampleCameraStats(){
@@ -1154,13 +1166,20 @@
     var elapsedSec = (now - lastStatsSampleTime) / 1000;
     lastStatsSampleTime = now;
 
+    var measuredFps = 0;
+    if(frameArrivalTimestamps.length >= 2){
+      var span = frameArrivalTimestamps[frameArrivalTimestamps.length-1] - frameArrivalTimestamps[0];
+      measuredFps = span > 0 ? ((frameArrivalTimestamps.length - 1) / span) * 1000 : 0;
+    }
+
     var totalFrames = 0, droppedFrames = 0;
     if(video.getVideoPlaybackQuality){
       var q = video.getVideoPlaybackQuality();
       totalFrames = q.totalVideoFrames || 0;
       droppedFrames = q.droppedVideoFrames || 0;
     }
-    var cameraFps = elapsedSec > 0 ? (totalFrames - lastTotalVideoFrames) / elapsedSec : 0;
+    var totalDelta = totalFrames - lastTotalVideoFrames;
+    if(droppedFramesSupported === null && totalDelta > 0){ droppedFramesSupported = true; }
     var droppedFps = elapsedSec > 0 ? (droppedFrames - lastDroppedVideoFrames) / elapsedSec : 0;
     var analysisFps = elapsedSec > 0 ? analysisFrameCount / elapsedSec : 0;
     lastTotalVideoFrames = totalFrames;
@@ -1171,14 +1190,15 @@
       ? analysisTimeSamples.reduce(function(a,b){ return a+b; }, 0) / analysisTimeSamples.length
       : 0;
 
-    var effectiveFps = cameraFps > 0 ? cameraFps : analysisFps;
+    var effectiveFps = measuredFps > 0 ? measuredFps : analysisFps;
     var quantizationMs = effectiveFps > 0 ? (1000/effectiveFps)/2 : 0;
     var estLatencyMs = quantizationMs + avgAnalysisMs;
 
     cameraDiagStats = {
-      cameraFps: cameraFps,
+      cameraFps: measuredFps,
       analysisFps: analysisFps,
       droppedFps: droppedFps,
+      droppedSupported: !!droppedFramesSupported,
       avgAnalysisMs: avgAnalysisMs,
       estLatencyMs: estLatencyMs
     };
@@ -1193,10 +1213,11 @@
     }
     var detailEl = document.getElementById('cameraDiagDetail');
     if(detailEl){
+      var droppedText = s.droppedSupported ? (s.droppedFps.toFixed(1) + ' /秒') : 'N/A(此浏览器不支持测量)';
       detailEl.innerHTML =
-        '<div class="diagrow">相机帧率(Camera FPS): ' + s.cameraFps.toFixed(1) + '</div>' +
+        '<div class="diagrow">相机帧率(Camera FPS,实测帧间隔): ' + s.cameraFps.toFixed(1) + '</div>' +
         '<div class="diagrow">分析帧率(Analysis FPS): ' + s.analysisFps.toFixed(1) + '</div>' +
-        '<div class="diagrow">丢帧率(Dropped Frames/s): ' + s.droppedFps.toFixed(1) + '</div>' +
+        '<div class="diagrow">丢帧率(Dropped Frames): ' + droppedText + '</div>' +
         '<div class="diagrow">平均分析耗时(Avg Analysis Time): ' + s.avgAnalysisMs.toFixed(1) + 'ms</div>' +
         '<div class="diagrow">估算检测延迟(Estimated Detection Latency): ' + Math.round(s.estLatencyMs) + 'ms</div>';
     }
@@ -1219,7 +1240,9 @@
     firstHitTimestamp = null;
     updateCameraBadge('已捕获，冷却中');
     triggerFlash();
-    addRecordAtTime(t, sourceTag || 'camera');
+    var tag = sourceTag || 'camera';
+    var latencyForThisCapture = (tag === 'camera') ? cameraDiagStats.estLatencyMs : null;
+    addRecordAtTime(t, tag, latencyForThisCapture);
     var d = new Date(t);
     document.getElementById('cameraResultText').textContent =
       formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3);
@@ -1300,7 +1323,8 @@
         else if(r.syncSource === 'network-agreed'){ srcLabel = '本机(已按网络核实修正)'; }
         else if(r.syncSource === 'device-conflict'){ srcLabel = '本机(网络来源不一致)'; }
         else if(r.syncSource === 'device-confirmed'){ srcLabel = '本机(已核实准确)'; }
-        ld.textContent = (r.deltaMs !== null ? ('距上次 ' + formatInterval(r.deltaMs) + ' · ') : '') + '来源 ' + srcLabel;
+        var latencyNote = (typeof r.detectionLatencyMs === 'number') ? (' · 统计时已扣除延迟' + Math.round(r.detectionLatencyMs) + 'ms') : '';
+        ld.textContent = (r.deltaMs !== null ? ('距上次 ' + formatInterval(r.deltaMs) + ' · ') : '') + '来源 ' + srcLabel + latencyNote;
         var stag = document.createElement('span');
         stag.className = 'seasontag';
         stag.textContent = (r.season === 'winter') ? '❄️冬' : '☀️夏';
@@ -1370,11 +1394,12 @@
     var prevKnown = null;
     for(var i=0;i<active.length;i++){
       var r = active[i];
+      var latencyAdj = (typeof r.detectionLatencyMs === 'number') ? r.detectionLatencyMs : 0;
       var y;
       if(r.explicitDriftMs !== null && r.explicitDriftMs !== undefined){
-        y = r.explicitDriftMs;
+        y = r.explicitDriftMs - latencyAdj;
       } else {
-        var raw = r.t % 60000;
+        var raw = (r.t - latencyAdj) % 60000;
         if(raw < 0){ raw += 60000; }
         if(prevKnown === null){
           y = raw;
@@ -1619,12 +1644,13 @@
 
   function exportData(){
     if(!records.length){ return; }
-    var lines = ['id,timestamp_ms,display,delta_ms,sync_source,season,clock_display,explicit_drift_ms,is_calibration,note'];
+    var lines = ['id,timestamp_ms,display,delta_ms,sync_source,season,clock_display,explicit_drift_ms,detection_latency_ms,is_calibration,note'];
     records.forEach(function(r){
       var note = (r.note||'').replace(/,/g,'，').replace(/\n/g,' ');
       lines.push([
         r.id, r.t, r.display, r.deltaMs===null?'':r.deltaMs, r.syncSource, r.season||'',
         r.clockDisplay||'', (r.explicitDriftMs===null||r.explicitDriftMs===undefined)?'':r.explicitDriftMs,
+        (typeof r.detectionLatencyMs === 'number')?r.detectionLatencyMs:'',
         r.isCalibration?1:0, note
       ].join(','));
     });
