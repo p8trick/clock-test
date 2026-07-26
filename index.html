@@ -126,7 +126,10 @@
     font-variant-numeric:tabular-nums;
   }
   .cameraTimeOverlay .cameraMs{color:var(--accent);}
-  .flashOverlay{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;}
+  .cameraStatusBadge.captured{
+    font-size:20px; font-weight:700; padding:12px 20px; color:#fff;
+    background:var(--accent); box-shadow:0 0 0 4px rgba(255,138,61,.3);
+  }
   .diaglive{font-size:12px; color:var(--ink-dim); font-family:var(--mono); margin-top:10px; text-align:center;}
   .diagToggleBtn{
     display:block; margin:8px auto 0; background:none; border:none; color:var(--ink-dim);
@@ -280,7 +283,6 @@
       <button class="roiResetBtn" id="roiResetBtn">重置取景框</button>
       <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
-      <div class="flashOverlay" id="flashOverlay"></div>
     </div>
 
     <div class="tuneRow">
@@ -309,7 +311,7 @@
 
     <button class="diagToggleBtn" id="instructionsToggleBtn">使用说明 ▾</button>
     <div class="section" id="instructionsDetail" style="display:none;">
-      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法先把每帧二值化(区分"亮"和"暗")，再用容差比对——附近几个像素范围内找得到匹配就不算变化，这样手抖造成的整体画面平移会被自动吸收掉，只有真正的线段亮灭才会被计入差异分数，理论上不再需要靠调到最高灵敏度去对抗手抖。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，并全屏闪白提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。</p>
+      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法先把每帧二值化(区分"亮"和"暗")，再用容差比对——附近几个像素范围内找得到匹配就不算变化，这样手抖造成的整体画面平移会被自动吸收掉，只有真正的线段亮灭才会被计入差异分数，理论上不再需要靠调到最高灵敏度去对抗手抖。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。</p>
     </div>
 
     <div class="zoomRow" id="hwZoomRow" style="display:none;">
@@ -332,6 +334,7 @@
       <div class="statsline" id="cameraResultText"></div>
       <div class="mbtnrow" style="margin-top:10px;">
         <button class="iconbtn" id="cameraContinueBtn">继续监测下一次</button>
+        <button class="iconbtn" id="cameraUndoBtn" style="color:var(--bad); border-color:var(--bad);">撤销这条记录</button>
       </div>
     </div>
 
@@ -435,12 +438,12 @@
       <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
       <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
       <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。统计面板里"①②③"这三个时刻、以及主界面摘要行显示的"下次校正"，现在都已经按这里设置的秒数实时扣除，改完点保存立刻能看到面板数字变化；导出的预测JSON里relayFireTimes字段是同一套算法，可直接给继电器用，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
-      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳并全屏闪白提示，避免人眼反应延迟带来的误差。LED七段数码管跳变是瞬间通断；检测算法先二值化再做容差比对，能自动吸收手抖造成的画面平移，只统计真正线段亮灭的变化，差异分数是变化像素占比(百分比)，默认灵敏度对应约1.5%变化量，起点定得比较低是因为实测某些数字切换(比如只切换一个线段)差异只有3%左右，太高的阈值会漏检——需要按实机情况配合"防抖容差"滑条一起调；"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据。相机帧率是靠实测每次真正拿到新画面的时间间隔算出来的，不依赖<code>getVideoPlaybackQuality</code>这个接口——它在Safari上对实时摄像头画面经常不增长，直接用会一直显示0.0，换了更可靠的测法。丢帧率如果显示"N/A(此浏览器不支持测量)"就是这个接口在你的Safari版本上确实不可用，不影响其他数字准确性。每条自动检测的相机记录会额外存一个"当次估算延迟"数值(原始时间戳本身不会被改写，保持如实记录)，统计计算漂移速率时会自动扣除这个延迟，日志列表和CSV导出里都能看到具体扣了多少毫秒，跟Tuya继电器那8秒执行延迟是同一个处理思路——只在计算这一层修正，不动原始观测数据。检测失败或误触发时用"手动立即截取"兜底，这种手动截取不经过相机分析流程，不会附带这项延迟修正。离开此界面会自动关闭摄像头。</p>
+      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"(按钮会变成"停止监测"，再点一次可随时取消)，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳，左上角状态徽章会放大变色提示，避免人眼反应延迟带来的误差，误触发可以在"已捕获"区域点"撤销这条记录"直接删除，不用切去设置页。LED七段数码管跳变是瞬间通断；检测算法先二值化再做容差比对，能自动吸收手抖造成的画面平移，只统计真正线段亮灭的变化，差异分数是变化像素占比(百分比)，默认灵敏度对应约1.5%变化量，起点定得比较低是因为实测某些数字切换(比如只切换一个线段)差异只有3%左右，太高的阈值会漏检——需要按实机情况配合"防抖容差"滑条一起调；"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据。相机帧率是靠实测每次真正拿到新画面的时间间隔算出来的，不依赖<code>getVideoPlaybackQuality</code>这个接口——它在Safari上对实时摄像头画面经常不增长，直接用会一直显示0.0，换了更可靠的测法。丢帧率如果显示"N/A(此浏览器不支持测量)"就是这个接口在你的Safari版本上确实不可用，不影响其他数字准确性。每条自动检测的相机记录会额外存一个"当次估算延迟"数值(原始时间戳本身不会被改写，保持如实记录)，统计计算漂移速率时会自动扣除这个延迟，日志列表和CSV导出里都能看到具体扣了多少毫秒，跟Tuya继电器那8秒执行延迟是同一个处理思路——只在计算这一层修正，不动原始观测数据。检测失败或误触发时用"手动立即截取"兜底，这种手动截取不经过相机分析流程，不会附带这项延迟修正。离开此界面会自动关闭摄像头。</p>
       <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v2.5.1</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v2.6.0</div>
   </div>
 
 </div>
@@ -1069,6 +1072,8 @@
     if(cameraRafId){ cancelAnimationFrame(cameraRafId); cameraRafId = null; }
     if(cooldownTimer){ clearTimeout(cooldownTimer); cooldownTimer = null; }
     updateCameraBadge('未启动');
+    document.getElementById('cameraStatusBadge').classList.remove('captured');
+    updateStartBtnLabel();
     resetDiffMeter();
     var latEl = document.getElementById('estLatencyDisplay');
     if(latEl){ latEl.textContent = '系统估算延迟: --'; }
@@ -1101,6 +1106,30 @@
       cameraLoopActive = true;
       runCameraLoop();
     }
+    updateStartBtnLabel();
+  }
+
+  function disarmCameraDetection(){
+    cameraState = 'idle';
+    consecutiveHits = 0;
+    firstHitTimestamp = null;
+    updateCameraBadge('已取消监测');
+    resetDiffMeter();
+    updateStartBtnLabel();
+  }
+
+  function toggleCameraArm(){
+    if(cameraState === 'armed'){
+      disarmCameraDetection();
+    } else {
+      armCameraDetection();
+    }
+  }
+
+  function updateStartBtnLabel(){
+    var btn = document.getElementById('cameraStartBtn');
+    if(!btn){ return; }
+    btn.textContent = (cameraState === 'armed') ? '停止监测' : '开始监测';
   }
 
   function runCameraLoop(){
@@ -1325,26 +1354,19 @@
     }
   }
 
-  function triggerFlash(){
-    var el = document.getElementById('flashOverlay');
-    if(!el){ return; }
-    el.style.transition = 'none';
-    el.style.opacity = '0.9';
-    requestAnimationFrame(function(){
-      el.style.transition = 'opacity .4s ease-out';
-      el.style.opacity = '0';
-    });
-  }
+  var lastCameraRecordId = null;
 
   function onCameraDetected(t, sourceTag){
     cameraState = 'cooldown';
     consecutiveHits = 0;
     firstHitTimestamp = null;
     updateCameraBadge('已捕获，冷却中');
-    triggerFlash();
+    document.getElementById('cameraStatusBadge').classList.add('captured');
+    updateStartBtnLabel();
     var tag = sourceTag || 'camera';
     var latencyForThisCapture = (tag === 'camera') ? cameraDiagStats.estLatencyMs : null;
-    addRecordAtTime(t, tag, latencyForThisCapture);
+    var rec = addRecordAtTime(t, tag, latencyForThisCapture);
+    lastCameraRecordId = rec.id;
     var d = new Date(t);
     document.getElementById('cameraResultText').textContent =
       formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3);
@@ -1353,8 +1375,18 @@
       if(cameraState === 'cooldown'){
         cameraState = 'idle';
         updateCameraBadge('已停止(点"继续监测下一次"开始)');
+        document.getElementById('cameraStatusBadge').classList.remove('captured');
+        updateStartBtnLabel();
       }
     }, 3000);
+  }
+
+  function undoLastCameraCapture(){
+    if(!lastCameraRecordId){ return; }
+    deleteRecord(lastCameraRecordId);
+    lastCameraRecordId = null;
+    document.getElementById('cameraResultSection').style.display = 'none';
+    document.getElementById('cameraStatusBadge').classList.remove('captured');
   }
 
   function deleteRecord(id){
@@ -1928,8 +1960,9 @@
     document.getElementById('openSettingsBtn').addEventListener('click', function(){ showScreen('settings'); });
     document.getElementById('openCameraBtn').addEventListener('click', function(){ showScreen('camera'); });
     document.getElementById('cameraBackBtn').addEventListener('click', function(){ showScreen('capture'); });
-    document.getElementById('cameraStartBtn').addEventListener('click', function(){ armCameraDetection(); });
+    document.getElementById('cameraStartBtn').addEventListener('click', function(){ toggleCameraArm(); });
     document.getElementById('cameraContinueBtn').addEventListener('click', function(){ armCameraDetection(); });
+    document.getElementById('cameraUndoBtn').addEventListener('click', function(){ undoLastCameraCapture(); });
     document.getElementById('cameraManualBtn').addEventListener('click', function(){
       onCameraDetected(nowCorrected(), 'camera-manual');
     });
