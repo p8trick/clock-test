@@ -6,6 +6,7 @@
 <title>校准计时器 Clock Calibrator</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta id="appleTitleMeta" name="apple-mobile-web-app-title" content="校准计时器">
 <meta name="theme-color" content="#0b0d10">
 <link id="favicon" rel="icon" href="">
 <link id="appleicon" rel="apple-touch-icon" href="">
@@ -165,13 +166,19 @@
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
 
   #captureZone{
-    flex:1 1 auto; margin-top:2px;
+    flex:3 1 0; margin-top:2px;
     background:var(--panel); border:1px solid var(--panel-edge); border-radius:20px;
     padding:16px 10px; text-align:center; position:relative;
     display:flex; flex-direction:column; justify-content:center; align-items:center;
     transition:background .08s, border-color .08s;
   }
   #captureZone.pressed{background:#1a1f27; border-color:var(--accent-dim);}
+  .cameraEntryBtn{
+    flex:1 1 0; margin-top:10px; width:100%; border:none; border-radius:18px;
+    background:var(--accent); color:#1a0f04; font-size:18px; font-weight:700;
+    font-family:inherit; letter-spacing:.02em;
+  }
+  .cameraEntryBtn:active{background:#e57630;}
   .datestr{font-size:14px; color:var(--ink-dim); letter-spacing:.05em; margin-bottom:8px; font-family:var(--mono);}
   .timestr{
     font-family:var(--mono); font-weight:600; letter-spacing:.01em;
@@ -259,7 +266,6 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <button id="openCameraBtn" class="gearbtn" aria-label="摄像头精确捕获">📷</button>
       <button id="openSettingsBtn" class="gearbtn" aria-label="设置">设置</button>
     </div>
 
@@ -269,6 +275,8 @@
       <div class="summaryline" id="summaryLine"></div>
       <div class="taphint">点击屏幕任意位置 · 空格/回车键 · 蓝牙小键盘 均可记录</div>
     </div>
+
+    <button id="openCameraBigBtn" class="cameraEntryBtn">📷 摄像头精确捕获模式</button>
   </div>
 
   <div id="screenCamera" class="screen" style="display:none;">
@@ -445,7 +453,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v2.7.1</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v2.8.0</div>
   </div>
 
 </div>
@@ -1862,13 +1870,27 @@
     return canvas.toDataURL('image/png');
   }
 
+  function getLocalizedAppName(){
+    var lang = ((navigator.language || (navigator.languages && navigator.languages[0]) || 'en') + '').toLowerCase();
+    if(lang.indexOf('zh') === 0){
+      return { name: '校准计时器', shortName: '校准计时器' };
+    }
+    return { name: 'Clock Calibrator', shortName: 'Calibrator' };
+  }
+
   function setupPWA(){
     var iconUrl = buildIconDataUrl();
     document.getElementById('favicon').href = iconUrl;
     document.getElementById('appleicon').href = iconUrl;
+
+    var appNames = getLocalizedAppName();
+    document.title = appNames.name;
+    var appleTitleMeta = document.getElementById('appleTitleMeta');
+    if(appleTitleMeta){ appleTitleMeta.setAttribute('content', appNames.shortName); }
+
     var manifest = {
-      name: '校准计时器',
-      short_name: '校准计时器',
+      name: appNames.name,
+      short_name: appNames.shortName,
       start_url: './',
       display: 'standalone',
       background_color: '#0b0d10',
@@ -1988,7 +2010,7 @@
     });
 
     document.getElementById('openSettingsBtn').addEventListener('click', function(){ showScreen('settings'); });
-    document.getElementById('openCameraBtn').addEventListener('click', function(){ showScreen('camera'); });
+    document.getElementById('openCameraBigBtn').addEventListener('click', function(){ showScreen('camera'); });
     document.getElementById('cameraBackBtn').addEventListener('click', function(){ showScreen('capture'); });
     document.getElementById('cameraStartBtn').addEventListener('click', function(){ toggleCameraArm(); });
     document.getElementById('cameraContinueBtn').addEventListener('click', function(){ armCameraDetection(); });
