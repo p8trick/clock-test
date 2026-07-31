@@ -112,6 +112,9 @@
     background:var(--accent); border-radius:50%; border:2px solid #1a0f04;
     touch-action:none; cursor:nwse-resize;
   }
+  .segMaskOverlay{position:absolute; inset:0; pointer-events:none;}
+  .segBoxOuter{position:absolute; transform-origin:center center;}
+  .segBar{position:absolute; background:rgba(0,255,150,.55); border:1px solid rgba(0,255,150,.9);}
   .roiResetBtn{
     position:absolute; top:10px; left:50%; transform:translateX(-50%);
     background:rgba(0,0,0,.6); color:var(--ink); font-size:11px; padding:5px 10px;
@@ -294,6 +297,17 @@
     <div class="cameraStage">
       <video id="cameraVideo" playsinline muted autoplay></video>
       <div class="roiGuide" id="roiGuide">
+        <div class="segMaskOverlay" id="segMaskOverlay" style="display:none;">
+          <div class="segBoxOuter" id="segBoxOuter">
+            <div class="segBar" id="seg_top"></div>
+            <div class="segBar" id="seg_topleft"></div>
+            <div class="segBar" id="seg_topright"></div>
+            <div class="segBar" id="seg_middle"></div>
+            <div class="segBar" id="seg_botleft"></div>
+            <div class="segBar" id="seg_botright"></div>
+            <div class="segBar" id="seg_bottom"></div>
+          </div>
+        </div>
         <div class="roiResizeHandle" id="roiResizeHandle"></div>
       </div>
       <button class="roiResetBtn" id="roiResetBtn">重置取景框</button>
@@ -325,6 +339,60 @@
       <button class="burstModeBtn" id="burstModeBtn">连拍模式(3次)</button>
     </div>
 
+    <div class="burstModeRow">
+      <button class="burstModeBtn active" id="wholeRoiModeBtn">整块ROI模式</button>
+      <button class="burstModeBtn" id="segMaskModeBtn">七段Mask模式</button>
+    </div>
+
+    <div class="diaglive" id="maskQualityDisplay" style="display:none;">Mask匹配度 -- · 亮度覆盖率 --</div>
+    <button class="diagToggleBtn" id="maskEditorToggleBtn" style="display:none;">七段Mask编辑器 ▾</button>
+    <div class="section" id="maskEditorDetail" style="display:none;">
+      <div class="tuneRow">
+        <span class="zoomlabel">整体宽度</span>
+        <input type="range" id="segWidthSlider" min="20" max="100" step="1" style="flex:1;">
+        <span id="segWidthSliderVal" class="zoomval">70</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">整体高度</span>
+        <input type="range" id="segHeightSlider" min="20" max="100" step="1" style="flex:1;">
+        <span id="segHeightSliderVal" class="zoomval">82</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">左右位置</span>
+        <input type="range" id="segOffsetXSlider" min="0" max="100" step="1" style="flex:1;">
+        <span id="segOffsetXSliderVal" class="zoomval">50</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">上下位置</span>
+        <input type="range" id="segOffsetYSlider" min="0" max="100" step="1" style="flex:1;">
+        <span id="segOffsetYSliderVal" class="zoomval">50</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">横线粗细</span>
+        <input type="range" id="segHThickSlider" min="3" max="40" step="1" style="flex:1;">
+        <span id="segHThickSliderVal" class="zoomval">14</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">竖线粗细</span>
+        <input type="range" id="segVThickSlider" min="3" max="40" step="1" style="flex:1;">
+        <span id="segVThickSliderVal" class="zoomval">16</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">线段间隙</span>
+        <input type="range" id="segGapSlider" min="0" max="20" step="1" style="flex:1;">
+        <span id="segGapSliderVal" class="zoomval">6</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">旋转角度</span>
+        <input type="range" id="segRotationSlider" min="-30" max="30" step="1" style="flex:1;">
+        <span id="segRotationSliderVal" class="zoomval">0</span>
+      </div>
+      <div class="mbtnrow" style="margin-top:10px;">
+        <button class="iconbtn" id="segAutoCalibrateBtn">自动优化</button>
+        <button class="iconbtn" id="segResetBtn">重置Mask</button>
+      </div>
+    </div>
+
     <div class="cameraBigBtnRow">
       <button class="bigCamBtn bigCamBtn-primary" id="cameraStartBtn">开始监测</button>
       <button class="bigCamBtn" id="cameraManualBtn">手动立即截取</button>
@@ -332,7 +400,7 @@
 
     <button class="diagToggleBtn" id="instructionsToggleBtn">使用说明 ▾</button>
     <div class="section" id="instructionsDetail" style="display:none;">
-      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法先把每帧二值化(区分"亮"和"暗")，再用容差比对——附近几个像素范围内找得到匹配就不算变化，这样手抖造成的整体画面平移会被自动吸收掉，只有真正的线段亮灭才会被计入差异分数，理论上不再需要靠调到最高灵敏度去对抗手抖。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；Esc＝退出摄像头回到主界面。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。</p>
+      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法先把每帧二值化(区分"亮"和"暗")，再用容差比对——附近几个像素范围内找得到匹配就不算变化，这样手抖造成的整体画面平移会被自动吸收掉，只有真正的线段亮灭才会被计入差异分数，理论上不再需要靠调到最高灵敏度去对抗手抖。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；Esc＝退出摄像头回到主界面。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">七段Mask模式</b>：切到"七段Mask模式"后，检测只统计Mask覆盖的7段线条区域，Mask以外的背景/间隙像素全部忽略，能大幅提高部分线段变化少的数字(如0→1、5→6、8→9)的识别率。展开"七段Mask编辑器"手动调整整体宽高、位置、横竖线粗细、间隙、旋转来对齐真实LED；更省事的办法是点"自动优化"，程序会在当前位置附近自动搜索让Mask区域平均亮度最高的位置(说明LED线条被完整框住)，一般几秒内就能吸附到位。"Mask匹配度"和"亮度覆盖率"两个数字用来判断当前对齐得好不好——匹配度是Mask内外的亮度对比(越高说明边界卡得越准)，覆盖率是Mask内当前有多少比例被判定为点亮(不同数字本身覆盖率不同，忽高忽低正常，长期持续很低才说明没框准)。这仍然是纯像素检测，不做数字识别(OCR)。</p>
     </div>
 
     <div class="zoomRow" id="hwZoomRow" style="display:none;">
@@ -363,6 +431,7 @@
       <div class="diaglive" id="estLatencyDisplay">系统估算延迟: --</div>
       <button class="diagToggleBtn" id="diagToggleBtn">查看诊断详情 ▾</button>
       <div class="cameraDiagDetail" id="cameraDiagDetail" style="display:none;"></div>
+      <div class="cameraDiagDetail" id="segDebugDetail" style="display:none; margin-top:6px;"></div>
     </div>
 
     <canvas id="cameraCanvas" style="display:none;"></canvas>
@@ -437,11 +506,18 @@
         <button class="iconbtn" id="exportPredBtn">导出预测JSON</button>
         <button class="iconbtn" id="clearBtn">清空记录</button>
       </div>
+      <div class="toolrow">
+        <button class="iconbtn" id="exportBackupBtn">导出完整备份(JSON)</button>
+        <button class="iconbtn" id="importBackupBtn">导入完整备份(JSON)</button>
+      </div>
+      <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
+      <p style="margin-top:8px;">完整备份包含所有记录的全部字段(含系统延迟、连拍会话标记等)，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，按记录ID去重，不会覆盖或清空当前已有的记录。</p>
     </div>
 
     <div class="section">
       <h4>漂移统计</h4>
       <div id="statsPanel"></div>
+      <button class="iconbtn" id="clearDriftHistoryBtn" style="width:100%; margin-top:10px;">清空收敛趋势记录</button>
     </div>
 
     <div class="section">
@@ -464,7 +540,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.0.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.2.0</div>
   </div>
 
 </div>
@@ -1065,12 +1141,17 @@
     slider.max = caps.zoom.max;
     slider.step = caps.zoom.step || 0.1;
     var settings = track.getSettings ? track.getSettings() : {};
-    slider.value = settings.zoom || caps.zoom.min;
+    var savedZoom = null;
+    try{ savedZoom = parseFloat(localStorage.getItem(ZOOM_KEY + '_hw')); }catch(e){}
+    var initialZoom = (savedZoom && savedZoom >= caps.zoom.min && savedZoom <= caps.zoom.max) ? savedZoom : (settings.zoom || caps.zoom.min);
+    slider.value = initialZoom;
     valEl.textContent = parseFloat(slider.value).toFixed(1) + 'x';
+    track.applyConstraints({ advanced: [{ zoom: initialZoom }] }).catch(function(){});
     slider.oninput = function(){
       var v = parseFloat(slider.value);
       valEl.textContent = v.toFixed(1) + 'x';
       track.applyConstraints({ advanced: [{ zoom: v }] }).catch(function(){});
+      try{ localStorage.setItem(ZOOM_KEY + '_hw', String(v)); }catch(e){}
     };
   }
 
@@ -1078,10 +1159,18 @@
     var slider = document.getElementById('previewZoomSlider');
     var valEl = document.getElementById('previewZoomVal');
     var video = document.getElementById('cameraVideo');
+    var savedPreview = null;
+    try{ savedPreview = parseFloat(localStorage.getItem(ZOOM_KEY + '_preview')); }catch(e){}
+    if(savedPreview && savedPreview >= 1 && savedPreview <= 4){
+      slider.value = savedPreview;
+      valEl.textContent = savedPreview.toFixed(1) + 'x';
+      video.style.transform = 'scale(' + savedPreview + ')';
+    }
     slider.addEventListener('input', function(){
       var v = parseFloat(slider.value);
       valEl.textContent = v.toFixed(1) + 'x';
       video.style.transform = 'scale(' + v + ')';
+      try{ localStorage.setItem(ZOOM_KEY + '_preview', String(v)); }catch(e){}
     });
   }
 
@@ -1236,15 +1325,302 @@
     if(labelEl){ labelEl.textContent = '--% / ' + sensitivityThreshold.toFixed(1) + '%'; }
   }
 
-  function binarizeFrame(frame, w, h){
+  var SEG_SAMPLE_W = 50;
+  var SEG_SAMPLE_H = 70;
+  var SEG_NAMES = ['top','topleft','topright','middle','botleft','botright','bottom'];
+
+  function segmentTest(lx, ly, p){
+    var gap = p.gap/100, vT = p.vThick/100, hT = p.hThick/100, midY = 0.5;
+    switch(p._segFilter){
+      case 'top': return ly<=hT && lx>=gap && lx<=1-gap;
+      case 'bottom': return ly>=1-hT && lx>=gap && lx<=1-gap;
+      case 'middle': return Math.abs(ly-midY)<=hT/2 && lx>=gap && lx<=1-gap;
+      case 'topleft': return lx<=vT && ly>=gap && ly<=midY-gap/2;
+      case 'topright': return lx>=1-vT && ly>=gap && ly<=midY-gap/2;
+      case 'botleft': return lx<=vT && ly>=midY+gap/2 && ly<=1-gap;
+      case 'botright': return lx>=1-vT && ly>=midY+gap/2 && ly<=1-gap;
+      default:
+        return (ly<=hT && lx>=gap && lx<=1-gap) ||
+               (ly>=1-hT && lx>=gap && lx<=1-gap) ||
+               (Math.abs(ly-midY)<=hT/2 && lx>=gap && lx<=1-gap) ||
+               (lx<=vT && ly>=gap && ly<=midY-gap/2) ||
+               (lx>=1-vT && ly>=gap && ly<=midY-gap/2) ||
+               (lx<=vT && ly>=midY+gap/2 && ly<=1-gap) ||
+               (lx>=1-vT && ly>=midY+gap/2 && ly<=1-gap);
+    }
+  }
+
+  function buildMaskGeneric(w, h, params, segFilter){
+    var mask = new Uint8Array(w*h);
+    var boxW = w * (params.width/100);
+    var boxH = h * (params.height/100);
+    var cx = w * (params.offsetX/100);
+    var cy = h * (params.offsetY/100);
+    var rot = (params.rotation||0) * Math.PI/180;
+    var cosR = Math.cos(-rot), sinR = Math.sin(-rot);
+    var p = params; p._segFilter = segFilter;
+    for(var y=0; y<h; y++){
+      for(var x=0; x<w; x++){
+        var dx = x - cx, dy = y - cy;
+        var rx = dx*cosR - dy*sinR;
+        var ry = dx*sinR + dy*cosR;
+        var lx = (rx + boxW/2) / boxW;
+        var ly = (ry + boxH/2) / boxH;
+        if(lx>=0 && lx<=1 && ly>=0 && ly<=1 && segmentTest(lx, ly, p)){
+          mask[y*w+x] = 1;
+        }
+      }
+    }
+    return mask;
+  }
+
+  function buildSegmentMask(w, h, params){
+    return buildMaskGeneric(w, h, params, null);
+  }
+
+  function buildHaloMask(segMask, w, h, marginPx){
+    var dilated = dilateMask(segMask, w, h, marginPx);
+    var halo = new Uint8Array(w*h);
+    for(var p=0; p<w*h; p++){
+      halo[p] = (dilated[p] && !segMask[p]) ? 1 : 0;
+    }
+    return halo;
+  }
+
+  function countMaskPixels(mask){
+    var c = 0;
+    for(var i=0;i<mask.length;i++){ if(mask[i]){ c++; } }
+    return c;
+  }
+
+  var SEG_MASK_KEY = 'cc_segmask_v1';
+  var ZOOM_KEY = 'cc_zoom_v1';
+  var segMaskEnabled = false;
+  var segMaskState = { width:70, height:82, offsetX:50, offsetY:50, hThick:14, vThick:16, gap:6, rotation:0 };
+  var cachedSegMask = null;
+  var cachedHaloMask = null;
+  var cachedMaskPixelCount = 0;
+  var cachedSegMaskParamsKey = '';
+
+  function loadSegMaskState(){
+    try{
+      var raw = localStorage.getItem(SEG_MASK_KEY);
+      var v = raw ? JSON.parse(raw) : null;
+      if(v){
+        segMaskEnabled = !!v.enabled;
+        if(v.params){ segMaskState = v.params; }
+      }
+    }catch(e){}
+  }
+
+  function saveSegMaskState(){
+    try{ localStorage.setItem(SEG_MASK_KEY, JSON.stringify({ enabled: segMaskEnabled, params: segMaskState })); }catch(e){}
+  }
+
+  var cachedSingleSegMasks = null;
+
+  function ensureSegMaskCache(){
+    var key = JSON.stringify(segMaskState);
+    if(key === cachedSegMaskParamsKey && cachedSegMask){ return; }
+    cachedSegMask = buildSegmentMask(SEG_SAMPLE_W, SEG_SAMPLE_H, segMaskState);
+    cachedHaloMask = buildHaloMask(cachedSegMask, SEG_SAMPLE_W, SEG_SAMPLE_H, 3);
+    cachedMaskPixelCount = countMaskPixels(cachedSegMask);
+    cachedSingleSegMasks = {};
+    SEG_NAMES.forEach(function(name){
+      cachedSingleSegMasks[name] = buildMaskGeneric(SEG_SAMPLE_W, SEG_SAMPLE_H, segMaskState, name);
+    });
+    cachedSegMaskParamsKey = key;
+  }
+
+  function computeMaskQuality(frame, w, h){
+    ensureSegMaskCache();
+    var maskSum=0, maskCount=0, haloSum=0, haloCount=0, litCount=0;
+    var minLum=255, maxLum=0;
+    for(var p=0; p<w*h; p++){
+      var i = p*4;
+      var lum = Math.max(frame[i], frame[i+1], frame[i+2]);
+      if(cachedSegMask[p]){
+        maskSum += lum; maskCount++;
+        if(lum < minLum){ minLum = lum; }
+        if(lum > maxLum){ maxLum = lum; }
+      } else if(cachedHaloMask[p]){
+        haloSum += lum; haloCount++;
+      }
+    }
+    var threshold = (minLum+maxLum)/2;
+    for(var p2=0; p2<w*h; p2++){
+      if(cachedSegMask[p2]){
+        var i2 = p2*4;
+        var lum2 = Math.max(frame[i2], frame[i2+1], frame[i2+2]);
+        if(lum2 > threshold){ litCount++; }
+      }
+    }
+    var avgMask = maskCount ? maskSum/maskCount : 0;
+    var avgHalo = haloCount ? haloSum/haloCount : 0;
+    var matchQuality = avgMask > 0 ? Math.max(0, Math.min(100, ((avgMask-avgHalo)/avgMask)*100)) : 0;
+    var coverage = maskCount ? (litCount/maskCount)*100 : 0;
+    return { matchQuality: matchQuality, coverage: coverage, avgMask: avgMask, avgHalo: avgHalo };
+  }
+
+  var debugPanelOpen = false;
+
+  function updateMaskQualityDisplay(mq){
+    var el = document.getElementById('maskQualityDisplay');
+    if(el){
+      el.textContent = 'Mask匹配度 ' + mq.matchQuality.toFixed(0) + '% · 亮度覆盖率 ' + mq.coverage.toFixed(0) + '%';
+    }
+  }
+
+  function avgBrightnessInMask(frame, mask){
+    var sum=0, count=0;
+    for(var p=0;p<mask.length;p++){
+      if(mask[p]){ var i=p*4; sum += Math.max(frame[i],frame[i+1],frame[i+2]); count++; }
+    }
+    return count ? sum/count : 0;
+  }
+
+  function updateSegmentDebugDisplay(frame, w, h){
+    var el = document.getElementById('segDebugDetail');
+    if(!el){ return; }
+    ensureSegMaskCache();
+    var lines = SEG_NAMES.map(function(name){
+      var b = avgBrightnessInMask(frame, cachedSingleSegMasks[name]);
+      return '<div class="diagrow">' + name + ': ' + b.toFixed(1) + '</div>';
+    });
+    var totalB = avgBrightnessInMask(frame, cachedSegMask);
+    lines.push('<div class="diagrow">总亮度: ' + totalB.toFixed(1) + '</div>');
+    lines.push('<div class="diagrow">当前触发阈值: ' + sensitivityThreshold.toFixed(1) + '%</div>');
+    var lastDiffEl = document.getElementById('diffMeterLabel');
+    lines.push('<div class="diagrow">当前差异分数: ' + (lastDiffEl ? lastDiffEl.textContent : '--') + '</div>');
+    el.innerHTML = lines.join('');
+  }
+
+  function clampSegParam(key, val){
+    var ranges = {
+      width:[20,100], height:[20,100], offsetX:[0,100], offsetY:[0,100],
+      hThick:[3,40], vThick:[3,40], gap:[0,20], rotation:[-30,30]
+    };
+    var r = ranges[key] || [0,100];
+    return Math.max(r[0], Math.min(r[1], val));
+  }
+
+  function getSegmentRectsPct(p){
+    var gap = p.gap, hT = p.hThick, vT = p.vThick, midY = 50;
+    return {
+      top:      { left: gap, top: 0, width: 100-2*gap, height: hT },
+      bottom:   { left: gap, top: 100-hT, width: 100-2*gap, height: hT },
+      middle:   { left: gap, top: midY-hT/2, width: 100-2*gap, height: hT },
+      topleft:  { left: 0, top: gap, width: vT, height: Math.max(0, midY-gap/2-gap) },
+      topright: { left: 100-vT, top: gap, width: vT, height: Math.max(0, midY-gap/2-gap) },
+      botleft:  { left: 0, top: midY+gap/2, width: vT, height: Math.max(0, 100-gap-(midY+gap/2)) },
+      botright: { left: 100-vT, top: midY+gap/2, width: vT, height: Math.max(0, 100-gap-(midY+gap/2)) }
+    };
+  }
+
+  function renderSegMaskOverlay(){
+    var overlay = document.getElementById('segMaskOverlay');
+    var outer = document.getElementById('segBoxOuter');
+    if(!overlay || !outer){ return; }
+    overlay.style.display = segMaskEnabled ? 'block' : 'none';
+    if(!segMaskEnabled){ return; }
+    var p = segMaskState;
+    outer.style.width = p.width + '%';
+    outer.style.height = p.height + '%';
+    outer.style.left = (p.offsetX - p.width/2) + '%';
+    outer.style.top = (p.offsetY - p.height/2) + '%';
+    outer.style.transform = 'rotate(' + (p.rotation||0) + 'deg)';
+
+    var rects = getSegmentRectsPct(p);
+    SEG_NAMES.forEach(function(name){
+      var el = document.getElementById('seg_' + name);
+      if(!el){ return; }
+      var r = rects[name];
+      el.style.left = r.left + '%';
+      el.style.top = r.top + '%';
+      el.style.width = r.width + '%';
+      el.style.height = r.height + '%';
+    });
+  }
+
+  function syncMaskEditorSliders(){
+    var map = {
+      segWidthSlider: 'width', segHeightSlider: 'height',
+      segOffsetXSlider: 'offsetX', segOffsetYSlider: 'offsetY',
+      segHThickSlider: 'hThick', segVThickSlider: 'vThick',
+      segGapSlider: 'gap', segRotationSlider: 'rotation'
+    };
+    Object.keys(map).forEach(function(sliderId){
+      var el = document.getElementById(sliderId);
+      var valEl = document.getElementById(sliderId + 'Val');
+      if(el){ el.value = segMaskState[map[sliderId]]; }
+      if(valEl){ valEl.textContent = segMaskState[map[sliderId]]; }
+    });
+    renderSegMaskOverlay();
+  }
+
+  function autoCalibrateMask(){
+    var video = document.getElementById('cameraVideo');
+    if(!video || !video.videoWidth){ alert('摄像头未就绪，请先进入预览'); return; }
+    var sampleW = SEG_SAMPLE_W, sampleH = SEG_SAMPLE_H;
+    var canvas = document.getElementById('cameraCanvas');
+    canvas.width = sampleW; canvas.height = sampleH;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var vr = getVisibleVideoRect(video);
+    var sx = vr.cropX + vr.visW*(roiState.left/100);
+    var sy = vr.cropY + vr.visH*(roiState.top/100);
+    var sw = vr.visW*(roiState.width/100);
+    var sh = vr.visH*(roiState.height/100);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
+    var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
+
+    function scoreFor(params){
+      var mask = buildSegmentMask(sampleW, sampleH, params);
+      return avgBrightnessInMask(frame, mask);
+    }
+
+    var best = Object.assign({}, segMaskState);
+    var bestScore = scoreFor(best);
+    var steps = {
+      offsetX: [-8,-5,-3,-1,1,3,5,8],
+      offsetY: [-8,-5,-3,-1,1,3,5,8],
+      width: [-12,-8,-4,4,8,12],
+      height: [-12,-8,-4,4,8,12]
+    };
+    for(var pass=0; pass<2; pass++){
+      ['offsetX','offsetY','width','height'].forEach(function(key){
+        var baseVal = best[key];
+        steps[key].forEach(function(delta){
+          var candidate = Object.assign({}, best);
+          candidate[key] = clampSegParam(key, baseVal + delta);
+          var score = scoreFor(candidate);
+          if(score > bestScore){
+            bestScore = score;
+            best = candidate;
+          }
+        });
+      });
+    }
+
+    segMaskState = best;
+    saveSegMaskState();
+    cachedSegMaskParamsKey = '';
+    syncMaskEditorSliders();
+    var mqFinal = computeMaskQuality(frame, sampleW, sampleH);
+    updateMaskQualityDisplay(mqFinal);
+    alert('自动优化完成 · 亮度评分 ' + bestScore.toFixed(1) + ' · 匹配度 ' + mqFinal.matchQuality.toFixed(0) + '%');
+  }
+
+  function binarizeFrame(frame, w, h, restrictMask){
     var n = w*h;
     var lums = new Uint8Array(n);
     var minLum = 255, maxLum = 0;
     for(var i=0,p=0; i<frame.length; i+=4,p++){
       var lum = Math.max(frame[i], frame[i+1], frame[i+2]);
       lums[p] = lum;
-      if(lum < minLum){ minLum = lum; }
-      if(lum > maxLum){ maxLum = lum; }
+      if(!restrictMask || restrictMask[p]){
+        if(lum < minLum){ minLum = lum; }
+        if(lum > maxLum){ maxLum = lum; }
+      }
     }
     var threshold = (minLum + maxLum) / 2;
     var mask = new Uint8Array(n);
@@ -1276,13 +1652,14 @@
     return out;
   }
 
-  function tolerantDiffPct(curMask, curDilated, prevMask, prevDilated, w, h){
+  function tolerantDiffPct(curMask, curDilated, prevMask, prevDilated, w, h, normCount){
     var n = w*h, changed = 0;
     for(var p=0; p<n; p++){
       if(curMask[p] && !prevDilated[p]){ changed++; }
       if(prevMask[p] && !curDilated[p]){ changed++; }
     }
-    return (changed / n) * 100;
+    var denom = (normCount && normCount > 0) ? normCount : n;
+    return (changed / denom) * 100;
   }
 
   function getVisibleVideoRect(video){
@@ -1311,7 +1688,7 @@
     analysisFrameCount++;
     var perfStart = performance.now();
 
-    var sampleW = 60, sampleH = 20;
+    var sampleW = SEG_SAMPLE_W, sampleH = SEG_SAMPLE_H;
     var canvas = document.getElementById('cameraCanvas');
     canvas.width = sampleW;
     canvas.height = sampleH;
@@ -1326,11 +1703,25 @@
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
     var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
 
-    var curMask = binarizeFrame(frame, sampleW, sampleH);
+    var normCount = null;
+    var restrictMask = null;
+    if(segMaskEnabled){
+      ensureSegMaskCache();
+      restrictMask = cachedSegMask;
+      normCount = cachedMaskPixelCount;
+      var mq = computeMaskQuality(frame, sampleW, sampleH);
+      updateMaskQualityDisplay(mq);
+      if(debugPanelOpen){ updateSegmentDebugDisplay(frame, sampleW, sampleH); }
+    }
+
+    var curMask = binarizeFrame(frame, sampleW, sampleH, restrictMask);
+    if(segMaskEnabled){
+      for(var mi=0; mi<curMask.length; mi++){ if(!cachedSegMask[mi]){ curMask[mi] = 0; } }
+    }
     var curDilated = dilateMask(curMask, sampleW, sampleH, shakeToleranceRadius);
 
     if(prevBinaryMask){
-      var avgDiff = tolerantDiffPct(curMask, curDilated, prevBinaryMask, prevDilatedMask, sampleW, sampleH);
+      var avgDiff = tolerantDiffPct(curMask, curDilated, prevBinaryMask, prevDilatedMask, sampleW, sampleH, normCount);
       updateDiffMeter(avgDiff);
 
       if(cameraState === 'armed'){
@@ -1991,6 +2382,70 @@
     setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
   }
 
+  function exportFullBackup(){
+    var payload = {
+      backupVersion: 1,
+      exportedAt: Date.now(),
+      recordCount: records.length,
+      records: records
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'clock-full-backup-' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  }
+
+  function importFullBackup(file){
+    if(!file){ return; }
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var data;
+      try{
+        data = JSON.parse(e.target.result);
+      }catch(err){
+        alert('导入失败：不是有效的JSON文件');
+        return;
+      }
+      if(!data || !Array.isArray(data.records)){
+        alert('导入失败：文件里找不到records数组，请确认选的是"导出完整备份"生成的文件');
+        return;
+      }
+      var existingIds = {};
+      records.forEach(function(r){ existingIds[r.id] = true; });
+      var added = 0, skipped = 0;
+      data.records.forEach(function(r){
+        if(r && r.id && typeof r.t === 'number' && !existingIds[r.id]){
+          records.push(r);
+          existingIds[r.id] = true;
+          added++;
+        } else {
+          skipped++;
+        }
+      });
+      records.sort(function(a,b){ return a.t - b.t; });
+      saveRecords();
+      renderLog();
+      renderStats();
+      alert('导入完成：新增 ' + added + ' 条记录，跳过 ' + skipped + ' 条重复/无效记录。设置(季节/延迟补偿/收敛趋势等)不受导入影响，只合并了记录本身。');
+    };
+    reader.readAsText(file);
+  }
+
+  function clearDriftHistory(){
+    var total = (driftHistory.summer ? driftHistory.summer.length : 0) + (driftHistory.winter ? driftHistory.winter.length : 0);
+    if(total === 0){ alert('收敛趋势记录本来就是空的'); return; }
+    if(confirm('确定清空收敛趋势记录吗？(共' + total + '条快照，含误触发留下的异常数据)。不影响漂移统计本身和历史记录，只清空这个辅助展示用的小日志，之后会从当前状态重新开始累积。')){
+      driftHistory = { summer: [], winter: [] };
+      saveHistory();
+      renderStats();
+      alert('已清空');
+    }
+  }
+
   function clearLog(){
     if(!records.length){ return; }
     if(confirm('确定清空全部 ' + records.length + ' 条记录？此操作不可撤销。')){
@@ -2119,12 +2574,14 @@
     loadDelay();
     loadEnabledSources();
     loadBurstMode();
+    loadSegMaskState();
     renderLog();
     renderSeasonButtons();
     renderStats();
     renderSourceToggleList();
     renderBurstModeButtons();
-    setupPreviewZoom();
+    renderSegModeButtons();
+    syncMaskEditorSliders();
     loadROI();
     applyROIStyle();
     setupROIInteraction();
@@ -2139,6 +2596,15 @@
     document.getElementById('syncStatusBtn').addEventListener('click', syncTime);
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('exportPredBtn').addEventListener('click', exportPrediction);
+    document.getElementById('exportBackupBtn').addEventListener('click', exportFullBackup);
+    document.getElementById('importBackupBtn').addEventListener('click', function(){
+      document.getElementById('importFileInput').click();
+    });
+    document.getElementById('importFileInput').addEventListener('change', function(e){
+      importFullBackup(e.target.files[0]);
+      e.target.value = '';
+    });
+    document.getElementById('clearDriftHistoryBtn').addEventListener('click', clearDriftHistory);
     document.getElementById('clearBtn').addEventListener('click', clearLog);
     document.getElementById('seasonSummerBtn').addEventListener('click', function(){ setSeason('summer'); });
     document.getElementById('seasonWinterBtn').addEventListener('click', function(){ setSeason('winter'); });
@@ -2181,6 +2647,55 @@
       saveBurstMode();
       renderBurstModeButtons();
     });
+
+    function renderSegModeButtons(){
+      document.getElementById('wholeRoiModeBtn').classList.toggle('active', !segMaskEnabled);
+      document.getElementById('segMaskModeBtn').classList.toggle('active', segMaskEnabled);
+      document.getElementById('maskQualityDisplay').style.display = segMaskEnabled ? 'block' : 'none';
+      document.getElementById('maskEditorToggleBtn').style.display = segMaskEnabled ? 'block' : 'none';
+      if(!segMaskEnabled){ document.getElementById('maskEditorDetail').style.display = 'none'; }
+      renderSegMaskOverlay();
+    }
+    document.getElementById('wholeRoiModeBtn').addEventListener('click', function(){
+      segMaskEnabled = false;
+      saveSegMaskState();
+      renderSegModeButtons();
+    });
+    document.getElementById('segMaskModeBtn').addEventListener('click', function(){
+      segMaskEnabled = true;
+      saveSegMaskState();
+      renderSegModeButtons();
+    });
+    document.getElementById('maskEditorToggleBtn').addEventListener('click', function(){
+      var el = document.getElementById('maskEditorDetail');
+      var btn = document.getElementById('maskEditorToggleBtn');
+      var open = el.style.display !== 'none';
+      el.style.display = open ? 'none' : 'block';
+      btn.textContent = open ? '七段Mask编辑器 ▾' : '收起编辑器 ▴';
+    });
+
+    var segSliderMap = {
+      segWidthSlider: 'width', segHeightSlider: 'height',
+      segOffsetXSlider: 'offsetX', segOffsetYSlider: 'offsetY',
+      segHThickSlider: 'hThick', segVThickSlider: 'vThick',
+      segGapSlider: 'gap', segRotationSlider: 'rotation'
+    };
+    Object.keys(segSliderMap).forEach(function(sliderId){
+      document.getElementById(sliderId).addEventListener('input', function(e){
+        var key = segSliderMap[sliderId];
+        segMaskState[key] = parseFloat(e.target.value);
+        document.getElementById(sliderId + 'Val').textContent = e.target.value;
+        renderSegMaskOverlay();
+        saveSegMaskState();
+      });
+    });
+    document.getElementById('segAutoCalibrateBtn').addEventListener('click', function(){ autoCalibrateMask(); });
+    document.getElementById('segResetBtn').addEventListener('click', function(){
+      segMaskState = { width:70, height:82, offsetX:50, offsetY:50, hThick:14, vThick:16, gap:6, rotation:0 };
+      saveSegMaskState();
+      syncMaskEditorSliders();
+    });
+
     document.getElementById('cameraManualBtn').addEventListener('click', function(){
       onCameraDetected(nowCorrected(), 'camera-manual');
     });
@@ -2200,6 +2715,9 @@
       var open = el.style.display !== 'none';
       el.style.display = open ? 'none' : 'block';
       btn.textContent = open ? '查看诊断详情 ▾' : '收起诊断详情 ▴';
+      debugPanelOpen = !open;
+      var segDebugEl = document.getElementById('segDebugDetail');
+      if(segDebugEl){ segDebugEl.style.display = (!open && segMaskEnabled) ? 'block' : 'none'; }
     });
     document.getElementById('instructionsToggleBtn').addEventListener('click', function(){
       var el = document.getElementById('instructionsDetail');
