@@ -391,6 +391,10 @@
         <button class="iconbtn" id="segAutoCalibrateBtn">自动优化</button>
         <button class="iconbtn" id="segResetBtn">重置Mask</button>
       </div>
+      <div class="progresswrap" id="autoCalProgressWrap" style="display:none;">
+        <div class="progresslabel" id="autoCalProgressLabel">准备中...</div>
+        <div class="progressbar"><div class="progressfill" id="autoCalProgressFill" style="width:0%"></div></div>
+      </div>
     </div>
 
     <div class="cameraBigBtnRow">
@@ -540,7 +544,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.2.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.3.0</div>
   </div>
 
 </div>
@@ -1558,9 +1562,25 @@
     renderSegMaskOverlay();
   }
 
+  var autoCalRunning = false;
+
+  function showAutoCalProgress(show, text, pct){
+    var wrap = document.getElementById('autoCalProgressWrap');
+    var bar = document.getElementById('autoCalProgressFill');
+    var label = document.getElementById('autoCalProgressLabel');
+    if(!wrap){ return; }
+    wrap.style.display = show ? 'block' : 'none';
+    if(show){
+      if(bar){ bar.style.width = (pct||0) + '%'; }
+      if(label){ label.textContent = text || ''; }
+    }
+  }
+
   function autoCalibrateMask(){
+    if(autoCalRunning){ return; }
     var video = document.getElementById('cameraVideo');
     if(!video || !video.videoWidth){ alert('摄像头未就绪，请先进入预览'); return; }
+
     var sampleW = SEG_SAMPLE_W, sampleH = SEG_SAMPLE_H;
     var canvas = document.getElementById('cameraCanvas');
     canvas.width = sampleW; canvas.height = sampleH;
@@ -1571,43 +1591,94 @@
     var sw = vr.visW*(roiState.width/100);
     var sh = vr.visH*(roiState.height/100);
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
-    var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
+    var frame;
+    try{
+      frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
+    }catch(err){
+      alert('截取画面失败: ' + err.message);
+      return;
+    }
+
+    autoCalRunning = true;
+    var btn = document.getElementById('segAutoCalibrateBtn');
+    btn.disabled = true;
+    btn.textContent = '优化中...';
+    showAutoCalProgress(true, '准备中...', 0);
 
     function scoreFor(params){
-      var mask = buildSegmentMask(sampleW, sampleH, params);
-      return avgBrightnessInMask(frame, mask);
+      return avgBrightnessInMask(frame, buildSegmentMask(sampleW, sampleH, params));
     }
 
     var best = Object.assign({}, segMaskState);
     var bestScore = scoreFor(best);
-    var steps = {
-      offsetX: [-8,-5,-3,-1,1,3,5,8],
-      offsetY: [-8,-5,-3,-1,1,3,5,8],
-      width: [-12,-8,-4,4,8,12],
-      height: [-12,-8,-4,4,8,12]
-    };
-    for(var pass=0; pass<2; pass++){
-      ['offsetX','offsetY','width','height'].forEach(function(key){
-        var baseVal = best[key];
-        steps[key].forEach(function(delta){
-          var candidate = Object.assign({}, best);
-          candidate[key] = clampSegParam(key, baseVal + delta);
-          var score = scoreFor(candidate);
-          if(score > bestScore){
-            bestScore = score;
-            best = candidate;
-          }
-        });
-      });
+
+    var stages = [
+      { name:'位置', keys:['offsetX','offsetY'], steps:[-8,-5,-3,-1,1,3,5,8] },
+      { name:'尺寸', keys:['width','height'], steps:[-12,-8,-4,4,8,12] },
+      { name:'线宽', keys:['hThick','vThick'], steps:[-4,-2,-1,1,2,4] }
+    ];
+    var stageIdx = 0, keyIdx = 0, stepIdx = 0, keyBaseVal = null;
+    var BATCH_SIZE = 4;
+
+    function finish(success, errMsg){
+      autoCalRunning = false;
+      btn.disabled = false;
+      btn.textContent = '自动优化';
+      showAutoCalProgress(false);
+      if(success){
+        segMaskState = best;
+        saveSegMaskState();
+        cachedSegMaskParamsKey = '';
+        syncMaskEditorSliders();
+        var mqFinal = computeMaskQuality(frame, sampleW, sampleH);
+        updateMaskQualityDisplay(mqFinal);
+        alert('自动优化完成 · 亮度评分 ' + bestScore.toFixed(1) + ' · 匹配度 ' + mqFinal.matchQuality.toFixed(0) + '%');
+      } else {
+        alert('自动优化未完成: ' + (errMsg || '未知错误'));
+      }
     }
 
-    segMaskState = best;
-    saveSegMaskState();
-    cachedSegMaskParamsKey = '';
-    syncMaskEditorSliders();
-    var mqFinal = computeMaskQuality(frame, sampleW, sampleH);
-    updateMaskQualityDisplay(mqFinal);
-    alert('自动优化完成 · 亮度评分 ' + bestScore.toFixed(1) + ' · 匹配度 ' + mqFinal.matchQuality.toFixed(0) + '%');
+    function runChunk(){
+      try{
+        if(stageIdx >= stages.length){
+          finish(true);
+          return;
+        }
+        var stage = stages[stageIdx];
+        if(keyIdx >= stage.keys.length){
+          stageIdx++; keyIdx = 0; stepIdx = 0; keyBaseVal = null;
+          segMaskState = best;
+          syncMaskEditorSliders();
+          if(stageIdx >= stages.length){ finish(true); return; }
+          setTimeout(runChunk, 0);
+          return;
+        }
+        var key = stage.keys[keyIdx];
+        if(stepIdx === 0){
+          keyBaseVal = best[key];
+          var overallPct = Math.round(((stageIdx + keyIdx/stage.keys.length) / stages.length) * 100);
+          showAutoCalProgress(true, '阶段' + (stageIdx+1) + '/3 · ' + stage.name, overallPct);
+        }
+        var processed = 0;
+        while(stepIdx < stage.steps.length && processed < BATCH_SIZE){
+          var delta = stage.steps[stepIdx];
+          var candidate = Object.assign({}, best);
+          candidate[key] = clampSegParam(key, keyBaseVal + delta);
+          var score = scoreFor(candidate);
+          if(score > bestScore){ bestScore = score; best = candidate; }
+          stepIdx++;
+          processed++;
+        }
+        if(stepIdx >= stage.steps.length){
+          keyIdx++; stepIdx = 0;
+        }
+        setTimeout(runChunk, 0);
+      }catch(err){
+        finish(false, err.message);
+      }
+    }
+
+    setTimeout(runChunk, 0);
   }
 
   function binarizeFrame(frame, w, h, restrictMask){
