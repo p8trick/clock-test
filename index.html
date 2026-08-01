@@ -124,6 +124,12 @@
     position:absolute; top:10px; left:10px; background:rgba(0,0,0,.6); color:var(--ink);
     font-size:11px; padding:5px 10px; border-radius:6px; font-family:var(--mono);
   }
+  .camToast{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.85); color:var(--ink); font-size:12px; padding:9px 16px;
+    border-radius:10px; max-width:90%; text-align:center; transition:opacity .3s;
+    border:1px solid var(--panel-edge);
+  }
   .cameraTimeOverlay{
     position:absolute; top:10px; right:10px; background:rgba(0,0,0,.6); color:var(--ink);
     font-size:13px; padding:5px 10px; border-radius:6px; font-family:var(--mono);
@@ -312,6 +318,7 @@
       </div>
       <button class="roiResetBtn" id="roiResetBtn">重置取景框</button>
       <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
+      <div class="camToast" id="camToast" style="display:none;"></div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
     </div>
 
@@ -544,7 +551,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.3.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.3.1</div>
   </div>
 
 </div>
@@ -1126,7 +1133,7 @@
     btn.onclick = function(){
       track.applyConstraints({ advanced: [{ focusMode: 'manual' }] })
         .then(function(){ btn.textContent = '已锁定对焦'; })
-        .catch(function(){ alert('这台设备/浏览器不支持手动锁定对焦，请让镜头静置几秒等自动对焦稳定后再开始监测。'); });
+        .catch(function(){ showCamToast('这台设备/浏览器不支持手动锁定对焦，请让镜头静置几秒等自动对焦稳定后再开始监测。', 4000); });
     };
   }
 
@@ -1562,6 +1569,23 @@
     renderSegMaskOverlay();
   }
 
+  var camToastTimer = null;
+  var camToastFadeTimer = null;
+
+  function showCamToast(msg, duration){
+    var el = document.getElementById('camToast');
+    if(!el){ return; }
+    if(camToastTimer){ clearTimeout(camToastTimer); }
+    if(camToastFadeTimer){ clearTimeout(camToastFadeTimer); }
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.opacity = '1';
+    camToastTimer = setTimeout(function(){
+      el.style.opacity = '0';
+      camToastFadeTimer = setTimeout(function(){ el.style.display = 'none'; }, 300);
+    }, duration || 3500);
+  }
+
   var autoCalRunning = false;
 
   function showAutoCalProgress(show, text, pct){
@@ -1579,7 +1603,7 @@
   function autoCalibrateMask(){
     if(autoCalRunning){ return; }
     var video = document.getElementById('cameraVideo');
-    if(!video || !video.videoWidth){ alert('摄像头未就绪，请先进入预览'); return; }
+    if(!video || !video.videoWidth){ showCamToast('摄像头未就绪，请先进入预览'); return; }
 
     var sampleW = SEG_SAMPLE_W, sampleH = SEG_SAMPLE_H;
     var canvas = document.getElementById('cameraCanvas');
@@ -1595,7 +1619,7 @@
     try{
       frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
     }catch(err){
-      alert('截取画面失败: ' + err.message);
+      showCamToast('截取画面失败: ' + err.message);
       return;
     }
 
@@ -1632,9 +1656,9 @@
         syncMaskEditorSliders();
         var mqFinal = computeMaskQuality(frame, sampleW, sampleH);
         updateMaskQualityDisplay(mqFinal);
-        alert('自动优化完成 · 亮度评分 ' + bestScore.toFixed(1) + ' · 匹配度 ' + mqFinal.matchQuality.toFixed(0) + '%');
+        showCamToast('自动优化完成 · 亮度评分 ' + bestScore.toFixed(1) + ' · 匹配度 ' + mqFinal.matchQuality.toFixed(0) + '%', 4000);
       } else {
-        alert('自动优化未完成: ' + (errMsg || '未知错误'));
+        showCamToast('自动优化未完成: ' + (errMsg || '未知错误'), 4000);
       }
     }
 
