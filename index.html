@@ -136,6 +136,19 @@
     font-variant-numeric:tabular-nums;
   }
   .cameraTimeOverlay .cameraMs{color:var(--accent);}
+  .segFloatBtn{
+    position:absolute; bottom:10px; background:rgba(0,0,0,.65); color:var(--ink);
+    font-size:12px; padding:9px 14px; border-radius:10px; border:1px solid rgba(255,138,61,.5);
+    font-family:inherit;
+  }
+  .segFloatBtnLeft{left:10px;}
+  .segFloatBtnRight{right:10px; border-color:var(--panel-edge);}
+  .segFloatBtn:active{background:rgba(255,138,61,.3);}
+  .autoCalProgressOverlay{
+    position:absolute; left:10px; right:10px; bottom:52px;
+    background:rgba(0,0,0,.75); border-radius:8px; padding:8px 10px;
+  }
+  .autoCalProgressOverlay .progresslabel{color:var(--ink); font-size:11px; margin-bottom:4px;}
   .cameraStatusBadge.captured{
     font-size:20px; font-weight:700; padding:12px 20px; color:#fff;
     background:var(--accent); box-shadow:0 0 0 4px rgba(255,138,61,.3);
@@ -320,6 +333,12 @@
       <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
       <div class="camToast" id="camToast" style="display:none;"></div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
+      <button class="segFloatBtn segFloatBtnLeft" id="segAutoCalibrateBtn" style="display:none;">自动优化</button>
+      <button class="segFloatBtn segFloatBtnRight" id="segResetBtn" style="display:none;">重置Mask</button>
+      <div class="autoCalProgressOverlay" id="autoCalProgressWrap" style="display:none;">
+        <div class="progresslabel" id="autoCalProgressLabel">准备中...</div>
+        <div class="progressbar"><div class="progressfill" id="autoCalProgressFill" style="width:0%"></div></div>
+      </div>
     </div>
 
     <div class="tuneRow">
@@ -393,14 +412,6 @@
         <span class="zoomlabel">旋转角度</span>
         <input type="range" id="segRotationSlider" min="-30" max="30" step="1" style="flex:1;">
         <span id="segRotationSliderVal" class="zoomval">0</span>
-      </div>
-      <div class="mbtnrow" style="margin-top:10px;">
-        <button class="iconbtn" id="segAutoCalibrateBtn">自动优化</button>
-        <button class="iconbtn" id="segResetBtn">重置Mask</button>
-      </div>
-      <div class="progresswrap" id="autoCalProgressWrap" style="display:none;">
-        <div class="progresslabel" id="autoCalProgressLabel">准备中...</div>
-        <div class="progressbar"><div class="progressfill" id="autoCalProgressFill" style="width:0%"></div></div>
       </div>
     </div>
 
@@ -551,7 +562,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.3.1</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.4.0</div>
   </div>
 
 </div>
@@ -2748,6 +2759,8 @@
       document.getElementById('segMaskModeBtn').classList.toggle('active', segMaskEnabled);
       document.getElementById('maskQualityDisplay').style.display = segMaskEnabled ? 'block' : 'none';
       document.getElementById('maskEditorToggleBtn').style.display = segMaskEnabled ? 'block' : 'none';
+      document.getElementById('segAutoCalibrateBtn').style.display = segMaskEnabled ? 'block' : 'none';
+      document.getElementById('segResetBtn').style.display = segMaskEnabled ? 'block' : 'none';
       if(!segMaskEnabled){ document.getElementById('maskEditorDetail').style.display = 'none'; }
       renderSegMaskOverlay();
     }
