@@ -144,6 +144,8 @@
   .segFloatBtnLeft{left:10px;}
   .segFloatBtnRight{right:10px; border-color:var(--panel-edge);}
   .segFloatBtn:active{background:rgba(255,138,61,.3);}
+  .segFloatBtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.18);}
+  #gridOverlayCanvas{position:absolute; inset:0; width:100%; height:100%; pointer-events:none;}
   .autoCalProgressOverlay{
     position:absolute; left:10px; right:10px; bottom:52px;
     background:rgba(0,0,0,.75); border-radius:8px; padding:8px 10px;
@@ -341,6 +343,7 @@
           </div>
         </div>
         <div class="roiResizeHandle" id="roiResizeHandle"></div>
+        <canvas id="gridOverlayCanvas" style="display:none;"></canvas>
       </div>
       <button class="roiResetBtn" id="roiResetBtn">重置取景框</button>
       <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
@@ -349,6 +352,7 @@
       <button class="btKeyStatus notready" id="btKeyStatusBtn">⌨ 检测中...</button>
       <button class="segFloatBtn segFloatBtnLeft" id="segAutoCalibrateBtn" style="display:none;">自动优化</button>
       <button class="segFloatBtn segFloatBtnRight" id="segResetBtn" style="display:none;">重置Mask</button>
+      <button class="segFloatBtn segFloatBtnRight" id="gridOverlayToggleBtn">网格</button>
       <div class="autoCalProgressOverlay" id="autoCalProgressWrap" style="display:none;">
         <div class="progresslabel" id="autoCalProgressLabel">准备中...</div>
         <div class="progressbar"><div class="progressfill" id="autoCalProgressFill" style="width:0%"></div></div>
@@ -1129,6 +1133,69 @@
   var GRID_GLOBAL_RATIO_LIMIT = 0.5;
   var GRID_MIN_CELLS_TO_TRIGGER = 1;
   var lastGridDiag = { changedCells: 0, totalCells: 0, globalRatio: 0, maxCellDelta: 0 };
+  var lastCellChanged = new Uint8Array(0);
+
+  var GRID_OVERLAY_KEY = 'cc_gridoverlay_v1';
+  var showGridOverlay = false;
+
+  function loadGridOverlay(){
+    try{ showGridOverlay = localStorage.getItem(GRID_OVERLAY_KEY) === '1'; }catch(e){ showGridOverlay = false; }
+  }
+
+  function saveGridOverlay(){
+    try{ localStorage.setItem(GRID_OVERLAY_KEY, showGridOverlay ? '1' : '0'); }catch(e){}
+  }
+
+  var gridOverlayLastW = 0;
+  var gridOverlayLastH = 0;
+
+  function clearGridOverlayCanvas(){
+    var canvas = document.getElementById('gridOverlayCanvas');
+    if(!canvas) return;
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function drawGridOverlay(){
+    var canvas = document.getElementById('gridOverlayCanvas');
+    if(!canvas || !showGridOverlay){ return; }
+    var guide = document.getElementById('roiGuide');
+    if(!guide){ return; }
+    var rect = guide.getBoundingClientRect();
+    var w = Math.round(rect.width), h = Math.round(rect.height);
+    if(w <= 0 || h <= 0){ return; }
+    if(w !== gridOverlayLastW || h !== gridOverlayLastH){
+      canvas.width = w; canvas.height = h;
+      gridOverlayLastW = w; gridOverlayLastH = h;
+    }
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    var cols = gridCols, rows = gridRows;
+    var cellW = w / cols, cellH = h / rows;
+
+    ctx.save();
+    if(lastCellChanged.length === cols*rows){
+      ctx.fillStyle = 'rgba(255,87,34,0.25)';
+      for(var ci=0; ci<lastCellChanged.length; ci++){
+        if(lastCellChanged[ci]){
+          var gx = ci % cols, gy = Math.floor(ci/cols);
+          ctx.fillRect(gx*cellW, gy*cellH, cellW, cellH);
+        }
+      }
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    for(var c=1; c<cols; c++){
+      var x = Math.round(c*cellW) + 0.5;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for(var r=1; r<rows; r++){
+      var y = Math.round(r*cellH) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   function computeGridDims(){
     var video = document.getElementById('cameraVideo');
@@ -1140,6 +1207,9 @@
     var effH = Math.min(SEG_SAMPLE_H, sh);
     gridCols = Math.max(3, Math.min(6, Math.round(effW/8)));
     gridRows = Math.max(4, Math.min(8, Math.round(effH/8)));
+    lastCellChanged = new Uint8Array(gridCols*gridRows);
+    gridOverlayLastW = 0;
+    gridOverlayLastH = 0;
   }
 
   function computeGridCellAvg(frame, w, h, cols, rows){
@@ -1284,6 +1354,7 @@
     consecutiveHits = 0;
     firstHitTimestamp = null;
     lastStatsSampleTime = 0;
+    clearGridOverlayCanvas();
     analysisFrameCount = 0;
     analysisTimeSamples = [];
     frameArrivalTimestamps = [];
@@ -1916,10 +1987,13 @@
     if(prevCellAvg){
       var totalCells = gridCols * gridRows;
       var changedCells = 0, maxCellDelta = 0;
+      if(lastCellChanged.length !== totalCells){ lastCellChanged = new Uint8Array(totalCells); }
       for(var ci=0; ci<totalCells; ci++){
         var cellDelta = Math.abs(curCellAvg[ci] - prevCellAvg[ci]);
         if(cellDelta > maxCellDelta){ maxCellDelta = cellDelta; }
-        if(cellDelta > sensitivityThreshold){ changedCells++; }
+        var isChanged = cellDelta > sensitivityThreshold;
+        lastCellChanged[ci] = isChanged ? 1 : 0;
+        if(isChanged){ changedCells++; }
       }
       var globalRatio = changedCells / totalCells;
       lastGridDiag.changedCells = changedCells;
@@ -1927,6 +2001,7 @@
       lastGridDiag.globalRatio = globalRatio;
       lastGridDiag.maxCellDelta = maxCellDelta;
       updateDiffMeter(maxCellDelta);
+      if(showGridOverlay){ drawGridOverlay(); }
 
       if(cameraState === 'armed'){
         var isGlobalEvent = globalRatio > GRID_GLOBAL_RATIO_LIMIT;
@@ -2922,6 +2997,7 @@
     loadEnabledSources();
     loadBurstMode();
     loadSegMaskState();
+    loadGridOverlay();
     renderLog();
     renderSeasonButtons();
     renderStats();
@@ -3003,6 +3079,7 @@
       document.getElementById('maskEditorToggleBtn').style.display = segMaskEnabled ? 'block' : 'none';
       document.getElementById('segAutoCalibrateBtn').style.display = segMaskEnabled ? 'block' : 'none';
       document.getElementById('segResetBtn').style.display = segMaskEnabled ? 'block' : 'none';
+      document.getElementById('gridOverlayToggleBtn').style.display = segMaskEnabled ? 'none' : 'block';
       if(!segMaskEnabled){ document.getElementById('maskEditorDetail').style.display = 'none'; }
       renderSegMaskOverlay();
       updateCameraParamsSummary();
@@ -3045,6 +3122,21 @@
       segMaskState = { width:70, height:82, offsetX:50, offsetY:50, hThick:14, vThick:16, gap:6, rotation:0 };
       saveSegMaskState();
       syncMaskEditorSliders();
+    });
+
+    function renderGridOverlayBtn(){
+      var btn = document.getElementById('gridOverlayToggleBtn');
+      var canvas = document.getElementById('gridOverlayCanvas');
+      btn.classList.toggle('active', showGridOverlay);
+      btn.textContent = showGridOverlay ? '网格 ✓' : '网格';
+      if(canvas){ canvas.style.display = showGridOverlay ? 'block' : 'none'; }
+      if(!showGridOverlay){ clearGridOverlayCanvas(); }
+    }
+    renderGridOverlayBtn();
+    document.getElementById('gridOverlayToggleBtn').addEventListener('click', function(){
+      showGridOverlay = !showGridOverlay;
+      saveGridOverlay();
+      renderGridOverlayBtn();
     });
 
     document.getElementById('cameraManualBtn').addEventListener('click', function(){
