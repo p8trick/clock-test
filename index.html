@@ -562,7 +562,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.4.1</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.4.2</div>
   </div>
 
 </div>
@@ -2643,6 +2643,97 @@
 
   var currentScreen = 'capture';
 
+  // ===== 蓝牙小键盘 Ghost Input 焦点守护（iOS PWA 兼容偏方） =====
+  // iOS PWA(standalone WKWebView) 下，如果页面没有任何真正获得焦点的可编辑元素，
+  // 外置蓝牙键盘的按键事件不会被派发到 document，document 级 keydown 监听会完全收不到事件。
+  // 这里用一个用户看不到、摸不到的 input 一直保持 focus 来"接住"物理键盘事件，
+  // 再让原有的两段 keydown 逻辑把这个 ghost input 识别为"非文字输入"、正常放行快捷键。
+  var BT_GHOST_ID = 'btKeypadGhost';
+  var btGhostEl = null;
+  var btFocusGuardActive = false;
+  var btGhostWatchdogTimer = null;
+
+  function isBtGhostTarget(target){
+    return !!(target && target.id === BT_GHOST_ID);
+  }
+
+  function shouldSkipGhostRefocus(target){
+    if(!target){ return false; }
+    var tag = target.tagName;
+    if(tag === 'TEXTAREA'){ return true; }
+    if(tag === 'SELECT'){ return true; }
+    if(tag === 'INPUT' && !isBtGhostTarget(target)){ return true; }
+    return false;
+  }
+
+  function focusGhostInput(){
+    if(!btGhostEl || !btFocusGuardActive){ return; }
+    if(document.activeElement === btGhostEl){ return; }
+    if(shouldSkipGhostRefocus(document.activeElement)){ return; }
+    try{ btGhostEl.focus({ preventScroll: true }); }
+    catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
+  }
+
+  function enableBtFocusGuard(){
+    btFocusGuardActive = true;
+    focusGhostInput();
+  }
+
+  function disableBtFocusGuard(){
+    btFocusGuardActive = false;
+  }
+
+  function setupBtKeypadGhost(){
+    var el = document.createElement('input');
+    el.type = 'text';
+    el.id = BT_GHOST_ID;
+    el.setAttribute('inputmode', 'none');   // 关键：不弹出系统虚拟键盘，但仍可接收物理/蓝牙键盘事件
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('autocapitalize', 'off');
+    el.setAttribute('spellcheck', 'false');
+    el.setAttribute('aria-hidden', 'true');
+    el.tabIndex = -1;
+    el.style.cssText = 'position:fixed;top:-999px;left:-999px;width:1px;height:1px;padding:0;margin:0;border:none;opacity:0;pointer-events:none;';
+    // Ghost Input 自身可能会把蓝牙按键当成真实文字输入，这里立刻清空，避免残留内容、避免被误判成"正在打字"
+    el.addEventListener('input', function(){ el.value = ''; });
+    el.addEventListener('blur', function(){
+      if(!btFocusGuardActive){ return; }
+      setTimeout(function(){
+        if(shouldSkipGhostRefocus(document.activeElement)){ return; }
+        focusGhostInput();
+      }, 30);
+    });
+    document.body.appendChild(el);
+    btGhostEl = el;
+
+    // 用户点按屏幕(切页、拖动ROI、按按钮等)会让 ghost input 失焦，这里借着同一次用户手势尽快抢回焦点
+    document.addEventListener('touchend', function(e){
+      if(!btFocusGuardActive || shouldSkipGhostRefocus(e.target)){ return; }
+      setTimeout(focusGhostInput, 0);
+    }, { passive: true });
+    document.addEventListener('mouseup', function(e){
+      if(!btFocusGuardActive || shouldSkipGhostRefocus(e.target)){ return; }
+      setTimeout(focusGhostInput, 0);
+    });
+
+    // App 从后台切回前台 / 页面重新可见时，焦点通常会丢失，需要重新抢回
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible' && btFocusGuardActive){ setTimeout(focusGhostInput, 100); }
+    });
+    window.addEventListener('pageshow', function(){ if(btFocusGuardActive){ setTimeout(focusGhostInput, 100); } });
+    window.addEventListener('focus', function(){ if(btFocusGuardActive){ setTimeout(focusGhostInput, 50); } });
+
+    // 兜底看门狗：防止某些场景下焦点被静默夺走而没有触发上面任何事件
+    btGhostWatchdogTimer = setInterval(function(){
+      if(!btFocusGuardActive){ return; }
+      if(document.activeElement === btGhostEl){ return; }
+      if(shouldSkipGhostRefocus(document.activeElement)){ return; }
+      focusGhostInput();
+    }, 1500);
+  }
+  // ===== Ghost Input 焦点守护 结束 =====
+
   function showScreen(name){
     currentScreen = name;
     document.getElementById('screenCapture').style.display = (name === 'capture') ? 'flex' : 'none';
@@ -2657,6 +2748,12 @@
       startCamera();
     } else {
       stopCamera();
+    }
+    // 蓝牙小键盘快捷键只在 capture / camera 页生效，settings 页需要用户正常打字(如手动改日期)，不抢焦点
+    if(name === 'capture' || name === 'camera'){
+      enableBtFocusGuard();
+    } else {
+      disableBtFocusGuard();
     }
   }
 
@@ -2695,6 +2792,7 @@
     setupPWA();
     requestAnimationFrame(renderClock);
     syncTime();
+    setupBtKeypadGhost();
     showScreen('capture');
 
     document.getElementById('captureZone').addEventListener('click', capture);
@@ -2849,7 +2947,7 @@
     document.addEventListener('keydown', function(e){
       if(currentScreen !== 'capture'){ return; }
       var tag = (e.target && e.target.tagName) || '';
-      if(tag === 'INPUT' || tag === 'TEXTAREA'){ return; }
+      if((tag === 'INPUT' || tag === 'TEXTAREA') && !isBtGhostTarget(e.target)){ return; }
       if(e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.key === '0'){
         e.preventDefault();
         capture();
@@ -2894,7 +2992,7 @@
       if(currentScreen !== 'camera'){ return; }
       var tag = (e.target && e.target.tagName) || '';
       var inputType = (e.target && e.target.type) || '';
-      if((tag === 'INPUT' && inputType !== 'range') || tag === 'TEXTAREA'){ return; }
+      if(!isBtGhostTarget(e.target) && ((tag === 'INPUT' && inputType !== 'range') || tag === 'TEXTAREA')){ return; }
 
       if(e.code === 'Enter' || e.code === 'NumpadEnter'){
         e.preventDefault();
