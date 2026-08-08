@@ -153,6 +153,13 @@
     font-size:20px; font-weight:700; padding:12px 20px; color:#fff;
     background:var(--accent); box-shadow:0 0 0 4px rgba(255,138,61,.3);
   }
+  .btKeyStatus{
+    position:absolute; top:46px; right:10px; background:rgba(0,0,0,.6); color:var(--ink-dim);
+    font-size:10px; padding:4px 9px; border-radius:6px; font-family:inherit; border:none;
+  }
+  .btKeyStatus.ready{ color:#8ee08e; }
+  .btKeyStatus.notready{ color:#ff8a3d; }
+  .btKeyStatus:active{ background:rgba(255,138,61,.3); }
   .diaglive{font-size:12px; color:var(--ink-dim); font-family:var(--mono); margin-top:10px; text-align:center;}
   .diagToggleBtn{
     display:block; margin:8px auto 0; background:none; border:none; color:var(--ink-dim);
@@ -333,6 +340,7 @@
       <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
       <div class="camToast" id="camToast" style="display:none;"></div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
+      <button class="btKeyStatus notready" id="btKeyStatusBtn">⌨ 检测中...</button>
       <button class="segFloatBtn segFloatBtnLeft" id="segAutoCalibrateBtn" style="display:none;">自动优化</button>
       <button class="segFloatBtn segFloatBtnRight" id="segResetBtn" style="display:none;">重置Mask</button>
       <div class="autoCalProgressOverlay" id="autoCalProgressWrap" style="display:none;">
@@ -562,7 +570,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.4.2</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.4.3</div>
   </div>
 
 </div>
@@ -1125,6 +1133,13 @@
       updateCameraBadge('预览中，未开始监测');
       trySetupFocusLock(stream);
       trySetupZoom(stream);
+      // 相机首次授权/启动这段异步过程可能抢走 responder，这里在流真正就绪后
+      // 多试几次(而不是只在切屏那一刻聚焦一次)，专门堵住这个时间差。
+      [0, 300, 1000, 2500].forEach(function(delay){
+        setTimeout(function(){
+          if(currentScreen === 'camera'){ focusGhostInput(); }
+        }, delay);
+      });
     }).catch(function(err){
       updateCameraBadge('无法访问摄像头');
       alert('无法打开摄像头: ' + ((err && err.message) || '未知错误') + '。请检查系统设置里是否已授权摄像头权限。');
@@ -2668,10 +2683,35 @@
 
   function focusGhostInput(){
     if(!btGhostEl || !btFocusGuardActive){ return; }
-    if(document.activeElement === btGhostEl){ return; }
     if(shouldSkipGhostRefocus(document.activeElement)){ return; }
+    if(document.activeElement === btGhostEl){
+      updateBtKeyStatus(true);
+      return;
+    }
+    // "先 blur 再 focus" 踢一脚：JS 层面调用 .focus() 有时会"假成功"(activeElement 显示对了，
+    // 但没有真正建立物理键盘的 responder)，尤其是没有真实用户手势背书、或刚从系统权限框/后台恢复时。
+    // 强制先失焦再聚焦，能让 WKWebView 重新走一遍完整的聚焦流程。
+    try{ btGhostEl.blur(); }catch(err){}
     try{ btGhostEl.focus({ preventScroll: true }); }
     catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
+    setTimeout(function(){ updateBtKeyStatus(document.activeElement === btGhostEl); }, 50);
+  }
+
+  function updateBtKeyStatus(ready){
+    var btn = document.getElementById('btKeyStatusBtn');
+    if(!btn){ return; }
+    if(!btFocusGuardActive){
+      btn.textContent = '⌨ 未激活';
+      btn.className = 'btKeyStatus notready';
+      return;
+    }
+    if(ready){
+      btn.textContent = '⌨ 已就绪';
+      btn.className = 'btKeyStatus ready';
+    } else {
+      btn.textContent = '⌨ 点此重新绑定';
+      btn.className = 'btKeyStatus notready';
+    }
   }
 
   function enableBtFocusGuard(){
@@ -2681,6 +2721,7 @@
 
   function disableBtFocusGuard(){
     btFocusGuardActive = false;
+    updateBtKeyStatus(false);
   }
 
   function setupBtKeypadGhost(){
@@ -2727,10 +2768,24 @@
     // 兜底看门狗：防止某些场景下焦点被静默夺走而没有触发上面任何事件
     btGhostWatchdogTimer = setInterval(function(){
       if(!btFocusGuardActive){ return; }
-      if(document.activeElement === btGhostEl){ return; }
+      if(document.activeElement === btGhostEl){ updateBtKeyStatus(true); return; }
       if(shouldSkipGhostRefocus(document.activeElement)){ return; }
       focusGhostInput();
     }, 1500);
+
+    // 手动兜底：这是一次100%有真实用户手势背书的点击，理论上必定能真正建立焦点。
+    // 固定手机、准备用蓝牙键盘启动监测前，看一眼徽章，不放心就点一下。
+    var statusBtn = document.getElementById('btKeyStatusBtn');
+    if(statusBtn){
+      statusBtn.addEventListener('click', function(){
+        if(!btFocusGuardActive){ return; }
+        try{ btGhostEl.blur(); }catch(err){}
+        setTimeout(function(){
+          try{ btGhostEl.focus({ preventScroll: true }); }catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
+          setTimeout(function(){ updateBtKeyStatus(document.activeElement === btGhostEl); }, 50);
+        }, 0);
+      });
+    }
   }
   // ===== Ghost Input 焦点守护 结束 =====
 
