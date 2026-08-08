@@ -580,7 +580,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.6.1</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.7.0</div>
   </div>
 
 </div>
@@ -1122,6 +1122,45 @@
   var firstHitTimestamp = null;
   var REQUIRED_CONSECUTIVE_HITS = 2;
 
+  // ==== v3.7 网格局部检测（新Trigger链路，取代旧的整ROI/Mask二值化比对） ====
+  var gridCols = 5;
+  var gridRows = 7;
+  var prevCellAvg = null;
+  var GRID_GLOBAL_RATIO_LIMIT = 0.5;
+  var GRID_MIN_CELLS_TO_TRIGGER = 1;
+  var lastGridDiag = { changedCells: 0, totalCells: 0, globalRatio: 0, maxCellDelta: 0 };
+
+  function computeGridDims(){
+    var video = document.getElementById('cameraVideo');
+    if(!video || !video.videoWidth){ gridCols = 5; gridRows = 7; return; }
+    var vr = getVisibleVideoRect(video);
+    var sw = vr.visW * (roiState.width/100);
+    var sh = vr.visH * (roiState.height/100);
+    var effW = Math.min(SEG_SAMPLE_W, sw);
+    var effH = Math.min(SEG_SAMPLE_H, sh);
+    gridCols = Math.max(3, Math.min(6, Math.round(effW/8)));
+    gridRows = Math.max(4, Math.min(8, Math.round(effH/8)));
+  }
+
+  function computeGridCellAvg(frame, w, h, cols, rows){
+    var cellSum = new Float32Array(cols*rows);
+    var cellCount = new Int32Array(cols*rows);
+    for(var y=0; y<h; y++){
+      var cy = Math.min(rows-1, Math.floor(y*rows/h));
+      var rowBase = cy*cols;
+      for(var x=0; x<w; x++){
+        var cx = Math.min(cols-1, Math.floor(x*cols/w));
+        var idx = (y*w+x)*4;
+        var redness = frame[idx] - Math.max(frame[idx+1], frame[idx+2]);
+        var ci = rowBase+cx;
+        cellSum[ci] += redness;
+        cellCount[ci]++;
+      }
+    }
+    for(var i=0; i<cellSum.length; i++){ if(cellCount[i]>0){ cellSum[i] /= cellCount[i]; } }
+    return cellSum;
+  }
+
   function updateCameraBadge(text){
     var el = document.getElementById('cameraStatusBadge');
     if(el){ el.textContent = text; }
@@ -1241,6 +1280,7 @@
     cameraLoopActive = false;
     prevBinaryMask = null;
     prevDilatedMask = null;
+    prevCellAvg = null;
     consecutiveHits = 0;
     firstHitTimestamp = null;
     lastStatsSampleTime = 0;
@@ -1267,6 +1307,8 @@
     resetUndoBtnState();
     prevBinaryMask = null;
     prevDilatedMask = null;
+    prevCellAvg = null;
+    computeGridDims();
     consecutiveHits = 0;
     firstHitTimestamp = null;
     updateCameraBadge('监测中...');
@@ -1859,29 +1901,37 @@
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
     var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
 
-    var normCount = null;
-    var restrictMask = null;
+    // 七段Mask模式：Mask编辑器的实时对齐反馈（匹配度/亮度覆盖率）保留，仅作UI诊断用，
+    // 不再参与下面的Trigger判定（v3.7起Mask完全退出核心检测链路，作为旧方案保留）。
     if(segMaskEnabled){
       ensureSegMaskCache();
-      restrictMask = cachedSegMask;
-      normCount = cachedMaskPixelCount;
       var mq = computeMaskQuality(frame, sampleW, sampleH);
       updateMaskQualityDisplay(mq);
       if(debugPanelOpen){ updateSegmentDebugDisplay(frame, sampleW, sampleH); }
     }
 
-    var curMask = binarizeFrame(frame, sampleW, sampleH, restrictMask);
-    if(segMaskEnabled){
-      for(var mi=0; mi<curMask.length; mi++){ if(!cachedSegMask[mi]){ curMask[mi] = 0; } }
-    }
-    var curDilated = dilateMask(curMask, sampleW, sampleH, shakeToleranceRadius);
+    // ==== v3.7 网格局部检测（新Trigger链路） ====
+    var curCellAvg = computeGridCellAvg(frame, sampleW, sampleH, gridCols, gridRows);
 
-    if(prevBinaryMask){
-      var avgDiff = tolerantDiffPct(curMask, curDilated, prevBinaryMask, prevDilatedMask, sampleW, sampleH, normCount);
-      updateDiffMeter(avgDiff);
+    if(prevCellAvg){
+      var totalCells = gridCols * gridRows;
+      var changedCells = 0, maxCellDelta = 0;
+      for(var ci=0; ci<totalCells; ci++){
+        var cellDelta = Math.abs(curCellAvg[ci] - prevCellAvg[ci]);
+        if(cellDelta > maxCellDelta){ maxCellDelta = cellDelta; }
+        if(cellDelta > sensitivityThreshold){ changedCells++; }
+      }
+      var globalRatio = changedCells / totalCells;
+      lastGridDiag.changedCells = changedCells;
+      lastGridDiag.totalCells = totalCells;
+      lastGridDiag.globalRatio = globalRatio;
+      lastGridDiag.maxCellDelta = maxCellDelta;
+      updateDiffMeter(maxCellDelta);
 
       if(cameraState === 'armed'){
-        if(avgDiff > sensitivityThreshold){
+        var isGlobalEvent = globalRatio > GRID_GLOBAL_RATIO_LIMIT;
+        var candidateHit = !isGlobalEvent && changedCells >= GRID_MIN_CELLS_TO_TRIGGER;
+        if(candidateHit){
           consecutiveHits++;
           if(consecutiveHits === 1){
             firstHitTimestamp = captureT;
@@ -1895,8 +1945,7 @@
         }
       }
     }
-    prevBinaryMask = curMask;
-    prevDilatedMask = curDilated;
+    prevCellAvg = curCellAvg;
 
     var analysisMs = performance.now() - perfStart;
     analysisTimeSamples.push(analysisMs);
@@ -1972,12 +2021,17 @@
     if(detailEl){
       var droppedText = s.droppedSupported ? (s.droppedFps.toFixed(1) + ' /秒') : 'N/A(此浏览器不支持测量)';
       var latText = suspect ? (Math.round(s.estLatencyMs) + 'ms (异常，可能刚从锁屏/切后台恢复，重新开始监测即可)') : (Math.round(s.estLatencyMs) + 'ms');
+      var g = lastGridDiag;
       detailEl.innerHTML =
         '<div class="diagrow">相机帧率(Camera FPS,实测帧间隔): ' + s.cameraFps.toFixed(1) + '</div>' +
         '<div class="diagrow">分析帧率(Analysis FPS): ' + s.analysisFps.toFixed(1) + '</div>' +
         '<div class="diagrow">丢帧率(Dropped Frames): ' + droppedText + '</div>' +
         '<div class="diagrow">平均分析耗时(Avg Analysis Time): ' + s.avgAnalysisMs.toFixed(1) + 'ms</div>' +
-        '<div class="diagrow">估算检测延迟(Estimated Detection Latency): ' + latText + '</div>';
+        '<div class="diagrow">估算检测延迟(Estimated Detection Latency): ' + latText + '</div>' +
+        '<div class="diagrow">网格(Grid): ' + gridCols + '×' + gridRows + ' (共' + g.totalCells + '格)</div>' +
+        '<div class="diagrow">变化格数(Changed Cells): ' + g.changedCells + ' / ' + g.totalCells + '</div>' +
+        '<div class="diagrow">全局占比(Global Ratio): ' + (g.globalRatio*100).toFixed(1) + '% (>' + (GRID_GLOBAL_RATIO_LIMIT*100) + '%判为全局噪声忽略)</div>' +
+        '<div class="diagrow">最大格差(Max Cell Delta): ' + g.maxCellDelta.toFixed(1) + ' / 阈值' + sensitivityThreshold.toFixed(1) + '</div>';
     }
   }
 
