@@ -184,12 +184,18 @@
   .tuneRow{display:flex; align-items:center; gap:10px; margin-top:10px;}
   .tuneRow .zoomlabel{font-size:13px; color:var(--ink); font-weight:600; flex:0 0 auto; white-space:nowrap;}
   .tuneRow .zoomval{width:28px; font-size:13px;}
-  .diffMeterWrap{margin-top:6px;}
-  .diffMeterBar{position:relative; height:26px; background:#1a1e25; border:1px solid var(--panel-edge); border-radius:8px; overflow:hidden;}
+  .diffMeterWrap{margin-top:0;}
+  .diffMeterBar{position:relative; height:15px; background:#1a1e25; border:1px solid var(--panel-edge); border-radius:6px; overflow:hidden;}
   .diffMeterFill{position:absolute; top:0; left:0; bottom:0; width:0%; background:var(--good); transition:width .05s linear, background .1s linear;}
   .diffMeterFill.triggered{background:var(--accent);}
   .diffMeterThreshold{position:absolute; top:0; bottom:0; width:3px; background:#fff; left:0%;}
-  .diffMeterLabel{margin-top:5px; text-align:center; font-size:13px; font-family:var(--mono); color:var(--ink-dim);}
+  .diffMeterLabel{margin-top:3px; text-align:center; font-size:11px; font-family:var(--mono); color:var(--ink-dim);}
+  .paramsMetaRow{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:8px;}
+  .cameraParamsSummaryText{
+    flex:1 1 150px; min-width:0; font-size:11.5px; color:var(--ink-dim); font-family:var(--mono);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .paramsMetaRow .diffMeterWrap{flex:1 1 130px; min-width:110px;}
   .burstModeRow{display:flex; gap:6px; margin-top:8px;}
   .burstModeBtn{
     flex:1; background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
@@ -349,33 +355,37 @@
       </div>
     </div>
 
-    <div class="tuneRow">
-      <span class="zoomlabel">灵敏度</span>
-      <input type="range" id="sensitivitySlider" min="0.2" max="9.8" step="0.2" value="8.5" style="flex:1;">
-      <span id="sensitivityVal" class="zoomval">8.5</span>
-    </div>
-    <div class="tuneRow">
-      <span class="zoomlabel">防抖容差</span>
-      <input type="range" id="shakeToleranceSlider" min="0" max="4" value="2" style="flex:1;">
-      <span id="shakeToleranceVal" class="zoomval">2px</span>
-    </div>
-
-    <div class="diffMeterWrap">
-      <div class="diffMeterBar">
-        <div class="diffMeterFill" id="diffMeterFill"></div>
-        <div class="diffMeterThreshold" id="diffMeterThresholdMarker"></div>
+    <button class="diagToggleBtn" id="cameraParamsToggleBtn">拍摄参数 ▾</button>
+    <div class="section" id="cameraParamsDetail" style="display:none;">
+      <div class="tuneRow">
+        <span class="zoomlabel">灵敏度</span>
+        <input type="range" id="sensitivitySlider" min="0.2" max="9.8" step="0.2" value="8.5" style="flex:1;">
+        <span id="sensitivityVal" class="zoomval">8.5</span>
       </div>
-      <div class="diffMeterLabel" id="diffMeterLabel">-- / --</div>
+      <div class="tuneRow">
+        <span class="zoomlabel">防抖容差</span>
+        <input type="range" id="shakeToleranceSlider" min="0" max="4" value="2" style="flex:1;">
+        <span id="shakeToleranceVal" class="zoomval">2px</span>
+      </div>
+      <div class="burstModeRow">
+        <button class="burstModeBtn active" id="quickModeBtn">快捷模式</button>
+        <button class="burstModeBtn" id="burstModeBtn">连拍模式(3次)</button>
+      </div>
+      <div class="burstModeRow">
+        <button class="burstModeBtn active" id="wholeRoiModeBtn">整块ROI模式</button>
+        <button class="burstModeBtn" id="segMaskModeBtn">七段Mask模式</button>
+      </div>
     </div>
 
-    <div class="burstModeRow">
-      <button class="burstModeBtn active" id="quickModeBtn">快捷模式</button>
-      <button class="burstModeBtn" id="burstModeBtn">连拍模式(3次)</button>
-    </div>
-
-    <div class="burstModeRow">
-      <button class="burstModeBtn active" id="wholeRoiModeBtn">整块ROI模式</button>
-      <button class="burstModeBtn" id="segMaskModeBtn">七段Mask模式</button>
+    <div class="paramsMetaRow" id="paramsMetaRow">
+      <span class="cameraParamsSummaryText" id="cameraParamsSummaryText"></span>
+      <div class="diffMeterWrap" id="diffMeterWrap">
+        <div class="diffMeterBar">
+          <div class="diffMeterFill" id="diffMeterFill"></div>
+          <div class="diffMeterThreshold" id="diffMeterThresholdMarker"></div>
+        </div>
+        <div class="diffMeterLabel" id="diffMeterLabel">-- / --</div>
+      </div>
     </div>
 
     <div class="diaglive" id="maskQualityDisplay" style="display:none;">Mask匹配度 -- · 亮度覆盖率 --</div>
@@ -428,11 +438,6 @@
       <button class="bigCamBtn" id="cameraManualBtn">手动立即截取</button>
     </div>
 
-    <button class="diagToggleBtn" id="instructionsToggleBtn">使用说明 ▾</button>
-    <div class="section" id="instructionsDetail" style="display:none;">
-      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法先把每帧二值化(区分"亮"和"暗")，再用容差比对——附近几个像素范围内找得到匹配就不算变化，这样手抖造成的整体画面平移会被自动吸收掉，只有真正的线段亮灭才会被计入差异分数，理论上不再需要靠调到最高灵敏度去对抗手抖。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；小数点＝自动优化(七段Mask模式下)；＝(等号)＝重置Mask(七段Mask模式下)；七段Mask模式下数字1-8对应编辑器里从上到下的8个参数(1宽度/2高度/3左右位置/4上下位置/5横线粗细/6竖线粗细/7间隙/8旋转)——点一下该数字键该参数+1，按住该数字键的同时点减号该参数-1(减号可连点或长按连续减，松开数字键结束)；Esc＝退出摄像头回到主界面。此前有个bug：只要屏幕上任意一个滑条(灵敏度/防抖容差/变焦/Mask编辑器等)因为手指碰过而拿到了焦点，蓝牙键盘所有按键都会被误判成"正在打字"而完全失效，现已修复——只有真正的文字输入框才会屏蔽快捷键，滑条不再屏蔽。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">七段Mask模式</b>：切到"七段Mask模式"后，检测只统计Mask覆盖的7段线条区域，Mask以外的背景/间隙像素全部忽略，能大幅提高部分线段变化少的数字(如0→1、5→6、8→9)的识别率。展开"七段Mask编辑器"手动调整整体宽高、位置、横竖线粗细、间隙、旋转来对齐真实LED；更省事的办法是点"自动优化"，程序会在当前位置附近自动搜索让Mask区域平均亮度最高的位置(说明LED线条被完整框住)，一般几秒内就能吸附到位。"Mask匹配度"和"亮度覆盖率"两个数字用来判断当前对齐得好不好——匹配度是Mask内外的亮度对比(越高说明边界卡得越准)，覆盖率是Mask内当前有多少比例被判定为点亮(不同数字本身覆盖率不同，忽高忽低正常，长期持续很低才说明没框准)。这仍然是纯像素检测，不做数字识别(OCR)。</p>
-    </div>
-
     <div class="zoomRow" id="hwZoomRow" style="display:none;">
       <span class="zoomlabel">硬件变焦</span>
       <input type="range" id="hwZoomSlider" style="flex:1;">
@@ -462,6 +467,11 @@
       <button class="diagToggleBtn" id="diagToggleBtn">查看诊断详情 ▾</button>
       <div class="cameraDiagDetail" id="cameraDiagDetail" style="display:none;"></div>
       <div class="cameraDiagDetail" id="segDebugDetail" style="display:none; margin-top:6px;"></div>
+    </div>
+
+    <button class="diagToggleBtn" id="instructionsToggleBtn">使用说明 ▾</button>
+    <div class="section" id="instructionsDetail" style="display:none;">
+      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法先把每帧二值化(区分"亮"和"暗")，再用容差比对——附近几个像素范围内找得到匹配就不算变化，这样手抖造成的整体画面平移会被自动吸收掉，只有真正的线段亮灭才会被计入差异分数，理论上不再需要靠调到最高灵敏度去对抗手抖。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；小数点＝自动优化(七段Mask模式下)；＝(等号)＝重置Mask(七段Mask模式下)；七段Mask模式下数字1-8对应编辑器里从上到下的8个参数(1宽度/2高度/3左右位置/4上下位置/5横线粗细/6竖线粗细/7间隙/8旋转)——点一下该数字键该参数+1，按住该数字键的同时点减号该参数-1(减号可连点或长按连续减，松开数字键结束)；数字9＝硬件变焦(点一下+一步，按住再点减号-一步，设备不支持时会提示)；预览放大不占用蓝牙键(实测NumLock键在此设备上不可靠)，保留手指触摸滑条调节，反正只影响显示不影响检测精度；Esc＝退出摄像头回到主界面。此前有个bug：只要屏幕上任意一个滑条(灵敏度/防抖容差/变焦/Mask编辑器等)因为手指碰过而拿到了焦点，蓝牙键盘所有按键都会被误判成"正在打字"而完全失效，现已修复——只有真正的文字输入框才会屏蔽快捷键，滑条不再屏蔽。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">七段Mask模式</b>：切到"七段Mask模式"后，检测只统计Mask覆盖的7段线条区域，Mask以外的背景/间隙像素全部忽略，能大幅提高部分线段变化少的数字(如0→1、5→6、8→9)的识别率。展开"七段Mask编辑器"手动调整整体宽高、位置、横竖线粗细、间隙、旋转来对齐真实LED；更省事的办法是点"自动优化"，程序会在当前位置附近自动搜索让Mask区域平均亮度最高的位置(说明LED线条被完整框住)，一般几秒内就能吸附到位。"Mask匹配度"和"亮度覆盖率"两个数字用来判断当前对齐得好不好——匹配度是Mask内外的亮度对比(越高说明边界卡得越准)，覆盖率是Mask内当前有多少比例被判定为点亮(不同数字本身覆盖率不同，忽高忽低正常，长期持续很低才说明没框准)。这仍然是纯像素检测，不做数字识别(OCR)。</p>
     </div>
 
     <canvas id="cameraCanvas" style="display:none;"></canvas>
@@ -570,7 +580,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.5.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.6.1</div>
   </div>
 
 </div>
@@ -693,6 +703,7 @@
   function renderBurstModeButtons(){
     document.getElementById('quickModeBtn').classList.toggle('active', !burstModeEnabled);
     document.getElementById('burstModeBtn').classList.toggle('active', burstModeEnabled);
+    updateCameraParamsSummary();
   }
 
   function cfTraceParse(text){
@@ -1432,6 +1443,30 @@
 
   var SEG_MASK_KEY = 'cc_segmask_v1';
   var ZOOM_KEY = 'cc_zoom_v1';
+  var CAMERA_PARAMS_COLLAPSED_KEY = 'cc_camparams_collapsed_v1';
+
+  function loadCameraParamsCollapsed(){
+    try{
+      var raw = localStorage.getItem(CAMERA_PARAMS_COLLAPSED_KEY);
+      return raw === null ? true : raw === '1';
+    }catch(e){ return true; }
+  }
+
+  function saveCameraParamsCollapsed(collapsed){
+    try{ localStorage.setItem(CAMERA_PARAMS_COLLAPSED_KEY, collapsed ? '1' : '0'); }catch(e){}
+  }
+
+  function updateCameraParamsSummary(){
+    var el = document.getElementById('cameraParamsSummaryText');
+    if(!el){ return; }
+    var sensSlider = document.getElementById('sensitivitySlider');
+    var shakeSlider = document.getElementById('shakeToleranceSlider');
+    var sensText = sensSlider ? parseFloat(sensSlider.value).toFixed(1) : '--';
+    var shakeText = shakeSlider ? shakeSlider.value + 'px' : '--';
+    var modeText = burstModeEnabled ? '连拍模式' : '快捷模式';
+    // ROI/七段Mask 模式在取景框上直接看得出来(有没有画Mask线)，折叠摘要里不重复占位，给电平表让出空间
+    el.textContent = '灵敏度' + sensText + ' · 防抖' + shakeText + ' · ' + modeText;
+  }
   var segMaskEnabled = false;
   var segMaskState = { width:70, height:82, offsetX:50, offsetY:50, hThick:14, vThick:16, gap:6, rotation:0 };
   var cachedSegMask = null;
@@ -2916,6 +2951,7 @@
       document.getElementById('segResetBtn').style.display = segMaskEnabled ? 'block' : 'none';
       if(!segMaskEnabled){ document.getElementById('maskEditorDetail').style.display = 'none'; }
       renderSegMaskOverlay();
+      updateCameraParamsSummary();
     }
     document.getElementById('wholeRoiModeBtn').addEventListener('click', function(){
       segMaskEnabled = false;
@@ -2965,11 +3001,31 @@
       sensitivityThreshold = SENSITIVITY_MAX - sliderVal;
       document.getElementById('sensitivityVal').textContent = sliderVal.toFixed(1);
       resetDiffMeter();
+      updateCameraParamsSummary();
     });
     document.getElementById('shakeToleranceSlider').addEventListener('input', function(e){
       shakeToleranceRadius = parseInt(e.target.value, 10);
       document.getElementById('shakeToleranceVal').textContent = shakeToleranceRadius + 'px';
+      updateCameraParamsSummary();
     });
+    (function(){
+      var detail = document.getElementById('cameraParamsDetail');
+      var btn = document.getElementById('cameraParamsToggleBtn');
+      var summary = document.getElementById('cameraParamsSummaryText');
+      function applyCollapsed(collapsed){
+        detail.style.display = collapsed ? 'none' : 'block';
+        summary.style.display = collapsed ? '' : 'none';
+        btn.textContent = collapsed ? '拍摄参数 ▾' : '收起拍摄参数 ▴';
+        if(collapsed){ updateCameraParamsSummary(); }
+      }
+      applyCollapsed(loadCameraParamsCollapsed());
+      btn.addEventListener('click', function(){
+        var currentlyCollapsed = detail.style.display === 'none';
+        var next = !currentlyCollapsed;
+        applyCollapsed(next);
+        saveCameraParamsCollapsed(next);
+      });
+    })();
     document.getElementById('diagToggleBtn').addEventListener('click', function(){
       var el = document.getElementById('cameraDiagDetail');
       var btn = document.getElementById('diagToggleBtn');
@@ -3068,8 +3124,8 @@
       '7': { key: 'gap',      slider: 'segGapSlider' },
       '8': { key: 'rotation', slider: 'segRotationSlider' }
     };
-    var segParamKeyHeld = null;
-    var segParamKeyUsedForCombo = false;
+    var quickTuneKeyHeld = null;
+    var quickTuneKeyUsedForCombo = false;
 
     function adjustSegParam(digit, step){
       var def = SEG_PARAM_KEYMAP[digit];
@@ -3085,6 +3141,37 @@
       if(valEl){ valEl.textContent = v; }
       renderSegMaskOverlay();
       saveSegMaskState();
+    }
+
+    // 硬件变焦(数字9)：复用同一套"点一下=+一步,按住再点减号=-一步"手感；预览放大放弃蓝牙映射(NumLock键实测在此设备上不可靠)，保留触摸调节
+    function adjustHwZoom(dir){
+      var row = document.getElementById('hwZoomRow');
+      var slider = document.getElementById('hwZoomSlider');
+      if(!row || !slider || row.style.display === 'none'){
+        showCamToast('该设备不支持硬件变焦', 2000);
+        return;
+      }
+      var min = parseFloat(slider.min), max = parseFloat(slider.max);
+      var stepSize = parseFloat(slider.step) || 0.1;
+      var v = parseFloat(slider.value) + dir * stepSize;
+      v = Math.min(max, Math.max(min, Math.round(v / stepSize) * stepSize));
+      slider.value = v;
+      if(slider.oninput){ slider.oninput(); }
+    }
+
+    function quickTuneIsTarget(token){
+      if(SEG_PARAM_KEYMAP[token]){ return segMaskEnabled; }
+      if(token === '9'){ return true; }
+      return false;
+    }
+
+    function quickTuneApply(token, dir){
+      if(SEG_PARAM_KEYMAP[token]){
+        if(!segMaskEnabled){ return; }
+        adjustSegParam(token, dir);
+        return;
+      }
+      if(token === '9'){ adjustHwZoom(dir); return; }
     }
 
     document.addEventListener('keydown', function(e){
@@ -3103,16 +3190,14 @@
         if(!e.repeat){ requestUndoLastCameraCapture(); }
         return;
       }
-      if(segMaskEnabled){
-        var maskDigitToken = resolveNumpadDigit(e);
-        if(maskDigitToken && SEG_PARAM_KEYMAP[maskDigitToken]){
-          e.preventDefault();
-          if(!e.repeat){
-            segParamKeyHeld = maskDigitToken;
-            segParamKeyUsedForCombo = false;
-          }
-          return;
+      var quickTuneToken = resolveNumpadDigit(e);
+      if(quickTuneToken && quickTuneIsTarget(quickTuneToken)){
+        e.preventDefault();
+        if(!e.repeat){
+          quickTuneKeyHeld = quickTuneToken;
+          quickTuneKeyUsedForCombo = false;
         }
+        return;
       }
       if(e.code === 'NumpadAdd' || e.key === '+'){
         e.preventDefault();
@@ -3121,9 +3206,9 @@
       }
       if(e.code === 'NumpadSubtract' || e.key === '-'){
         e.preventDefault();
-        if(segMaskEnabled && segParamKeyHeld){
-          adjustSegParam(segParamKeyHeld, -1);
-          segParamKeyUsedForCombo = true;
+        if(quickTuneKeyHeld && quickTuneIsTarget(quickTuneKeyHeld)){
+          quickTuneApply(quickTuneKeyHeld, -1);
+          quickTuneKeyUsedForCombo = true;
           return;
         }
         if(!e.repeat && !sensHoldTimer && !sensHoldInterval){ startSensHold(-1); }
@@ -3165,14 +3250,14 @@
       if(e.code === 'NumpadAdd' || e.key === '+' || e.code === 'NumpadSubtract' || e.key === '-'){
         stopSensHold();
       }
-      if(segParamKeyHeld){
+      if(quickTuneKeyHeld){
         var upToken = resolveNumpadDigit(e);
-        if(upToken === segParamKeyHeld){
-          if(!segParamKeyUsedForCombo){
-            adjustSegParam(segParamKeyHeld, 1);
+        if(upToken === quickTuneKeyHeld){
+          if(!quickTuneKeyUsedForCombo){
+            quickTuneApply(quickTuneKeyHeld, 1);
           }
-          segParamKeyHeld = null;
-          segParamKeyUsedForCombo = false;
+          quickTuneKeyHeld = null;
+          quickTuneKeyUsedForCombo = false;
         }
       }
     });
