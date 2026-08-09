@@ -529,7 +529,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.8.3</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.8.4</div>
   </div>
 
 </div>
@@ -1103,7 +1103,7 @@
     }
 
     function onUp(){
-      if(mode){ saveROI(); }
+      if(mode){ saveROI(); resetDetectionBaseline(); }
       mode = null;
     }
 
@@ -1118,6 +1118,7 @@
       roiState = { left: ROI_DEFAULT.left, top: ROI_DEFAULT.top, width: ROI_DEFAULT.width, height: ROI_DEFAULT.height };
       saveROI();
       applyROIStyle();
+      resetDetectionBaseline();
     });
   }
 
@@ -1137,10 +1138,18 @@
   // ==== v3.7 网格局部检测（新Trigger链路，取代旧的整ROI/Mask二值化比对） ====
   var gridCols = 5;
   var gridRows = 7;
-  var prevCellAvg = null;
+  var baselineCellAvg = null; // v3.8.4: 冻结基线，只在初始化/触发确认后刷新，不再逐帧滚动更新
   var GRID_GLOBAL_RATIO_LIMIT = 0.5;
   var GRID_MIN_CELLS_TO_TRIGGER = 1;
   var lastGridDiag = { changedCells: 0, totalCells: 0, globalRatio: 0, maxCellDelta: 0 };
+
+  // v3.8.4: baseline统一重置入口。ROI/网格密度/变焦等任何改变画面内容或格子布局的操作都必须调用，
+  // 否则baseline会跟新画面/新格子数错位，产生无意义的delta。
+  function resetDetectionBaseline(){
+    baselineCellAvg = null;
+    consecutiveHits = 0;
+    firstHitTimestamp = null;
+  }
 
   var GRID_DENSITY_KEY = 'cc_griddensity_v1';
   var GRID_DENSITY_PX = { coarse: 12, medium: 8, fine: 5 };
@@ -1333,6 +1342,7 @@
       valEl.textContent = v.toFixed(1) + 'x';
       track.applyConstraints({ advanced: [{ zoom: v }] }).catch(function(){});
       try{ localStorage.setItem(ZOOM_KEY + '_hw', String(v)); }catch(e){}
+      resetDetectionBaseline();
     };
   }
 
@@ -1349,9 +1359,7 @@
     if(video){ video.srcObject = null; }
     cameraState = 'idle';
     cameraLoopActive = false;
-    prevCellAvg = null;
-    consecutiveHits = 0;
-    firstHitTimestamp = null;
+    resetDetectionBaseline();
     lastStatsSampleTime = 0;
     clearGridOverlayCanvas();
     analysisFrameCount = 0;
@@ -1375,10 +1383,8 @@
     if(!cameraStream){ startCamera(); }
     cameraState = 'armed';
     resetUndoBtnState();
-    prevCellAvg = null;
     computeGridDims();
-    consecutiveHits = 0;
-    firstHitTimestamp = null;
+    resetDetectionBaseline();
     updateCameraBadge('监测中...');
     var badgeEl = document.getElementById('cameraStatusBadge');
     badgeEl.classList.remove('captured');
@@ -1405,8 +1411,7 @@
 
   function disarmCameraDetection(){
     cameraState = 'idle';
-    consecutiveHits = 0;
-    firstHitTimestamp = null;
+    resetDetectionBaseline();
     updateCameraBadge('已取消监测');
     document.getElementById('cameraStatusBadge').classList.remove('captured', 'armed');
     resetDiffMeter();
@@ -1556,15 +1561,18 @@
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
     var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
 
-    // ==== v3.7 网格局部检测（Trigger链路） ====
+    // ==== v3.8.4 网格局部检测（Baseline比对Trigger链路，取代逐帧比对） ====
     var curCellAvg = computeGridCellAvg(frame, sampleW, sampleH, gridCols, gridRows);
 
-    if(prevCellAvg){
+    if(!baselineCellAvg){
+      // 基线尚未建立（首帧/刚reset）：本帧只确立基线，不做比较
+      baselineCellAvg = curCellAvg;
+    } else {
       var totalCells = gridCols * gridRows;
       var changedCells = 0, maxCellDelta = 0;
       if(lastCellChanged.length !== totalCells){ lastCellChanged = new Uint8Array(totalCells); }
       for(var ci=0; ci<totalCells; ci++){
-        var cellDelta = Math.abs(curCellAvg[ci] - prevCellAvg[ci]);
+        var cellDelta = Math.abs(curCellAvg[ci] - baselineCellAvg[ci]);
         if(cellDelta > maxCellDelta){ maxCellDelta = cellDelta; }
         var isChanged = cellDelta > sensitivityThreshold;
         lastCellChanged[ci] = isChanged ? 1 : 0;
@@ -1588,14 +1596,15 @@
           }
           if(consecutiveHits >= REQUIRED_CONSECUTIVE_HITS){
             onCameraDetected(firstHitTimestamp);
+            baselineCellAvg = curCellAvg; // 触发确认后刷新基线为当前（新稳定）值
           }
         } else {
           consecutiveHits = 0;
           firstHitTimestamp = null;
+          // 基线保持不变：未确认的候选不污染基线，这是baseline模型抗瞬态噪声的关键
         }
       }
     }
-    prevCellAvg = curCellAvg;
 
     var analysisMs = performance.now() - perfStart;
     analysisTimeSamples.push(analysisMs);
@@ -2791,18 +2800,21 @@
       saveGridDensity();
       renderGridDensityButtons();
       computeGridDims();
+      resetDetectionBaseline();
     });
     document.getElementById('gridDensityMediumBtn').addEventListener('click', function(){
       gridDensityMode = 'medium';
       saveGridDensity();
       renderGridDensityButtons();
       computeGridDims();
+      resetDetectionBaseline();
     });
     document.getElementById('gridDensityFineBtn').addEventListener('click', function(){
       gridDensityMode = 'fine';
       saveGridDensity();
       renderGridDensityButtons();
       computeGridDims();
+      resetDetectionBaseline();
     });
 
     function renderGridOverlayBtn(){
@@ -2955,6 +2967,7 @@
       clampROI();
       applyROIStyle();
       saveROI();
+      resetDetectionBaseline();
     }
 
     // 硬件变焦(数字9)：复用同一套"点一下=+一步,按住再点减号=-一步"手感(v3.7起软件预览放大功能已彻底移除，硬件变焦为唯一缩放手段)
