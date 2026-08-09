@@ -112,9 +112,6 @@
     background:var(--accent); border-radius:50%; border:2px solid #1a0f04;
     touch-action:none; cursor:nwse-resize;
   }
-  .segMaskOverlay{position:absolute; inset:0; pointer-events:none;}
-  .segBoxOuter{position:absolute; transform-origin:center center;}
-  .segBar{position:absolute; background:rgba(0,255,150,.55); border:1px solid rgba(0,255,150,.9);}
   .roiResetBtn{
     position:absolute; top:10px; left:50%; transform:translateX(-50%);
     background:rgba(0,0,0,.6); color:var(--ink); font-size:11px; padding:5px 10px;
@@ -136,21 +133,16 @@
     font-variant-numeric:tabular-nums;
   }
   .cameraTimeOverlay .cameraMs{color:var(--accent);}
-  .segFloatBtn{
+  .camFloatBtn{
     position:absolute; bottom:10px; background:rgba(0,0,0,.65); color:var(--ink);
     font-size:12px; padding:9px 14px; border-radius:10px; border:1px solid rgba(255,138,61,.5);
     font-family:inherit;
   }
-  .segFloatBtnLeft{left:10px;}
-  .segFloatBtnRight{right:10px; border-color:var(--panel-edge);}
-  .segFloatBtn:active{background:rgba(255,138,61,.3);}
-  .segFloatBtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.18);}
+  .camFloatBtnLeft{left:10px;}
+  .camFloatBtnRight{right:10px; border-color:var(--panel-edge);}
+  .camFloatBtn:active{background:rgba(255,138,61,.3);}
+  .camFloatBtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.18);}
   #gridOverlayCanvas{position:absolute; inset:0; width:100%; height:100%; pointer-events:none;}
-  .autoCalProgressOverlay{
-    position:absolute; left:10px; right:10px; bottom:52px;
-    background:rgba(0,0,0,.75); border-radius:8px; padding:8px 10px;
-  }
-  .autoCalProgressOverlay .progresslabel{color:var(--ink); font-size:11px; margin-bottom:4px;}
   .cameraStatusBadge.captured{
     font-size:20px; font-weight:700; padding:12px 20px; color:#fff;
     background:var(--accent); box-shadow:0 0 0 4px rgba(255,138,61,.3);
@@ -331,17 +323,6 @@
     <div class="cameraStage">
       <video id="cameraVideo" playsinline muted autoplay></video>
       <div class="roiGuide" id="roiGuide">
-        <div class="segMaskOverlay" id="segMaskOverlay" style="display:none;">
-          <div class="segBoxOuter" id="segBoxOuter">
-            <div class="segBar" id="seg_top"></div>
-            <div class="segBar" id="seg_topleft"></div>
-            <div class="segBar" id="seg_topright"></div>
-            <div class="segBar" id="seg_middle"></div>
-            <div class="segBar" id="seg_botleft"></div>
-            <div class="segBar" id="seg_botright"></div>
-            <div class="segBar" id="seg_bottom"></div>
-          </div>
-        </div>
         <div class="roiResizeHandle" id="roiResizeHandle"></div>
         <canvas id="gridOverlayCanvas" style="display:none;"></canvas>
       </div>
@@ -350,13 +331,7 @@
       <div class="camToast" id="camToast" style="display:none;"></div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
       <button class="btKeyStatus notready" id="btKeyStatusBtn">⌨ 检测中...</button>
-      <button class="segFloatBtn segFloatBtnLeft" id="segAutoCalibrateBtn" style="display:none;">自动优化</button>
-      <button class="segFloatBtn segFloatBtnRight" id="segResetBtn" style="display:none;">重置Mask</button>
-      <button class="segFloatBtn segFloatBtnRight" id="gridOverlayToggleBtn">网格</button>
-      <div class="autoCalProgressOverlay" id="autoCalProgressWrap" style="display:none;">
-        <div class="progresslabel" id="autoCalProgressLabel">准备中...</div>
-        <div class="progressbar"><div class="progressfill" id="autoCalProgressFill" style="width:0%"></div></div>
-      </div>
+      <button class="camFloatBtn camFloatBtnRight" id="gridOverlayToggleBtn">网格</button>
     </div>
 
     <button class="diagToggleBtn" id="cameraParamsToggleBtn">拍摄参数 ▾</button>
@@ -376,8 +351,9 @@
         <button class="burstModeBtn" id="burstModeBtn">连拍模式(3次)</button>
       </div>
       <div class="burstModeRow">
-        <button class="burstModeBtn active" id="wholeRoiModeBtn">整块ROI模式</button>
-        <button class="burstModeBtn" id="segMaskModeBtn">七段Mask模式</button>
+        <button class="burstModeBtn" id="gridDensityCoarseBtn">网格:粗</button>
+        <button class="burstModeBtn active" id="gridDensityMediumBtn">网格:中</button>
+        <button class="burstModeBtn" id="gridDensityFineBtn">网格:细</button>
       </div>
     </div>
 
@@ -389,51 +365,6 @@
           <div class="diffMeterThreshold" id="diffMeterThresholdMarker"></div>
         </div>
         <div class="diffMeterLabel" id="diffMeterLabel">-- / --</div>
-      </div>
-    </div>
-
-    <div class="diaglive" id="maskQualityDisplay" style="display:none;">Mask匹配度 -- · 亮度覆盖率 --</div>
-    <button class="diagToggleBtn" id="maskEditorToggleBtn" style="display:none;">七段Mask编辑器 ▾</button>
-    <div class="section" id="maskEditorDetail" style="display:none;">
-      <div class="tuneRow">
-        <span class="zoomlabel">整体宽度</span>
-        <input type="range" id="segWidthSlider" min="20" max="100" step="1" style="flex:1;">
-        <span id="segWidthSliderVal" class="zoomval">70</span>
-      </div>
-      <div class="tuneRow">
-        <span class="zoomlabel">整体高度</span>
-        <input type="range" id="segHeightSlider" min="20" max="100" step="1" style="flex:1;">
-        <span id="segHeightSliderVal" class="zoomval">82</span>
-      </div>
-      <div class="tuneRow">
-        <span class="zoomlabel">左右位置</span>
-        <input type="range" id="segOffsetXSlider" min="0" max="100" step="1" style="flex:1;">
-        <span id="segOffsetXSliderVal" class="zoomval">50</span>
-      </div>
-      <div class="tuneRow">
-        <span class="zoomlabel">上下位置</span>
-        <input type="range" id="segOffsetYSlider" min="0" max="100" step="1" style="flex:1;">
-        <span id="segOffsetYSliderVal" class="zoomval">50</span>
-      </div>
-      <div class="tuneRow">
-        <span class="zoomlabel">横线粗细</span>
-        <input type="range" id="segHThickSlider" min="3" max="40" step="1" style="flex:1;">
-        <span id="segHThickSliderVal" class="zoomval">14</span>
-      </div>
-      <div class="tuneRow">
-        <span class="zoomlabel">竖线粗细</span>
-        <input type="range" id="segVThickSlider" min="3" max="40" step="1" style="flex:1;">
-        <span id="segVThickSliderVal" class="zoomval">16</span>
-      </div>
-      <div class="tuneRow">
-        <span class="zoomlabel">线段间隙</span>
-        <input type="range" id="segGapSlider" min="0" max="20" step="1" style="flex:1;">
-        <span id="segGapSliderVal" class="zoomval">6</span>
-      </div>
-      <div class="tuneRow">
-        <span class="zoomlabel">旋转角度</span>
-        <input type="range" id="segRotationSlider" min="-30" max="30" step="1" style="flex:1;">
-        <span id="segRotationSliderVal" class="zoomval">0</span>
       </div>
     </div>
 
@@ -465,12 +396,11 @@
       <div class="diaglive" id="estLatencyDisplay">系统估算延迟: --</div>
       <button class="diagToggleBtn" id="diagToggleBtn">查看诊断详情 ▾</button>
       <div class="cameraDiagDetail" id="cameraDiagDetail" style="display:none;"></div>
-      <div class="cameraDiagDetail" id="segDebugDetail" style="display:none; margin-top:6px;"></div>
     </div>
 
     <button class="diagToggleBtn" id="instructionsToggleBtn">使用说明 ▾</button>
     <div class="section" id="instructionsDetail" style="display:none;">
-      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法先把每帧二值化(区分"亮"和"暗")，再用容差比对——附近几个像素范围内找得到匹配就不算变化，这样手抖造成的整体画面平移会被自动吸收掉，只有真正的线段亮灭才会被计入差异分数，理论上不再需要靠调到最高灵敏度去对抗手抖。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；小数点＝自动优化(七段Mask模式下)；＝(等号)＝重置Mask(七段Mask模式下)；七段Mask模式下数字1-8对应编辑器里从上到下的8个参数(1宽度/2高度/3左右位置/4上下位置/5横线粗细/6竖线粗细/7间隙/8旋转)——点一下该数字键该参数+1，按住该数字键的同时点减号该参数-1(减号可连点或长按连续减，松开数字键结束)；数字9＝硬件变焦(点一下+一步，按住再点减号-一步，设备不支持时会提示)；Esc＝退出摄像头回到主界面。此前有个bug：只要屏幕上任意一个滑条(灵敏度/防抖容差/变焦/Mask编辑器等)因为手指碰过而拿到了焦点，蓝牙键盘所有按键都会被误判成"正在打字"而完全失效，现已修复——只有真正的文字输入框才会屏蔽快捷键，滑条不再屏蔽。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">七段Mask模式</b>：切到"七段Mask模式"后，检测只统计Mask覆盖的7段线条区域，Mask以外的背景/间隙像素全部忽略，能大幅提高部分线段变化少的数字(如0→1、5→6、8→9)的识别率。展开"七段Mask编辑器"手动调整整体宽高、位置、横竖线粗细、间隙、旋转来对齐真实LED；更省事的办法是点"自动优化"，程序会在当前位置附近自动搜索让Mask区域平均亮度最高的位置(说明LED线条被完整框住)，一般几秒内就能吸附到位。"Mask匹配度"和"亮度覆盖率"两个数字用来判断当前对齐得好不好——匹配度是Mask内外的亮度对比(越高说明边界卡得越准)，覆盖率是Mask内当前有多少比例被判定为点亮(不同数字本身覆盖率不同，忽高忽低正常，长期持续很低才说明没框准)。这仍然是纯像素检测，不做数字识别(OCR)。</p>
+      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法把取景框划成小格，逐格比较相邻帧红色分量变化，只有少数格子变化才算真正跳变，大半格子同时变化会被判定为环境光/曝光噪声并整帧忽略，这样能自动吸收手抖和整体光照波动，只有真正的数字亮灭才会被计入差异分数。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；数字9＝硬件变焦(点一下+一步，按住再点减号-一步，设备不支持时会提示)；Esc＝退出摄像头回到主界面。数字1-8、小数点、等号目前未绑定任何功能(v3.7.2起随七段Mask功能一起释放，留给以后用)。此前有个bug：只要屏幕上任意一个滑条(灵敏度/防抖容差/变焦等)因为手指碰过而拿到了焦点，蓝牙键盘所有按键都会被误判成"正在打字"而完全失效，现已修复——只有真正的文字输入框才会屏蔽快捷键，滑条不再屏蔽。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">网格局部检测</b>：v3.7起检测算法改为把取景框划分成若干小格，逐格比较相邻两帧的红色分量(LED数字发光色)变化，而不是整个取景框算一个平均值——这样能把"数字跳变"(只影响少数几个格子)和"环境光/自动曝光整体波动"(往往同时影响一大半格子)区分开，后者会被自动判定为全局噪声并整帧忽略。取景框大小不同时，格子会自动变粗或变细以保持每格有效像素量；"网格:粗/中/细"三档可以手动调整这个基准密度——画面较暗或噪声明显时选"粗"更稳，需要抓小面积数字变化(比如"1")时选"细"更灵敏。点右上角"网格"按钮可以直接在取景框上叠加显示当前网格线，橙色高亮的格子就是本帧被判定为变化的格子，方便现场对照调参。之前的七段Mask对齐功能(手动画线段框LED区域)已在v3.7.2彻底移除，新的网格检测不依赖数字的具体形状。</p>
     </div>
 
     <canvas id="cameraCanvas" style="display:none;"></canvas>
@@ -574,12 +504,12 @@
       <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
       <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
       <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。统计面板里"①②③"这三个时刻、以及主界面摘要行显示的"下次校正"，现在都已经按这里设置的秒数实时扣除，改完点保存立刻能看到面板数字变化；导出的预测JSON里relayFireTimes字段是同一套算法，可直接给继电器用，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
-      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"(按钮会变成"停止监测"，再点一次可随时取消)，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳，左上角状态徽章会放大变色提示，避免人眼反应延迟带来的误差，误触发可以在"已捕获"区域点"撤销这条记录"直接删除，不用切去设置页。LED七段数码管跳变是瞬间通断；检测算法先二值化再做容差比对，能自动吸收手抖造成的画面平移，只统计真正线段亮灭的变化，差异分数是变化像素占比(百分比)，默认灵敏度对应约1.5%变化量，起点定得比较低是因为实测某些数字切换(比如只切换一个线段)差异只有3%左右，太高的阈值会漏检——需要按实机情况配合"防抖容差"滑条一起调；"差异分数"实时显示，调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据。相机帧率是靠实测每次真正拿到新画面的时间间隔算出来的，不依赖<code>getVideoPlaybackQuality</code>这个接口——它在Safari上对实时摄像头画面经常不增长，直接用会一直显示0.0，换了更可靠的测法。丢帧率如果显示"N/A(此浏览器不支持测量)"就是这个接口在你的Safari版本上确实不可用，不影响其他数字准确性。每条自动检测的相机记录会额外存一个"当次估算延迟"数值(原始时间戳本身不会被改写，保持如实记录)，统计计算漂移速率时会自动扣除这个延迟，日志列表和CSV导出里都能看到具体扣了多少毫秒，跟Tuya继电器那8秒执行延迟是同一个处理思路——只在计算这一层修正，不动原始观测数据。检测失败或误触发时用"手动立即截取"兜底，这种手动截取不经过相机分析流程，不会附带这项延迟修正。离开此界面会自动关闭摄像头。蓝牙数字小键盘在摄像头界面下可用：回车切换开始/停止监测、退格撤销上条记录(3秒二次确认)、加减号微调灵敏度(长按加速)、乘除号微调防抖容差、数字0手动立即截取、Esc返回主界面。</p>
+      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"(按钮会变成"停止监测"，再点一次可随时取消)，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳，左上角状态徽章会放大变色提示，避免人眼反应延迟带来的误差，误触发可以在"已捕获"区域点"撤销这条记录"直接删除，不用切去设置页。LED七段数码管跳变是瞬间通断；检测算法把取景框划成小格，逐格比较相邻帧红色分量变化，只有少数格子变化才算真正跳变，大半格子同时变化会被判定为环境光/曝光噪声并整帧忽略，这样能自动吸收手抖和整体光照波动，只统计真正的数字亮灭；"差异分数"(电平表)显示的是本帧单格最大变化量，默认灵敏度对应的阈值需要按实机情况配合"防抖容差"滑条和"网格:粗/中/细"密度一起调；调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据。相机帧率是靠实测每次真正拿到新画面的时间间隔算出来的，不依赖<code>getVideoPlaybackQuality</code>这个接口——它在Safari上对实时摄像头画面经常不增长，直接用会一直显示0.0，换了更可靠的测法。丢帧率如果显示"N/A(此浏览器不支持测量)"就是这个接口在你的Safari版本上确实不可用，不影响其他数字准确性。每条自动检测的相机记录会额外存一个"当次估算延迟"数值(原始时间戳本身不会被改写，保持如实记录)，统计计算漂移速率时会自动扣除这个延迟，日志列表和CSV导出里都能看到具体扣了多少毫秒，跟Tuya继电器那8秒执行延迟是同一个处理思路——只在计算这一层修正，不动原始观测数据。检测失败或误触发时用"手动立即截取"兜底，这种手动截取不经过相机分析流程，不会附带这项延迟修正。离开此界面会自动关闭摄像头。蓝牙数字小键盘在摄像头界面下可用：回车切换开始/停止监测、退格撤销上条记录(3秒二次确认)、加减号微调灵敏度(长按加速)、乘除号微调防抖容差、数字0手动立即截取、Esc返回主界面。</p>
       <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.7.0</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.7.2</div>
   </div>
 
 </div>
@@ -1109,8 +1039,6 @@
   var cameraStream = null;
   var cameraState = 'idle';
   var cameraLoopActive = false;
-  var prevBinaryMask = null;
-  var prevDilatedMask = null;
   var shakeToleranceRadius = 2;
   var SENSITIVITY_MAX = 10;
   var sensitivityThreshold = SENSITIVITY_MAX - 8.5;
@@ -1128,6 +1056,21 @@
   var GRID_GLOBAL_RATIO_LIMIT = 0.5;
   var GRID_MIN_CELLS_TO_TRIGGER = 1;
   var lastGridDiag = { changedCells: 0, totalCells: 0, globalRatio: 0, maxCellDelta: 0 };
+
+  var GRID_DENSITY_KEY = 'cc_griddensity_v1';
+  var GRID_DENSITY_PX = { coarse: 12, medium: 8, fine: 5 };
+  var gridDensityMode = 'medium';
+
+  function loadGridDensity(){
+    try{
+      var v = localStorage.getItem(GRID_DENSITY_KEY);
+      gridDensityMode = (v === 'coarse' || v === 'medium' || v === 'fine') ? v : 'medium';
+    }catch(e){ gridDensityMode = 'medium'; }
+  }
+
+  function saveGridDensity(){
+    try{ localStorage.setItem(GRID_DENSITY_KEY, gridDensityMode); }catch(e){}
+  }
   var lastCellChanged = new Uint8Array(0);
 
   var GRID_OVERLAY_KEY = 'cc_gridoverlay_v1';
@@ -1198,10 +1141,11 @@
     var vr = getVisibleVideoRect(video);
     var sw = vr.visW * (roiState.width/100);
     var sh = vr.visH * (roiState.height/100);
-    var effW = Math.min(SEG_SAMPLE_W, sw);
-    var effH = Math.min(SEG_SAMPLE_H, sh);
-    gridCols = Math.max(3, Math.min(6, Math.round(effW/8)));
-    gridRows = Math.max(4, Math.min(8, Math.round(effH/8)));
+    var effW = Math.min(SAMPLE_W, sw);
+    var effH = Math.min(SAMPLE_H, sh);
+    var targetPx = GRID_DENSITY_PX[gridDensityMode] || GRID_DENSITY_PX.medium;
+    gridCols = Math.max(3, Math.min(6, Math.round(effW/targetPx)));
+    gridRows = Math.max(4, Math.min(8, Math.round(effH/targetPx)));
     lastCellChanged = new Uint8Array(gridCols*gridRows);
     gridOverlayLastW = 0;
     gridOverlayLastH = 0;
@@ -1320,8 +1264,6 @@
     if(video){ video.srcObject = null; }
     cameraState = 'idle';
     cameraLoopActive = false;
-    prevBinaryMask = null;
-    prevDilatedMask = null;
     prevCellAvg = null;
     consecutiveHits = 0;
     firstHitTimestamp = null;
@@ -1348,8 +1290,6 @@
     if(!cameraStream){ startCamera(); }
     cameraState = 'armed';
     resetUndoBtnState();
-    prevBinaryMask = null;
-    prevDilatedMask = null;
     prevCellAvg = null;
     computeGridDims();
     consecutiveHits = 0;
@@ -1458,75 +1398,9 @@
     if(labelEl){ labelEl.textContent = '--% / ' + sensitivityThreshold.toFixed(1) + '%'; }
   }
 
-  var SEG_SAMPLE_W = 50;
-  var SEG_SAMPLE_H = 70;
-  var SEG_NAMES = ['top','topleft','topright','middle','botleft','botright','bottom'];
+  var SAMPLE_W = 50;
+  var SAMPLE_H = 70;
 
-  function segmentTest(lx, ly, p){
-    var gap = p.gap/100, vT = p.vThick/100, hT = p.hThick/100, midY = 0.5;
-    switch(p._segFilter){
-      case 'top': return ly<=hT && lx>=gap && lx<=1-gap;
-      case 'bottom': return ly>=1-hT && lx>=gap && lx<=1-gap;
-      case 'middle': return Math.abs(ly-midY)<=hT/2 && lx>=gap && lx<=1-gap;
-      case 'topleft': return lx<=vT && ly>=gap && ly<=midY-gap/2;
-      case 'topright': return lx>=1-vT && ly>=gap && ly<=midY-gap/2;
-      case 'botleft': return lx<=vT && ly>=midY+gap/2 && ly<=1-gap;
-      case 'botright': return lx>=1-vT && ly>=midY+gap/2 && ly<=1-gap;
-      default:
-        return (ly<=hT && lx>=gap && lx<=1-gap) ||
-               (ly>=1-hT && lx>=gap && lx<=1-gap) ||
-               (Math.abs(ly-midY)<=hT/2 && lx>=gap && lx<=1-gap) ||
-               (lx<=vT && ly>=gap && ly<=midY-gap/2) ||
-               (lx>=1-vT && ly>=gap && ly<=midY-gap/2) ||
-               (lx<=vT && ly>=midY+gap/2 && ly<=1-gap) ||
-               (lx>=1-vT && ly>=midY+gap/2 && ly<=1-gap);
-    }
-  }
-
-  function buildMaskGeneric(w, h, params, segFilter){
-    var mask = new Uint8Array(w*h);
-    var boxW = w * (params.width/100);
-    var boxH = h * (params.height/100);
-    var cx = w * (params.offsetX/100);
-    var cy = h * (params.offsetY/100);
-    var rot = (params.rotation||0) * Math.PI/180;
-    var cosR = Math.cos(-rot), sinR = Math.sin(-rot);
-    var p = params; p._segFilter = segFilter;
-    for(var y=0; y<h; y++){
-      for(var x=0; x<w; x++){
-        var dx = x - cx, dy = y - cy;
-        var rx = dx*cosR - dy*sinR;
-        var ry = dx*sinR + dy*cosR;
-        var lx = (rx + boxW/2) / boxW;
-        var ly = (ry + boxH/2) / boxH;
-        if(lx>=0 && lx<=1 && ly>=0 && ly<=1 && segmentTest(lx, ly, p)){
-          mask[y*w+x] = 1;
-        }
-      }
-    }
-    return mask;
-  }
-
-  function buildSegmentMask(w, h, params){
-    return buildMaskGeneric(w, h, params, null);
-  }
-
-  function buildHaloMask(segMask, w, h, marginPx){
-    var dilated = dilateMask(segMask, w, h, marginPx);
-    var halo = new Uint8Array(w*h);
-    for(var p=0; p<w*h; p++){
-      halo[p] = (dilated[p] && !segMask[p]) ? 1 : 0;
-    }
-    return halo;
-  }
-
-  function countMaskPixels(mask){
-    var c = 0;
-    for(var i=0;i<mask.length;i++){ if(mask[i]){ c++; } }
-    return c;
-  }
-
-  var SEG_MASK_KEY = 'cc_segmask_v1';
   var ZOOM_KEY = 'cc_zoom_v1';
   var CAMERA_PARAMS_COLLAPSED_KEY = 'cc_camparams_collapsed_v1';
 
@@ -1549,358 +1423,7 @@
     var sensText = sensSlider ? parseFloat(sensSlider.value).toFixed(1) : '--';
     var shakeText = shakeSlider ? shakeSlider.value + 'px' : '--';
     var modeText = burstModeEnabled ? '连拍模式' : '快捷模式';
-    // ROI/七段Mask 模式在取景框上直接看得出来(有没有画Mask线)，折叠摘要里不重复占位，给电平表让出空间
     el.textContent = '灵敏度' + sensText + ' · 防抖' + shakeText + ' · ' + modeText;
-  }
-  var segMaskEnabled = false;
-  var segMaskState = { width:70, height:82, offsetX:50, offsetY:50, hThick:14, vThick:16, gap:6, rotation:0 };
-  var cachedSegMask = null;
-  var cachedHaloMask = null;
-  var cachedMaskPixelCount = 0;
-  var cachedSegMaskParamsKey = '';
-
-  function loadSegMaskState(){
-    try{
-      var raw = localStorage.getItem(SEG_MASK_KEY);
-      var v = raw ? JSON.parse(raw) : null;
-      if(v){
-        segMaskEnabled = !!v.enabled;
-        if(v.params){ segMaskState = v.params; }
-      }
-    }catch(e){}
-  }
-
-  function saveSegMaskState(){
-    try{ localStorage.setItem(SEG_MASK_KEY, JSON.stringify({ enabled: segMaskEnabled, params: segMaskState })); }catch(e){}
-  }
-
-  var cachedSingleSegMasks = null;
-
-  function ensureSegMaskCache(){
-    var key = JSON.stringify(segMaskState);
-    if(key === cachedSegMaskParamsKey && cachedSegMask){ return; }
-    cachedSegMask = buildSegmentMask(SEG_SAMPLE_W, SEG_SAMPLE_H, segMaskState);
-    cachedHaloMask = buildHaloMask(cachedSegMask, SEG_SAMPLE_W, SEG_SAMPLE_H, 3);
-    cachedMaskPixelCount = countMaskPixels(cachedSegMask);
-    cachedSingleSegMasks = {};
-    SEG_NAMES.forEach(function(name){
-      cachedSingleSegMasks[name] = buildMaskGeneric(SEG_SAMPLE_W, SEG_SAMPLE_H, segMaskState, name);
-    });
-    cachedSegMaskParamsKey = key;
-  }
-
-  function computeMaskQuality(frame, w, h){
-    ensureSegMaskCache();
-    var maskSum=0, maskCount=0, haloSum=0, haloCount=0, litCount=0;
-    var minLum=255, maxLum=0;
-    for(var p=0; p<w*h; p++){
-      var i = p*4;
-      var lum = Math.max(frame[i], frame[i+1], frame[i+2]);
-      if(cachedSegMask[p]){
-        maskSum += lum; maskCount++;
-        if(lum < minLum){ minLum = lum; }
-        if(lum > maxLum){ maxLum = lum; }
-      } else if(cachedHaloMask[p]){
-        haloSum += lum; haloCount++;
-      }
-    }
-    var threshold = (minLum+maxLum)/2;
-    for(var p2=0; p2<w*h; p2++){
-      if(cachedSegMask[p2]){
-        var i2 = p2*4;
-        var lum2 = Math.max(frame[i2], frame[i2+1], frame[i2+2]);
-        if(lum2 > threshold){ litCount++; }
-      }
-    }
-    var avgMask = maskCount ? maskSum/maskCount : 0;
-    var avgHalo = haloCount ? haloSum/haloCount : 0;
-    var matchQuality = avgMask > 0 ? Math.max(0, Math.min(100, ((avgMask-avgHalo)/avgMask)*100)) : 0;
-    var coverage = maskCount ? (litCount/maskCount)*100 : 0;
-    return { matchQuality: matchQuality, coverage: coverage, avgMask: avgMask, avgHalo: avgHalo };
-  }
-
-  var debugPanelOpen = false;
-
-  function updateMaskQualityDisplay(mq){
-    var el = document.getElementById('maskQualityDisplay');
-    if(el){
-      el.textContent = 'Mask匹配度 ' + mq.matchQuality.toFixed(0) + '% · 亮度覆盖率 ' + mq.coverage.toFixed(0) + '%';
-    }
-  }
-
-  function avgBrightnessInMask(frame, mask){
-    var sum=0, count=0;
-    for(var p=0;p<mask.length;p++){
-      if(mask[p]){ var i=p*4; sum += Math.max(frame[i],frame[i+1],frame[i+2]); count++; }
-    }
-    return count ? sum/count : 0;
-  }
-
-  function updateSegmentDebugDisplay(frame, w, h){
-    var el = document.getElementById('segDebugDetail');
-    if(!el){ return; }
-    ensureSegMaskCache();
-    var lines = SEG_NAMES.map(function(name){
-      var b = avgBrightnessInMask(frame, cachedSingleSegMasks[name]);
-      return '<div class="diagrow">' + name + ': ' + b.toFixed(1) + '</div>';
-    });
-    var totalB = avgBrightnessInMask(frame, cachedSegMask);
-    lines.push('<div class="diagrow">总亮度: ' + totalB.toFixed(1) + '</div>');
-    lines.push('<div class="diagrow">当前触发阈值: ' + sensitivityThreshold.toFixed(1) + '%</div>');
-    var lastDiffEl = document.getElementById('diffMeterLabel');
-    lines.push('<div class="diagrow">当前差异分数: ' + (lastDiffEl ? lastDiffEl.textContent : '--') + '</div>');
-    el.innerHTML = lines.join('');
-  }
-
-  function clampSegParam(key, val){
-    var ranges = {
-      width:[20,100], height:[20,100], offsetX:[0,100], offsetY:[0,100],
-      hThick:[3,40], vThick:[3,40], gap:[0,20], rotation:[-30,30]
-    };
-    var r = ranges[key] || [0,100];
-    return Math.max(r[0], Math.min(r[1], val));
-  }
-
-  function getSegmentRectsPct(p){
-    var gap = p.gap, hT = p.hThick, vT = p.vThick, midY = 50;
-    return {
-      top:      { left: gap, top: 0, width: 100-2*gap, height: hT },
-      bottom:   { left: gap, top: 100-hT, width: 100-2*gap, height: hT },
-      middle:   { left: gap, top: midY-hT/2, width: 100-2*gap, height: hT },
-      topleft:  { left: 0, top: gap, width: vT, height: Math.max(0, midY-gap/2-gap) },
-      topright: { left: 100-vT, top: gap, width: vT, height: Math.max(0, midY-gap/2-gap) },
-      botleft:  { left: 0, top: midY+gap/2, width: vT, height: Math.max(0, 100-gap-(midY+gap/2)) },
-      botright: { left: 100-vT, top: midY+gap/2, width: vT, height: Math.max(0, 100-gap-(midY+gap/2)) }
-    };
-  }
-
-  function renderSegMaskOverlay(){
-    var overlay = document.getElementById('segMaskOverlay');
-    var outer = document.getElementById('segBoxOuter');
-    if(!overlay || !outer){ return; }
-    overlay.style.display = segMaskEnabled ? 'block' : 'none';
-    if(!segMaskEnabled){ return; }
-    var p = segMaskState;
-    outer.style.width = p.width + '%';
-    outer.style.height = p.height + '%';
-    outer.style.left = (p.offsetX - p.width/2) + '%';
-    outer.style.top = (p.offsetY - p.height/2) + '%';
-    outer.style.transform = 'rotate(' + (p.rotation||0) + 'deg)';
-
-    var rects = getSegmentRectsPct(p);
-    SEG_NAMES.forEach(function(name){
-      var el = document.getElementById('seg_' + name);
-      if(!el){ return; }
-      var r = rects[name];
-      el.style.left = r.left + '%';
-      el.style.top = r.top + '%';
-      el.style.width = r.width + '%';
-      el.style.height = r.height + '%';
-    });
-  }
-
-  function syncMaskEditorSliders(){
-    var map = {
-      segWidthSlider: 'width', segHeightSlider: 'height',
-      segOffsetXSlider: 'offsetX', segOffsetYSlider: 'offsetY',
-      segHThickSlider: 'hThick', segVThickSlider: 'vThick',
-      segGapSlider: 'gap', segRotationSlider: 'rotation'
-    };
-    Object.keys(map).forEach(function(sliderId){
-      var el = document.getElementById(sliderId);
-      var valEl = document.getElementById(sliderId + 'Val');
-      if(el){ el.value = segMaskState[map[sliderId]]; }
-      if(valEl){ valEl.textContent = segMaskState[map[sliderId]]; }
-    });
-    renderSegMaskOverlay();
-  }
-
-  var camToastTimer = null;
-  var camToastFadeTimer = null;
-
-  function showCamToast(msg, duration){
-    var el = document.getElementById('camToast');
-    if(!el){ return; }
-    if(camToastTimer){ clearTimeout(camToastTimer); }
-    if(camToastFadeTimer){ clearTimeout(camToastFadeTimer); }
-    el.textContent = msg;
-    el.style.display = 'block';
-    el.style.opacity = '1';
-    camToastTimer = setTimeout(function(){
-      el.style.opacity = '0';
-      camToastFadeTimer = setTimeout(function(){ el.style.display = 'none'; }, 300);
-    }, duration || 3500);
-  }
-
-  var autoCalRunning = false;
-
-  function showAutoCalProgress(show, text, pct){
-    var wrap = document.getElementById('autoCalProgressWrap');
-    var bar = document.getElementById('autoCalProgressFill');
-    var label = document.getElementById('autoCalProgressLabel');
-    if(!wrap){ return; }
-    wrap.style.display = show ? 'block' : 'none';
-    if(show){
-      if(bar){ bar.style.width = (pct||0) + '%'; }
-      if(label){ label.textContent = text || ''; }
-    }
-  }
-
-  function autoCalibrateMask(){
-    if(autoCalRunning){ return; }
-    var video = document.getElementById('cameraVideo');
-    if(!video || !video.videoWidth){ showCamToast('摄像头未就绪，请先进入预览'); return; }
-
-    var sampleW = SEG_SAMPLE_W, sampleH = SEG_SAMPLE_H;
-    var canvas = document.getElementById('cameraCanvas');
-    canvas.width = sampleW; canvas.height = sampleH;
-    var ctx = canvas.getContext('2d', { willReadFrequently: true });
-    var vr = getVisibleVideoRect(video);
-    var sx = vr.cropX + vr.visW*(roiState.left/100);
-    var sy = vr.cropY + vr.visH*(roiState.top/100);
-    var sw = vr.visW*(roiState.width/100);
-    var sh = vr.visH*(roiState.height/100);
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
-    var frame;
-    try{
-      frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
-    }catch(err){
-      showCamToast('截取画面失败: ' + err.message);
-      return;
-    }
-
-    autoCalRunning = true;
-    var btn = document.getElementById('segAutoCalibrateBtn');
-    btn.disabled = true;
-    btn.textContent = '优化中...';
-    showAutoCalProgress(true, '准备中...', 0);
-
-    function scoreFor(params){
-      return avgBrightnessInMask(frame, buildSegmentMask(sampleW, sampleH, params));
-    }
-
-    var best = Object.assign({}, segMaskState);
-    var bestScore = scoreFor(best);
-
-    var stages = [
-      { name:'位置', keys:['offsetX','offsetY'], steps:[-8,-5,-3,-1,1,3,5,8] },
-      { name:'尺寸', keys:['width','height'], steps:[-12,-8,-4,4,8,12] },
-      { name:'线宽', keys:['hThick','vThick'], steps:[-4,-2,-1,1,2,4] }
-    ];
-    var stageIdx = 0, keyIdx = 0, stepIdx = 0, keyBaseVal = null;
-    var BATCH_SIZE = 4;
-
-    function finish(success, errMsg){
-      autoCalRunning = false;
-      btn.disabled = false;
-      btn.textContent = '自动优化';
-      showAutoCalProgress(false);
-      if(success){
-        segMaskState = best;
-        saveSegMaskState();
-        cachedSegMaskParamsKey = '';
-        syncMaskEditorSliders();
-        var mqFinal = computeMaskQuality(frame, sampleW, sampleH);
-        updateMaskQualityDisplay(mqFinal);
-        showCamToast('自动优化完成 · 亮度评分 ' + bestScore.toFixed(1) + ' · 匹配度 ' + mqFinal.matchQuality.toFixed(0) + '%', 4000);
-      } else {
-        showCamToast('自动优化未完成: ' + (errMsg || '未知错误'), 4000);
-      }
-    }
-
-    function runChunk(){
-      try{
-        if(stageIdx >= stages.length){
-          finish(true);
-          return;
-        }
-        var stage = stages[stageIdx];
-        if(keyIdx >= stage.keys.length){
-          stageIdx++; keyIdx = 0; stepIdx = 0; keyBaseVal = null;
-          segMaskState = best;
-          syncMaskEditorSliders();
-          if(stageIdx >= stages.length){ finish(true); return; }
-          setTimeout(runChunk, 0);
-          return;
-        }
-        var key = stage.keys[keyIdx];
-        if(stepIdx === 0){
-          keyBaseVal = best[key];
-          var overallPct = Math.round(((stageIdx + keyIdx/stage.keys.length) / stages.length) * 100);
-          showAutoCalProgress(true, '阶段' + (stageIdx+1) + '/3 · ' + stage.name, overallPct);
-        }
-        var processed = 0;
-        while(stepIdx < stage.steps.length && processed < BATCH_SIZE){
-          var delta = stage.steps[stepIdx];
-          var candidate = Object.assign({}, best);
-          candidate[key] = clampSegParam(key, keyBaseVal + delta);
-          var score = scoreFor(candidate);
-          if(score > bestScore){ bestScore = score; best = candidate; }
-          stepIdx++;
-          processed++;
-        }
-        if(stepIdx >= stage.steps.length){
-          keyIdx++; stepIdx = 0;
-        }
-        setTimeout(runChunk, 0);
-      }catch(err){
-        finish(false, err.message);
-      }
-    }
-
-    setTimeout(runChunk, 0);
-  }
-
-  function binarizeFrame(frame, w, h, restrictMask){
-    var n = w*h;
-    var lums = new Uint8Array(n);
-    var minLum = 255, maxLum = 0;
-    for(var i=0,p=0; i<frame.length; i+=4,p++){
-      var lum = Math.max(frame[i], frame[i+1], frame[i+2]);
-      lums[p] = lum;
-      if(!restrictMask || restrictMask[p]){
-        if(lum < minLum){ minLum = lum; }
-        if(lum > maxLum){ maxLum = lum; }
-      }
-    }
-    var threshold = (minLum + maxLum) / 2;
-    var mask = new Uint8Array(n);
-    for(var p2=0; p2<n; p2++){ mask[p2] = lums[p2] > threshold ? 1 : 0; }
-    return mask;
-  }
-
-  function dilateMask(mask, w, h, radius){
-    var out = new Uint8Array(w*h);
-    if(radius <= 0){ out.set(mask); return out; }
-    for(var y=0; y<h; y++){
-      for(var x=0; x<w; x++){
-        var idx = y*w+x;
-        if(mask[idx]){ out[idx] = 1; continue; }
-        var found = 0;
-        for(var dy=-radius; dy<=radius && !found; dy++){
-          var ny = y+dy;
-          if(ny<0 || ny>=h){ continue; }
-          var rowBase = ny*w;
-          for(var dx=-radius; dx<=radius; dx++){
-            var nx = x+dx;
-            if(nx<0 || nx>=w){ continue; }
-            if(mask[rowBase+nx]){ found = 1; break; }
-          }
-        }
-        out[idx] = found;
-      }
-    }
-    return out;
-  }
-
-  function tolerantDiffPct(curMask, curDilated, prevMask, prevDilated, w, h, normCount){
-    var n = w*h, changed = 0;
-    for(var p=0; p<n; p++){
-      if(curMask[p] && !prevDilated[p]){ changed++; }
-      if(prevMask[p] && !curDilated[p]){ changed++; }
-    }
-    var denom = (normCount && normCount > 0) ? normCount : n;
-    return (changed / denom) * 100;
   }
 
   function getVisibleVideoRect(video){
@@ -1929,7 +1452,7 @@
     analysisFrameCount++;
     var perfStart = performance.now();
 
-    var sampleW = SEG_SAMPLE_W, sampleH = SEG_SAMPLE_H;
+    var sampleW = SAMPLE_W, sampleH = SAMPLE_H;
     var canvas = document.getElementById('cameraCanvas');
     canvas.width = sampleW;
     canvas.height = sampleH;
@@ -1944,16 +1467,7 @@
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sampleW, sampleH);
     var frame = ctx.getImageData(0, 0, sampleW, sampleH).data;
 
-    // 七段Mask模式：Mask编辑器的实时对齐反馈（匹配度/亮度覆盖率）保留，仅作UI诊断用，
-    // 不再参与下面的Trigger判定（v3.7起Mask完全退出核心检测链路，作为旧方案保留）。
-    if(segMaskEnabled){
-      ensureSegMaskCache();
-      var mq = computeMaskQuality(frame, sampleW, sampleH);
-      updateMaskQualityDisplay(mq);
-      if(debugPanelOpen){ updateSegmentDebugDisplay(frame, sampleW, sampleH); }
-    }
-
-    // ==== v3.7 网格局部检测（新Trigger链路） ====
+    // ==== v3.7 网格局部检测（Trigger链路） ====
     var curCellAvg = computeGridCellAvg(frame, sampleW, sampleH, gridCols, gridRows);
 
     if(prevCellAvg){
@@ -2968,15 +2482,14 @@
     loadDelay();
     loadEnabledSources();
     loadBurstMode();
-    loadSegMaskState();
     loadGridOverlay();
+    loadGridDensity();
     renderLog();
     renderSeasonButtons();
     renderStats();
     renderSourceToggleList();
     renderBurstModeButtons();
-    renderSegModeButtons();
-    syncMaskEditorSliders();
+    renderGridDensityButtons();
     loadROI();
     applyROIStyle();
     setupROIInteraction();
@@ -3044,56 +2557,28 @@
       renderBurstModeButtons();
     });
 
-    function renderSegModeButtons(){
-      document.getElementById('wholeRoiModeBtn').classList.toggle('active', !segMaskEnabled);
-      document.getElementById('segMaskModeBtn').classList.toggle('active', segMaskEnabled);
-      document.getElementById('maskQualityDisplay').style.display = segMaskEnabled ? 'block' : 'none';
-      document.getElementById('maskEditorToggleBtn').style.display = segMaskEnabled ? 'block' : 'none';
-      document.getElementById('segAutoCalibrateBtn').style.display = segMaskEnabled ? 'block' : 'none';
-      document.getElementById('segResetBtn').style.display = segMaskEnabled ? 'block' : 'none';
-      document.getElementById('gridOverlayToggleBtn').style.display = segMaskEnabled ? 'none' : 'block';
-      if(!segMaskEnabled){ document.getElementById('maskEditorDetail').style.display = 'none'; }
-      renderSegMaskOverlay();
-      updateCameraParamsSummary();
+    function renderGridDensityButtons(){
+      document.getElementById('gridDensityCoarseBtn').classList.toggle('active', gridDensityMode === 'coarse');
+      document.getElementById('gridDensityMediumBtn').classList.toggle('active', gridDensityMode === 'medium');
+      document.getElementById('gridDensityFineBtn').classList.toggle('active', gridDensityMode === 'fine');
     }
-    document.getElementById('wholeRoiModeBtn').addEventListener('click', function(){
-      segMaskEnabled = false;
-      saveSegMaskState();
-      renderSegModeButtons();
+    document.getElementById('gridDensityCoarseBtn').addEventListener('click', function(){
+      gridDensityMode = 'coarse';
+      saveGridDensity();
+      renderGridDensityButtons();
+      computeGridDims();
     });
-    document.getElementById('segMaskModeBtn').addEventListener('click', function(){
-      segMaskEnabled = true;
-      saveSegMaskState();
-      renderSegModeButtons();
+    document.getElementById('gridDensityMediumBtn').addEventListener('click', function(){
+      gridDensityMode = 'medium';
+      saveGridDensity();
+      renderGridDensityButtons();
+      computeGridDims();
     });
-    document.getElementById('maskEditorToggleBtn').addEventListener('click', function(){
-      var el = document.getElementById('maskEditorDetail');
-      var btn = document.getElementById('maskEditorToggleBtn');
-      var open = el.style.display !== 'none';
-      el.style.display = open ? 'none' : 'block';
-      btn.textContent = open ? '七段Mask编辑器 ▾' : '收起编辑器 ▴';
-    });
-
-    var segSliderMap = {
-      segWidthSlider: 'width', segHeightSlider: 'height',
-      segOffsetXSlider: 'offsetX', segOffsetYSlider: 'offsetY',
-      segHThickSlider: 'hThick', segVThickSlider: 'vThick',
-      segGapSlider: 'gap', segRotationSlider: 'rotation'
-    };
-    Object.keys(segSliderMap).forEach(function(sliderId){
-      document.getElementById(sliderId).addEventListener('input', function(e){
-        var key = segSliderMap[sliderId];
-        segMaskState[key] = parseFloat(e.target.value);
-        document.getElementById(sliderId + 'Val').textContent = e.target.value;
-        renderSegMaskOverlay();
-        saveSegMaskState();
-      });
-    });
-    document.getElementById('segAutoCalibrateBtn').addEventListener('click', function(){ autoCalibrateMask(); });
-    document.getElementById('segResetBtn').addEventListener('click', function(){
-      segMaskState = { width:70, height:82, offsetX:50, offsetY:50, hThick:14, vThick:16, gap:6, rotation:0 };
-      saveSegMaskState();
-      syncMaskEditorSliders();
+    document.getElementById('gridDensityFineBtn').addEventListener('click', function(){
+      gridDensityMode = 'fine';
+      saveGridDensity();
+      renderGridDensityButtons();
+      computeGridDims();
     });
 
     function renderGridOverlayBtn(){
@@ -3150,9 +2635,6 @@
       var open = el.style.display !== 'none';
       el.style.display = open ? 'none' : 'block';
       btn.textContent = open ? '查看诊断详情 ▾' : '收起诊断详情 ▴';
-      debugPanelOpen = !open;
-      var segDebugEl = document.getElementById('segDebugDetail');
-      if(segDebugEl){ segDebugEl.style.display = (!open && segMaskEnabled) ? 'block' : 'none'; }
     });
     document.getElementById('instructionsToggleBtn').addEventListener('click', function(){
       var el = document.getElementById('instructionsDetail');
@@ -3231,35 +2713,9 @@
       return null;
     }
 
-    // 七段Mask编辑器8个参数的数字键微调：点一下数字键=该参数+1；按住数字键再点减号=该参数-1(减号可连按/长按连续减)
-    var SEG_PARAM_KEYMAP = {
-      '1': { key: 'width',    slider: 'segWidthSlider' },
-      '2': { key: 'height',   slider: 'segHeightSlider' },
-      '3': { key: 'offsetX',  slider: 'segOffsetXSlider' },
-      '4': { key: 'offsetY',  slider: 'segOffsetYSlider' },
-      '5': { key: 'hThick',   slider: 'segHThickSlider' },
-      '6': { key: 'vThick',   slider: 'segVThickSlider' },
-      '7': { key: 'gap',      slider: 'segGapSlider' },
-      '8': { key: 'rotation', slider: 'segRotationSlider' }
-    };
+    // 数字键1-8、小数点、等号目前无映射(v3.7.2起七段Mask功能已彻底移除，这些键留待未来功能使用)
     var quickTuneKeyHeld = null;
     var quickTuneKeyUsedForCombo = false;
-
-    function adjustSegParam(digit, step){
-      var def = SEG_PARAM_KEYMAP[digit];
-      if(!def){ return; }
-      var slider = document.getElementById(def.slider);
-      if(!slider){ return; }
-      var min = parseFloat(slider.min), max = parseFloat(slider.max);
-      var v = segMaskState[def.key] + step;
-      v = Math.min(max, Math.max(min, v));
-      segMaskState[def.key] = v;
-      slider.value = v;
-      var valEl = document.getElementById(def.slider + 'Val');
-      if(valEl){ valEl.textContent = v; }
-      renderSegMaskOverlay();
-      saveSegMaskState();
-    }
 
     // 硬件变焦(数字9)：复用同一套"点一下=+一步,按住再点减号=-一步"手感(v3.7起软件预览放大功能已彻底移除，硬件变焦为唯一缩放手段)
     function adjustHwZoom(dir){
@@ -3278,17 +2734,10 @@
     }
 
     function quickTuneIsTarget(token){
-      if(SEG_PARAM_KEYMAP[token]){ return segMaskEnabled; }
-      if(token === '9'){ return true; }
-      return false;
+      return token === '9';
     }
 
     function quickTuneApply(token, dir){
-      if(SEG_PARAM_KEYMAP[token]){
-        if(!segMaskEnabled){ return; }
-        adjustSegParam(token, dir);
-        return;
-      }
       if(token === '9'){ adjustHwZoom(dir); return; }
     }
 
@@ -3345,16 +2794,6 @@
       if(resolveNumpadDigit(e) === '0'){
         e.preventDefault();
         if(!e.repeat){ onCameraDetected(nowCorrected(), 'camera-manual'); }
-        return;
-      }
-      if(resolveNumpadDigit(e) === '.'){
-        e.preventDefault();
-        if(!e.repeat && segMaskEnabled){ autoCalibrateMask(); }
-        return;
-      }
-      if(e.code === 'Tab' || e.code === 'NumpadEqual' || e.code === 'Equal' || e.key === '='){
-        e.preventDefault();
-        if(!e.repeat && segMaskEnabled){ document.getElementById('segResetBtn').click(); }
         return;
       }
       if(e.code === 'Escape'){
