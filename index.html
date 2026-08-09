@@ -288,6 +288,21 @@
   }
   .calbtn.calactive{border-color:var(--accent); color:var(--accent);}
 
+  .bundlecard{border-bottom:1px solid var(--panel-edge); padding:10px 0;}
+  .bundlecard:last-child{border-bottom:none;}
+  .bundlehead{display:flex; justify-content:space-between; align-items:flex-start; cursor:pointer;}
+  .bundlehead .lt{font-family:var(--mono); color:var(--ink); font-size:13px;}
+  .bundlehead .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:3px; line-height:1.6;}
+  .continuitytag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
+  .continuitytag.warn{border-color:var(--bad); color:var(--bad);}
+  .bundleExpandBtn{background:none; border:none; color:var(--ink-dim); font-size:14px; padding:4px 8px;}
+  .bundlebody{margin-top:8px; padding-left:10px; border-left:2px solid var(--panel-edge);}
+  .bundleitem{padding:6px 0; font-size:12px;}
+  .bundleitem .lt{font-family:var(--mono); color:var(--ink); font-size:12px;}
+  .bundleitem .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:2px;}
+  .bundleitem.missedgap{color:var(--bad);}
+  .bundlebtnrow{display:flex; gap:8px; margin-top:8px;}
+
   .statstitle{font-size:11px; color:var(--ink-dim); letter-spacing:.03em; margin-bottom:8px;}
   .statsline{font-size:13px; color:var(--ink); line-height:1.7;}
   .statsbig{font-size:16px; font-weight:700; color:var(--accent); margin:2px 0;}
@@ -400,7 +415,7 @@
 
     <button class="diagToggleBtn" id="instructionsToggleBtn">使用说明 ▾</button>
     <div class="section" id="instructionsDetail" style="display:none;">
-      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法把取景框划成小格，逐格比较相邻帧红色分量变化，只有少数格子变化才算真正跳变，大半格子同时变化会被判定为环境光/曝光噪声并整帧忽略，这样能自动吸收手抖和整体光照波动，只有真正的数字亮灭才会被计入差异分数。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；数字9＝硬件变焦(点一下+一步，按住再点减号-一步，设备不支持时会提示)；Esc＝退出摄像头回到主界面。数字1-8、小数点、等号目前未绑定任何功能(v3.7.2起随七段Mask功能一起释放，留给以后用)。此前有个bug：只要屏幕上任意一个滑条(灵敏度/防抖容差/变焦等)因为手指碰过而拿到了焦点，蓝牙键盘所有按键都会被误判成"正在打字"而完全失效，现已修复——只有真正的文字输入框才会屏蔽快捷键，滑条不再屏蔽。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">网格局部检测</b>：v3.7起检测算法改为把取景框划分成若干小格，逐格比较相邻两帧的红色分量(LED数字发光色)变化，而不是整个取景框算一个平均值——这样能把"数字跳变"(只影响少数几个格子)和"环境光/自动曝光整体波动"(往往同时影响一大半格子)区分开，后者会被自动判定为全局噪声并整帧忽略。取景框大小不同时，格子会自动变粗或变细以保持每格有效像素量；"网格:粗/中/细"三档可以手动调整这个基准密度——画面较暗或噪声明显时选"粗"更稳，需要抓小面积数字变化(比如"1")时选"细"更灵敏。点右上角"网格"按钮可以直接在取景框上叠加显示当前网格线，橙色高亮的格子就是本帧被判定为变化的格子，方便现场对照调参。之前的七段Mask对齐功能(手动画线段框LED区域)已在v3.7.2彻底移除，新的网格检测不依赖数字的具体形状。</p>
+      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法把取景框划成小格，逐格比较相邻帧红色分量变化，只有少数格子变化才算真正跳变，大半格子同时变化会被判定为环境光/曝光噪声并整帧忽略，这样能自动吸收手抖和整体光照波动，只有真正的数字亮灭才会被计入差异分数。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，捕获瞬间左上角状态徽章会明显放大变色提示已抓取；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；数字9＝硬件变焦(点一下+一步，按住再点减号-一步，设备不支持时会提示)；数字1＝取景框宽度、数字2＝高度、数字3＝左右位置、数字4＝上下位置，每个都是"点一下该数字键+1%，按住该数字键的同时点减号-1%(减号可连点或长按连续减，松开数字键结束)"，只影响蓝牙键盘操作，触屏拖拽/拉伸手柄照常可用；数字5-8、小数点、等号目前仍未绑定任何功能，留给以后用；Esc＝退出摄像头回到主界面。此前有个bug：只要屏幕上任意一个滑条(灵敏度/防抖容差/变焦等)因为手指碰过而拿到了焦点，蓝牙键盘所有按键都会被误判成"正在打字"而完全失效，现已修复——只有真正的文字输入框才会屏蔽快捷键，滑条不再屏蔽。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">网格局部检测</b>：v3.7起检测算法改为把取景框划分成若干小格，逐格比较相邻两帧的红色分量(LED数字发光色)变化，而不是整个取景框算一个平均值——这样能把"数字跳变"(只影响少数几个格子)和"环境光/自动曝光整体波动"(往往同时影响一大半格子)区分开，后者会被自动判定为全局噪声并整帧忽略。取景框大小不同时，格子会自动变粗或变细以保持每格有效像素量；"网格:粗/中/细"三档可以手动调整这个基准密度——画面较暗或噪声明显时选"粗"更稳，需要抓小面积数字变化(比如"1")时选"细"更灵敏。点右上角"网格"按钮可以直接在取景框上叠加显示当前网格线，橙色高亮的格子就是本帧被判定为变化的格子，方便现场对照调参。之前的七段Mask对齐功能(手动画线段框LED区域)已在v3.7.2彻底移除，新的网格检测不依赖数字的具体形状。</p>
     </div>
 
     <canvas id="cameraCanvas" style="display:none;"></canvas>
@@ -461,6 +476,10 @@
           <input type="text" inputmode="numeric" maxlength="3" class="seg seg-s3" id="segMs" placeholder="mmm">
         </div>
         <button class="iconbtn" id="manualFillNowBtn" style="width:100%; margin-top:8px;">填入当前</button>
+        <div class="chkrow" style="margin-top:8px;">
+          <label for="manualLatencyInput" style="font-size:12px; color:var(--ink-dim); margin-right:8px;">扣除系统延迟(ms，可留空)</label>
+          <input type="number" min="0" step="1" id="manualLatencyInput" class="clockinput" style="width:80px;" placeholder="0">
+        </div>
         <div class="chkrow">
           <input type="checkbox" id="manualCalChk">
           <label for="manualCalChk">标记为校准点(该时刻挂钟已被调至与真实时间一致)</label>
@@ -509,7 +528,7 @@
       <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.7.2</div>
+    <div class="versionfooter">校准计时器 Clock Calibrator · v3.8.2</div>
   </div>
 
 </div>
@@ -573,6 +592,60 @@
 
   function saveRecords(){
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }catch(e){}
+  }
+
+  var SESSION_META_KEY = 'cc_sessionmeta_v1';
+  var sessionMeta = {};
+  var expandedSessionIds = {};
+
+  function loadSessionMeta(){
+    try{
+      var raw = localStorage.getItem(SESSION_META_KEY);
+      sessionMeta = raw ? JSON.parse(raw) : {};
+    }catch(e){ sessionMeta = {}; }
+  }
+
+  function saveSessionMeta(){
+    try{ localStorage.setItem(SESSION_META_KEY, JSON.stringify(sessionMeta)); }catch(e){}
+  }
+
+  // v3.8.0 3次触发打包(Session Bundle)：3次连拍完成后，算跨度是否连续、漏抓了几次、
+  // 平均系统延迟、平均相邻间隔、以及按漏抓次数补偿后的平均变化周期
+  var SESSION_BASELINE_CYCLE_MS = 60000;
+  var SESSION_CONTINUITY_LIMIT_MS = 90000;
+
+  function computeSessionContinuity(sessionId){
+    var members = records.filter(function(r){ return r.sessionId === sessionId; }).sort(function(a,b){ return a.t - b.t; });
+    if(members.length < 2){ return; }
+    var gaps = [];
+    var missedTotal = 0;
+    var isContinuous = true;
+    for(var i=1;i<members.length;i++){
+      var dt = members[i].t - members[i-1].t;
+      gaps.push(dt);
+      if(dt > SESSION_CONTINUITY_LIMIT_MS){
+        isContinuous = false;
+        var expectedCycles = Math.round(dt / SESSION_BASELINE_CYCLE_MS);
+        missedTotal += Math.max(0, expectedCycles - 1);
+      }
+    }
+    var actualSpanMs = members[members.length-1].t - members[0].t;
+    var avgDeltaMs = gaps.reduce(function(a,b){ return a+b; }, 0) / gaps.length;
+    var latencies = members.filter(function(r){ return typeof r.detectionLatencyMs === 'number'; }).map(function(r){ return r.detectionLatencyMs; });
+    var avgLatencyMs = latencies.length ? (latencies.reduce(function(a,b){ return a+b; }, 0) / latencies.length) : null;
+    var totalCycles = gaps.length + missedTotal;
+    var compensatedAvgCycleMs = totalCycles > 0 ? (actualSpanMs / totalCycles) : avgDeltaMs;
+    sessionMeta[sessionId] = {
+      count: members.length,
+      isContinuous: isContinuous,
+      actualSpanMs: actualSpanMs,
+      missedCount: missedTotal,
+      avgLatencyMs: avgLatencyMs,
+      avgDeltaMs: avgDeltaMs,
+      compensatedAvgCycleMs: compensatedAvgCycleMs,
+      completedAt: Date.now()
+    };
+    saveSessionMeta();
   }
 
   function pad(n, len){
@@ -885,25 +958,37 @@
     return new Date(y, mo-1, d, h, mi, s, ms).getTime();
   }
 
-  function manualAddRecord(t, markCal){
+  function recomputeAllDeltas(){
+    records.sort(function(a,b){ return a.t - b.t; });
+    for(var i=0;i<records.length;i++){
+      records[i].deltaMs = i > 0 ? (records[i].t - records[i-1].t) : null;
+    }
+  }
+
+  function insertRecordSorted(rec){
+    records.push(rec);
+    recomputeAllDeltas();
+  }
+
+  function manualAddRecord(t, markCal, latencyMs){
     if(isNaN(t)){ alert('时间不完整或无效，请检查每一格数字'); return false; }
     var d = new Date(t);
-    var sorted = records.slice().sort(function(a,b){ return a.t - b.t; });
-    var prevT = null;
-    for(var i=0;i<sorted.length;i++){ if(sorted[i].t < t){ prevT = sorted[i].t; } }
     var rec = {
       id: 'r' + t + '_' + Math.floor(Math.random()*1000) + '_m',
       t: t,
       display: formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3),
-      deltaMs: prevT !== null ? (t - prevT) : null,
+      deltaMs: null,
       syncSource: 'manual',
       note: '手动补录',
-      isCalibration: !!markCal,
+      isCalibration: false,
       season: seasonMode,
       clockDisplay: '',
-      explicitDriftMs: null
+      explicitDriftMs: null,
+      detectionLatencyMs: (typeof latencyMs === 'number' && latencyMs >= 0) ? latencyMs : null,
+      sessionId: null
     };
-    records.push(rec);
+    insertRecordSorted(rec);
+    if(markCal){ setSingleCalibration(rec.id); }
     saveRecords();
     renderLog();
     renderStats();
@@ -912,12 +997,11 @@
 
   function addRecordAtTime(t, sourceTag, detectionLatencyMs, sessionId){
     var d = new Date(t);
-    var prev = records.length ? records[records.length-1].t : null;
     var rec = {
       id: 'r' + t + '_' + Math.floor(Math.random()*1000),
       t: t,
       display: formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3),
-      deltaMs: prev ? (t - prev) : null,
+      deltaMs: null,
       syncSource: sourceTag || (lastSyncInfo ? lastSyncInfo.source : 'device'),
       note: '',
       isCalibration: false,
@@ -927,7 +1011,7 @@
       detectionLatencyMs: (typeof detectionLatencyMs === 'number' && detectionLatencyMs > 0) ? detectionLatencyMs : null,
       sessionId: sessionId || null
     };
-    records.push(rec);
+    insertRecordSorted(rec);
     saveRecords();
     renderLog();
     renderStats();
@@ -1144,8 +1228,8 @@
     var effW = Math.min(SAMPLE_W, sw);
     var effH = Math.min(SAMPLE_H, sh);
     var targetPx = GRID_DENSITY_PX[gridDensityMode] || GRID_DENSITY_PX.medium;
-    gridCols = Math.max(3, Math.min(6, Math.round(effW/targetPx)));
-    gridRows = Math.max(4, Math.min(8, Math.round(effH/targetPx)));
+    gridCols = Math.max(3, Math.min(8, Math.round(effW/targetPx)));
+    gridRows = Math.max(4, Math.min(10, Math.round(effH/targetPx)));
     lastCellChanged = new Uint8Array(gridCols*gridRows);
     gridOverlayLastW = 0;
     gridOverlayLastH = 0;
@@ -1633,9 +1717,13 @@
     }
 
     if(isBurstActive){
-      document.getElementById('cameraResultText').textContent = '连拍完成(' + BURST_TARGET_COUNT + '/' + BURST_TARGET_COUNT + ') · 最后一次 ' + timeStr;
+      computeSessionContinuity(sessionIdForThisCapture);
+      var metaDone = sessionMeta[sessionIdForThisCapture];
+      var contNote = metaDone && !metaDone.isContinuous ? (' · 疑似漏抓' + metaDone.missedCount + '次') : '';
+      document.getElementById('cameraResultText').textContent = '连拍完成(' + BURST_TARGET_COUNT + '/' + BURST_TARGET_COUNT + ') · 最后一次 ' + timeStr + contNote;
       burstSessionId = null;
       burstCaptureIndex = 0;
+      renderLog();
     } else {
       document.getElementById('cameraResultText').textContent = timeStr;
     }
@@ -1682,6 +1770,17 @@
 
   function deleteRecord(id){
     records = records.filter(function(r){ return r.id !== id; });
+    recomputeAllDeltas();
+    saveRecords();
+    renderLog();
+    renderStats();
+  }
+
+  function deleteSessionGroup(sessionId){
+    records = records.filter(function(r){ return r.sessionId !== sessionId; });
+    recomputeAllDeltas();
+    delete sessionMeta[sessionId];
+    saveSessionMeta();
     saveRecords();
     renderLog();
     renderStats();
@@ -1707,6 +1806,24 @@
     }
   }
 
+  function requestDeleteGroup(sessionId){
+    var confirmKey = 'group:' + sessionId;
+    if(pendingDeleteId === confirmKey){
+      if(pendingDeleteTimer){ clearTimeout(pendingDeleteTimer); pendingDeleteTimer = null; }
+      pendingDeleteId = null;
+      deleteSessionGroup(sessionId);
+    } else {
+      pendingDeleteId = confirmKey;
+      if(pendingDeleteTimer){ clearTimeout(pendingDeleteTimer); }
+      pendingDeleteTimer = setTimeout(function(){
+        pendingDeleteId = null;
+        pendingDeleteTimer = null;
+        renderLog();
+      }, 3000);
+      renderLog();
+    }
+  }
+
   function updateNote(id, val){
     for(var i=0;i<records.length;i++){
       if(records[i].id === id){ records[i].note = val; break; }
@@ -1714,13 +1831,170 @@
     saveRecords();
   }
 
-  function toggleCalibration(id){
+  function setSingleCalibration(id){
     for(var i=0;i<records.length;i++){
-      if(records[i].id === id){ records[i].isCalibration = !records[i].isCalibration; break; }
+      records[i].isCalibration = (records[i].id === id);
+    }
+  }
+
+  function toggleCalibration(id){
+    var target = null;
+    for(var i=0;i<records.length;i++){ if(records[i].id === id){ target = records[i]; break; } }
+    if(!target){ return; }
+    if(target.isCalibration){
+      target.isCalibration = false;
+    } else {
+      setSingleCalibration(id);
     }
     saveRecords();
     renderLog();
     renderStats();
+  }
+
+  function renderSingleLogRow(r){
+    var row = document.createElement('div');
+    row.className = 'logrow' + (r.isCalibration ? ' calmarked' : '');
+    var left = document.createElement('div');
+    left.style.flex = '1';
+    var lt = document.createElement('div');
+    lt.className = 'lt';
+    lt.textContent = r.display;
+    var ld = document.createElement('div');
+    ld.className = 'ld';
+    var srcLabel = '本机';
+    if(r.syncSource === 'manual'){ srcLabel = '手动补录'; }
+    else if(r.syncSource === 'camera'){ srcLabel = '📷摄像头自动检测'; }
+    else if(r.syncSource === 'camera-manual'){ srcLabel = '📷摄像头模式手动截取'; }
+    else if(r.syncSource === 'network-agreed'){ srcLabel = '本机(已按网络核实修正)'; }
+    else if(r.syncSource === 'device-conflict'){ srcLabel = '本机(网络来源不一致)'; }
+    else if(r.syncSource === 'device-confirmed'){ srcLabel = '本机(已核实准确)'; }
+    var latencyNote = (typeof r.detectionLatencyMs === 'number') ? (' · 统计时已扣除延迟' + Math.round(r.detectionLatencyMs) + 'ms') : '';
+    ld.textContent = (r.deltaMs !== null ? ('距上次 ' + formatInterval(r.deltaMs) + ' · ') : '') + '来源 ' + srcLabel + latencyNote;
+    var stag = document.createElement('span');
+    stag.className = 'seasontag';
+    stag.textContent = (r.season === 'winter') ? '❄️冬' : '☀️夏';
+    ld.appendChild(stag);
+
+    var clockRow = document.createElement('div');
+    clockRow.className = 'clockrow';
+    var clockLabel = document.createElement('span');
+    clockLabel.className = 'clocklabel';
+    clockLabel.textContent = '挂钟显示';
+    var clockInput = document.createElement('input');
+    clockInput.type = 'time';
+    clockInput.className = 'clockinput';
+    clockInput.value = r.clockDisplay || '';
+    clockInput.addEventListener('change', function(){ setClockDisplay(r.id, clockInput.value); });
+    var driftSpan = document.createElement('span');
+    driftSpan.className = 'driftresult';
+    driftSpan.id = 'drift-' + r.id;
+    if(r.explicitDriftMs !== null && r.explicitDriftMs !== undefined){
+      var dsec = r.explicitDriftMs / 1000;
+      driftSpan.textContent = dsec >= 0
+        ? ('本次发现挂钟已漂移 ' + dsec.toFixed(1) + ' 秒(落后)')
+        : ('本次发现挂钟领先 ' + Math.abs(dsec).toFixed(1) + ' 秒');
+    } else {
+      driftSpan.textContent = '';
+    }
+    clockRow.appendChild(clockLabel);
+    clockRow.appendChild(clockInput);
+    clockRow.appendChild(driftSpan);
+
+    var note = document.createElement('input');
+    note.className = 'noteinput';
+    note.placeholder = '备注';
+    note.value = r.note || '';
+    note.addEventListener('change', function(){ updateNote(r.id, note.value); });
+    var btnrow = document.createElement('div');
+    btnrow.className = 'logbtnrow';
+    var calBtn = document.createElement('button');
+    calBtn.className = 'calbtn' + (r.isCalibration ? ' calactive' : '');
+    calBtn.textContent = r.isCalibration ? '\u2605 校准点(点击取消)' : '设为校准点';
+    calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
+    btnrow.appendChild(calBtn);
+    left.appendChild(lt); left.appendChild(ld); left.appendChild(clockRow); left.appendChild(note); left.appendChild(btnrow);
+    var del = document.createElement('button');
+    del.className = 'lx' + (pendingDeleteId === r.id ? ' lxconfirm' : '');
+    del.textContent = (pendingDeleteId === r.id) ? '确认删除' : '\u00d7';
+    del.addEventListener('click', function(){ requestDelete(r.id); });
+    row.appendChild(left); row.appendChild(del);
+    return row;
+  }
+
+  function renderBundleCard(sessionId, members){
+    var meta = sessionMeta[sessionId];
+    var expanded = !!expandedSessionIds[sessionId];
+    var card = document.createElement('div');
+    card.className = 'bundlecard';
+
+    var head = document.createElement('div');
+    head.className = 'bundlehead';
+    var left = document.createElement('div');
+    left.style.flex = '1';
+    var lt = document.createElement('div');
+    lt.className = 'lt';
+    lt.textContent = '🔗连拍会话 · ' + members[members.length-1].display + ' · 共' + members.length + '次';
+    var ld = document.createElement('div');
+    ld.className = 'ld';
+    if(meta){
+      var avgLatText = (typeof meta.avgLatencyMs === 'number') ? (Math.round(meta.avgLatencyMs) + 'ms') : '--';
+      ld.textContent = '平均延迟 ' + avgLatText + ' · 平均间隔 ' + formatInterval(meta.avgDeltaMs) + ' · 补偿后平均周期 ' + formatInterval(meta.compensatedAvgCycleMs);
+    } else {
+      ld.textContent = '会话数据不完整(可能是旧版本记录)';
+    }
+    var tag = document.createElement('span');
+    if(meta && !meta.isContinuous){
+      tag.className = 'continuitytag warn';
+      tag.textContent = '跨越' + formatInterval(meta.actualSpanMs) + ' · 疑似漏抓' + meta.missedCount + '次';
+    } else {
+      tag.className = 'continuitytag';
+      tag.textContent = '连续';
+    }
+    ld.appendChild(tag);
+    left.appendChild(lt); left.appendChild(ld);
+
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'bundleExpandBtn';
+    expandBtn.textContent = expanded ? '▴' : '▾';
+    var toggleExpand = function(){
+      expandedSessionIds[sessionId] = !expandedSessionIds[sessionId];
+      renderLog();
+    };
+    head.addEventListener('click', toggleExpand);
+    head.appendChild(left); head.appendChild(expandBtn);
+    card.appendChild(head);
+
+    if(expanded){
+      var body = document.createElement('div');
+      body.className = 'bundlebody';
+      for(var i=0;i<members.length;i++){
+        var m = members[i];
+        var item = document.createElement('div');
+        var gapMs = i > 0 ? (m.t - members[i-1].t) : null;
+        var missedGap = gapMs !== null && gapMs > SESSION_CONTINUITY_LIMIT_MS;
+        item.className = 'bundleitem' + (missedGap ? ' missedgap' : '');
+        var ilt = document.createElement('div');
+        ilt.className = 'lt';
+        ilt.textContent = (i+1) + '/' + members.length + ' · ' + m.display;
+        var ild = document.createElement('div');
+        ild.className = 'ld';
+        var latText = (typeof m.detectionLatencyMs === 'number') ? ('延迟' + Math.round(m.detectionLatencyMs) + 'ms · ') : '';
+        var gapText = gapMs !== null ? ('间隔' + formatInterval(gapMs) + (missedGap ? '(疑似漏抓)' : '') + ' · ') : '';
+        ild.textContent = gapText + latText + '来源 📷摄像头自动检测';
+        item.appendChild(ilt); item.appendChild(ild);
+        body.appendChild(item);
+      }
+      var btnrow = document.createElement('div');
+      btnrow.className = 'bundlebtnrow';
+      var delBtn = document.createElement('button');
+      delBtn.className = 'lx' + (pendingDeleteId === ('group:' + sessionId) ? ' lxconfirm' : '');
+      delBtn.textContent = (pendingDeleteId === ('group:' + sessionId)) ? '确认删除整组' : '删除整组';
+      delBtn.addEventListener('click', function(e){ e.stopPropagation(); requestDeleteGroup(sessionId); });
+      btnrow.appendChild(delBtn);
+      body.appendChild(btnrow);
+      card.appendChild(body);
+    }
+    return card;
   }
 
   function renderLog(){
@@ -1730,77 +2004,17 @@
       return;
     }
     log.innerHTML = '';
+    var renderedSessions = {};
     for(var i = records.length - 1; i >= 0; i--){
-      (function(r){
-        var row = document.createElement('div');
-        row.className = 'logrow' + (r.isCalibration ? ' calmarked' : '');
-        var left = document.createElement('div');
-        left.style.flex = '1';
-        var lt = document.createElement('div');
-        lt.className = 'lt';
-        lt.textContent = r.display;
-        var ld = document.createElement('div');
-        ld.className = 'ld';
-        var srcLabel = '本机';
-        if(r.syncSource === 'manual'){ srcLabel = '手动补录'; }
-        else if(r.syncSource === 'camera'){ srcLabel = '📷摄像头自动检测'; }
-        else if(r.syncSource === 'camera-manual'){ srcLabel = '📷摄像头模式手动截取'; }
-        else if(r.syncSource === 'network-agreed'){ srcLabel = '本机(已按网络核实修正)'; }
-        else if(r.syncSource === 'device-conflict'){ srcLabel = '本机(网络来源不一致)'; }
-        else if(r.syncSource === 'device-confirmed'){ srcLabel = '本机(已核实准确)'; }
-        var latencyNote = (typeof r.detectionLatencyMs === 'number') ? (' · 统计时已扣除延迟' + Math.round(r.detectionLatencyMs) + 'ms') : '';
-        var burstNote = r.sessionId ? ' · 🔗连拍会话' : '';
-        ld.textContent = (r.deltaMs !== null ? ('距上次 ' + formatInterval(r.deltaMs) + ' · ') : '') + '来源 ' + srcLabel + latencyNote + burstNote;
-        var stag = document.createElement('span');
-        stag.className = 'seasontag';
-        stag.textContent = (r.season === 'winter') ? '❄️冬' : '☀️夏';
-        ld.appendChild(stag);
-
-        var clockRow = document.createElement('div');
-        clockRow.className = 'clockrow';
-        var clockLabel = document.createElement('span');
-        clockLabel.className = 'clocklabel';
-        clockLabel.textContent = '挂钟显示';
-        var clockInput = document.createElement('input');
-        clockInput.type = 'time';
-        clockInput.className = 'clockinput';
-        clockInput.value = r.clockDisplay || '';
-        clockInput.addEventListener('change', function(){ setClockDisplay(r.id, clockInput.value); });
-        var driftSpan = document.createElement('span');
-        driftSpan.className = 'driftresult';
-        driftSpan.id = 'drift-' + r.id;
-        if(r.explicitDriftMs !== null && r.explicitDriftMs !== undefined){
-          var dsec = r.explicitDriftMs / 1000;
-          driftSpan.textContent = dsec >= 0
-            ? ('本次发现挂钟已漂移 ' + dsec.toFixed(1) + ' 秒(落后)')
-            : ('本次发现挂钟领先 ' + Math.abs(dsec).toFixed(1) + ' 秒');
-        } else {
-          driftSpan.textContent = '';
-        }
-        clockRow.appendChild(clockLabel);
-        clockRow.appendChild(clockInput);
-        clockRow.appendChild(driftSpan);
-
-        var note = document.createElement('input');
-        note.className = 'noteinput';
-        note.placeholder = '备注';
-        note.value = r.note || '';
-        note.addEventListener('change', function(){ updateNote(r.id, note.value); });
-        var btnrow = document.createElement('div');
-        btnrow.className = 'logbtnrow';
-        var calBtn = document.createElement('button');
-        calBtn.className = 'calbtn' + (r.isCalibration ? ' calactive' : '');
-        calBtn.textContent = r.isCalibration ? '\u2605 校准点(点击取消)' : '设为校准点';
-        calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
-        btnrow.appendChild(calBtn);
-        left.appendChild(lt); left.appendChild(ld); left.appendChild(clockRow); left.appendChild(note); left.appendChild(btnrow);
-        var del = document.createElement('button');
-        del.className = 'lx' + (pendingDeleteId === r.id ? ' lxconfirm' : '');
-        del.textContent = (pendingDeleteId === r.id) ? '确认删除' : '\u00d7';
-        del.addEventListener('click', function(){ requestDelete(r.id); });
-        row.appendChild(left); row.appendChild(del);
-        log.appendChild(row);
-      })(records[i]);
+      var r = records[i];
+      if(r.sessionId){
+        if(renderedSessions[r.sessionId]){ continue; }
+        renderedSessions[r.sessionId] = true;
+        var members = records.filter(function(x){ return x.sessionId === r.sessionId; }).sort(function(a,b){ return a.t - b.t; });
+        log.appendChild(renderBundleCard(r.sessionId, members));
+      } else {
+        log.appendChild(renderSingleLogRow(r));
+      }
     }
   }
 
@@ -2477,6 +2691,7 @@
 
   function init(){
     loadRecords();
+    loadSessionMeta();
     loadSeason();
     loadHistory();
     loadDelay();
@@ -2534,9 +2749,13 @@
     document.getElementById('manualConfirmBtn').addEventListener('click', function(){
       var t = parseSegmentsToTimestamp();
       var markCal = document.getElementById('manualCalChk').checked;
-      if(manualAddRecord(t, markCal)){
+      var latRaw = document.getElementById('manualLatencyInput').value;
+      var latencyMs = latRaw !== '' ? parseFloat(latRaw) : null;
+      if(latencyMs !== null && (isNaN(latencyMs) || latencyMs < 0)){ latencyMs = null; }
+      if(manualAddRecord(t, markCal, latencyMs)){
         document.getElementById('manualForm').classList.remove('open');
         document.getElementById('manualCalChk').checked = false;
+        document.getElementById('manualLatencyInput').value = '';
       }
     });
 
@@ -2713,9 +2932,25 @@
       return null;
     }
 
-    // 数字键1-8、小数点、等号目前无映射(v3.7.2起七段Mask功能已彻底移除，这些键留待未来功能使用)
+    // 数字键1-4：蓝牙键盘微调ROI取景框(宽度/高度/左右/上下)，触屏拖拽不受影响仍可用手精细调；5-8/小数点/等号仍空闲留给以后用
+    var ROI_KEY_STEP_PCT = 1;
+    var ROI_PARAM_KEYMAP = {
+      '1': 'width',
+      '2': 'height',
+      '3': 'left',
+      '4': 'top'
+    };
     var quickTuneKeyHeld = null;
     var quickTuneKeyUsedForCombo = false;
+
+    function adjustROIParam(digit, dir){
+      var key = ROI_PARAM_KEYMAP[digit];
+      if(!key){ return; }
+      roiState[key] = roiState[key] + dir * ROI_KEY_STEP_PCT;
+      clampROI();
+      applyROIStyle();
+      saveROI();
+    }
 
     // 硬件变焦(数字9)：复用同一套"点一下=+一步,按住再点减号=-一步"手感(v3.7起软件预览放大功能已彻底移除，硬件变焦为唯一缩放手段)
     function adjustHwZoom(dir){
@@ -2734,11 +2969,12 @@
     }
 
     function quickTuneIsTarget(token){
-      return token === '9';
+      return token === '9' || !!ROI_PARAM_KEYMAP[token];
     }
 
     function quickTuneApply(token, dir){
       if(token === '9'){ adjustHwZoom(dir); return; }
+      if(ROI_PARAM_KEYMAP[token]){ adjustROIParam(token, dir); return; }
     }
 
     document.addEventListener('keydown', function(e){
