@@ -198,14 +198,15 @@
 
   .sessionListTitle{font-size:11px; color:var(--ink-dim); letter-spacing:.03em; margin:10px 2px 6px;}
   .sessionCard{
-    display:flex; align-items:center; justify-content:space-between;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
     background:var(--panel); border:1px solid var(--panel-edge); border-radius:10px;
-    padding:9px 10px; margin-bottom:6px; font-family:var(--mono); font-size:13px; color:var(--ink);
+    padding:9px 10px; margin-bottom:6px; font-family:var(--mono); font-size:12.5px; color:var(--ink);
   }
+  .sessionCard span{flex:1 1 auto; min-width:0; line-height:1.5;}
   .sessionCard:last-child{margin-bottom:0;}
   .sessionCardDel{
     background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
-    font-family:inherit; font-size:11px; padding:4px 9px; border-radius:6px; flex:0 0 auto; margin-left:10px;
+    font-family:inherit; font-size:11px; padding:4px 9px; border-radius:6px; flex:0 0 auto;
   }
   .sessionCardDel.pending{color:var(--bad); border-color:var(--bad);}
 
@@ -345,7 +346,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.1</span>
+      <span class="versiontag" id="versionTag">v3.9.3</span>
     </div>
 
     <div id="timePanel">
@@ -431,15 +432,6 @@
 
     <div class="cameraBigBtnRow" id="focusBtnRow" style="display:none;">
       <button class="bigCamBtn" id="focusLockBtn">尝试锁定对焦</button>
-    </div>
-
-    <div class="section" id="cameraResultSection" style="display:none;">
-      <h4>已捕获</h4>
-      <div class="statsline" id="cameraResultText"></div>
-      <div class="mbtnrow" style="margin-top:10px;">
-        <button class="iconbtn" id="cameraContinueBtn">继续监测下一次</button>
-        <button class="iconbtn" id="cameraUndoBtn" style="color:var(--bad); border-color:var(--bad);">撤销这条记录</button>
-      </div>
     </div>
 
     <div class="section">
@@ -582,7 +574,9 @@
         <h5>灵敏度与确认机制</h5>
         <p>下方电平表白线是当前阈值位置，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调"灵敏度"和"防抖容差"两个滑条。连续两帧都超过阈值才真正判定为跳变(记录的时间戳取自首次超标那一帧，避免系统性晚记)，减少单帧手抖误触发。</p>
         <h5>状态与撤销</h5>
-        <p>左上角状态徽章：白色小字＝未开始监测；红色小字"监测中..."＝正在实时监测；橙底大字闪烁＝刚捕获到跳变瞬间。误触发时"已捕获"区域下方点"撤销这条记录"即可删除；按下"开始监测"后反悔，再点一次同一按钮(此时显示"停止监测")就能取消。"系统估算延迟"会在统计时自动扣除，原始时间戳本身不受影响；离开此界面会自动关闭摄像头。</p>
+        <p>左上角状态徽章：白色小字＝未开始监测；红色小字"监测中..."＝正在实时监测；橙底大字闪烁＝刚捕获到跳变瞬间。误触发时，可以在下方"本次监测最近捕获"列表里点对应记录的删除按钮(3秒二次确认)；连拍产生的3条一起打包成一行，删除是整组删；蓝牙键盘退格键同样能撤销最近一条(连按两次确认，确认提示会临时显示在状态徽章文字上)。想继续监测，再点一次"开始监测"即可；"系统估算延迟"会在统计时自动扣除，原始时间戳本身不受影响；离开此界面会自动关闭摄像头。</p>
+        <h5>本次监测最近捕获</h5>
+        <p>取景框下方会显示最多3条本次进入摄像头页面以来的捕获记录(超过3条自动滚动，只保留最新3条；某条被删除后，之前被挤掉的记录会重新露出来补位)。这个列表只是"最近做了什么"的随手一览，不是完整数据——完整记录、以及删除后悔了想找回的旧数据，请去统计页面的历史记录里看。列表只在本次停留于摄像头页面期间有效：点左上角"返回"离开会清空，下次进来重新开始计数；但如果只是点右上角"帮助"看一眼再回来，或者切到其他App/退到后台再切回来，列表都会保留，不会清空。</p>
       </div>
 
       <div class="section">
@@ -624,7 +618,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.1</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.3</div>
   </div>
 
 </div>
@@ -1462,8 +1456,6 @@
     resetDiffMeter();
     var latEl = document.getElementById('estLatencyDisplay');
     if(latEl){ latEl.textContent = '系统估算延迟: --'; }
-    var resultSection = document.getElementById('cameraResultSection');
-    if(resultSection){ resultSection.style.display = 'none'; }
   }
 
   function armCameraDetection(){
@@ -1476,7 +1468,6 @@
     var badgeEl = document.getElementById('cameraStatusBadge');
     badgeEl.classList.remove('captured');
     badgeEl.classList.add('armed');
-    document.getElementById('cameraResultSection').style.display = 'none';
 
     lastStatsSampleTime = performance.now();
     analysisFrameCount = 0;
@@ -1804,16 +1795,8 @@
 
     var rec = addRecordAtTime(t, tag, latencyForThisCapture, sessionIdForThisCapture);
     lastCameraRecordId = rec.id;
-    cameraSessionCaptures.unshift({ id: rec.id, t: t });
-    saveCameraSessionCaptures();
-    renderCameraSessionList();
-    var d = new Date(t);
-    var timeStr = formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3);
 
     if(isBurstActive && burstCaptureIndex < BURST_TARGET_COUNT){
-      document.getElementById('cameraResultText').textContent =
-        '连拍 ' + burstCaptureIndex + '/' + BURST_TARGET_COUNT + ' · ' + timeStr + ' · 3秒后自动继续监测下一分钟';
-      document.getElementById('cameraResultSection').style.display = 'block';
       cooldownTimer = setTimeout(function(){
         armCameraDetection();
       }, 3000);
@@ -1824,18 +1807,20 @@
       computeSessionContinuity(sessionIdForThisCapture);
       var metaDone = sessionMeta[sessionIdForThisCapture];
       var contNote = metaDone && !metaDone.isContinuous ? (' · 疑似漏抓' + metaDone.missedCount + '次') : '';
-      document.getElementById('cameraResultText').textContent = '连拍完成(' + BURST_TARGET_COUNT + '/' + BURST_TARGET_COUNT + ') · 最后一次 ' + timeStr + contNote;
+      var burstMemberIds = records.filter(function(r){ return r.sessionId === sessionIdForThisCapture; }).map(function(r){ return r.id; });
+      cameraSessionCaptures.unshift({ kind:'burst', sessionId: sessionIdForThisCapture, ids: burstMemberIds, t: t, note: contNote });
+      renderCameraSessionList();
       burstSessionId = null;
       burstCaptureIndex = 0;
       renderLog();
     } else {
-      document.getElementById('cameraResultText').textContent = timeStr;
+      cameraSessionCaptures.unshift({ kind:'single', id: rec.id, t: t });
+      renderCameraSessionList();
     }
-    document.getElementById('cameraResultSection').style.display = 'block';
     cooldownTimer = setTimeout(function(){
       if(cameraState === 'cooldown'){
         cameraState = 'idle';
-        updateCameraBadge('已停止(点"继续监测下一次"开始)');
+        updateCameraBadge('已停止(点"开始监测"继续)');
         document.getElementById('cameraStatusBadge').classList.remove('captured', 'armed');
         updateStartBtnLabel();
       }
@@ -1846,7 +1831,6 @@
     if(!lastCameraRecordId){ return; }
     deleteRecord(lastCameraRecordId);
     lastCameraRecordId = null;
-    document.getElementById('cameraResultSection').style.display = 'none';
     document.getElementById('cameraStatusBadge').classList.remove('captured');
   }
 
@@ -1854,20 +1838,26 @@
   var pendingCameraUndoTimer = null;
 
   function resetUndoBtnState(){
+    var wasPending = pendingCameraUndo;
     pendingCameraUndo = false;
     if(pendingCameraUndoTimer){ clearTimeout(pendingCameraUndoTimer); pendingCameraUndoTimer = null; }
-    var btn = document.getElementById('cameraUndoBtn');
-    if(btn){ btn.textContent = '撤销这条记录'; }
+    if(wasPending){
+      // 撤下"退格再按一次＝删除上条"的临时提示，把状态徽章文案还原成当前实际状态
+      if(cameraState === 'armed'){ updateCameraBadge('监测中...'); }
+      else if(cameraState === 'cooldown'){ updateCameraBadge('已捕获，冷却中'); }
+      else if(cameraState === 'idle'){ updateCameraBadge('已停止(点"开始监测"继续)'); }
+    }
   }
 
   function requestUndoLastCameraCapture(){
-    var btn = document.getElementById('cameraUndoBtn');
+    if(!lastCameraRecordId){ return; }
     if(pendingCameraUndo){
       resetUndoBtnState();
       undoLastCameraCapture();
     } else {
       pendingCameraUndo = true;
-      if(btn){ btn.textContent = '确认撤销？'; }
+      updateCameraBadge('退格再按一次＝删除上条');
+      if(pendingCameraUndoTimer){ clearTimeout(pendingCameraUndoTimer); }
       pendingCameraUndoTimer = setTimeout(resetUndoBtnState, 3000);
     }
   }
@@ -1882,7 +1872,6 @@
   }
 
   function deleteSessionGroup(sessionId){
-    var removedIds = records.filter(function(r){ return r.sessionId === sessionId; }).map(function(r){ return r.id; });
     records = records.filter(function(r){ return r.sessionId !== sessionId; });
     recomputeAllDeltas();
     delete sessionMeta[sessionId];
@@ -1890,41 +1879,42 @@
     saveRecords();
     renderLog();
     renderStats();
-    removedIds.forEach(removeFromCameraSessionCaptures);
+    removeSessionGroupFromCameraSessionCaptures(sessionId);
   }
 
-  // ==== v3.9.1 摄像头页"本次监测最近捕获"临时列表 ====
-  // 只在本次进入摄像头页面期间有效，存localStorage是为了扛住切后台/被系统杀进程，
-  // 只有点左上角"返回"才清空；点"帮助"或切后台回来都不清。
-  var CAMERA_SESSION_KEY = 'cc_camsession_v1';
+  // ==== v3.9.3 摄像头页"本次监测最近捕获"临时列表 ====
+  // 纯内存变量，不落盘：普通切后台再切回来JS进程没死，内存自然还在，列表正常保留；
+  // 一旦被系统杀掉进程重启(相当于重新走一遍init())，这个数组本来就会回到空——
+  // 不需要专门判断"是杀后台还是普通resume"，内存生命周期本身就是这道分界线。
+  // 另外点左上角"返回"也会显式清空，确保同一次运行内"退出再进"同样是空列表。
   var cameraSessionCaptures = [];
   var pendingSessionDeleteId = null;
   var pendingSessionDeleteTimer = null;
 
-  function loadCameraSessionCaptures(){
-    try{
-      var raw = localStorage.getItem(CAMERA_SESSION_KEY);
-      cameraSessionCaptures = raw ? JSON.parse(raw) : [];
-    }catch(e){ cameraSessionCaptures = []; }
-  }
-
-  function saveCameraSessionCaptures(){
-    try{ localStorage.setItem(CAMERA_SESSION_KEY, JSON.stringify(cameraSessionCaptures)); }catch(e){}
-  }
-
   function clearCameraSessionCaptures(){
     cameraSessionCaptures = [];
-    saveCameraSessionCaptures();
   }
 
   function removeFromCameraSessionCaptures(recordId){
     var before = cameraSessionCaptures.length;
-    cameraSessionCaptures = cameraSessionCaptures.filter(function(c){ return c.id !== recordId; });
+    cameraSessionCaptures = cameraSessionCaptures.filter(function(c){
+      return c.kind === 'single' ? c.id !== recordId : true;
+    });
     if(cameraSessionCaptures.length !== before){
-      saveCameraSessionCaptures();
       renderCameraSessionList();
     }
   }
+
+  function removeSessionGroupFromCameraSessionCaptures(sessionId){
+    var before = cameraSessionCaptures.length;
+    cameraSessionCaptures = cameraSessionCaptures.filter(function(c){
+      return c.kind === 'burst' ? c.sessionId !== sessionId : true;
+    });
+    if(cameraSessionCaptures.length !== before){
+      renderCameraSessionList();
+    }
+  }
+
 
   function renderCameraSessionList(){
     var wrap = document.getElementById('cameraSessionListWrap');
@@ -1939,28 +1929,34 @@
     var html = '<div class="sessionListTitle">本次监测最近捕获</div>';
     visible.forEach(function(item){
       var d = new Date(item.t);
-      var timeStr = pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3);
-      var isPending = (pendingSessionDeleteId === item.id);
-      html += '<div class="sessionCard"><span>' + timeStr + '</span>' +
-        '<button class="sessionCardDel' + (isPending ? ' pending' : '') + '" data-id="' + item.id + '">' +
-        (isPending ? '确认删除？' : '×') + '</button></div>';
+      var timeStr = formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3);
+      var key = item.kind === 'burst' ? ('b:' + item.sessionId) : ('r:' + item.id);
+      var isPending = (pendingSessionDeleteId === key);
+      var label = item.kind === 'burst' ? ('连拍×' + item.ids.length + ' · 最后一次 ' + timeStr + (item.note || '')) : timeStr;
+      var delText = isPending ? '确认删除？' : (item.kind === 'burst' ? '删除整组' : '×');
+      html += '<div class="sessionCard"><span>' + label + '</span>' +
+        '<button class="sessionCardDel' + (isPending ? ' pending' : '') + '" data-key="' + key + '">' + delText + '</button></div>';
     });
     wrap.innerHTML = html;
     var delBtns = wrap.querySelectorAll('.sessionCardDel');
     for(var i=0;i<delBtns.length;i++){
       delBtns[i].addEventListener('click', function(e){
-        handleSessionCardDelete(e.currentTarget.getAttribute('data-id'));
+        handleSessionCardDelete(e.currentTarget.getAttribute('data-key'));
       });
     }
   }
 
-  function handleSessionCardDelete(id){
-    if(pendingSessionDeleteId === id){
+  function handleSessionCardDelete(key){
+    if(pendingSessionDeleteId === key){
       if(pendingSessionDeleteTimer){ clearTimeout(pendingSessionDeleteTimer); pendingSessionDeleteTimer = null; }
       pendingSessionDeleteId = null;
-      deleteRecord(id); // 内部会顺带从cameraSessionCaptures摘除+重渲染
+      if(key.indexOf('b:') === 0){
+        deleteSessionGroup(key.slice(2)); // 整组删除，内部会顺带清理这条摘要卡片
+      } else {
+        deleteRecord(key.slice(2));
+      }
     } else {
-      pendingSessionDeleteId = id;
+      pendingSessionDeleteId = key;
       if(pendingSessionDeleteTimer){ clearTimeout(pendingSessionDeleteTimer); }
       pendingSessionDeleteTimer = setTimeout(function(){
         pendingSessionDeleteId = null;
@@ -2705,6 +2701,7 @@
   }
 
   var currentScreen = 'capture';
+  var helpReturnScreen = 'capture'; // 帮助页"返回"要回到打开它之前所在的页面(主页或摄像头页)
 
   // ===== 蓝牙小键盘 Ghost Input 焦点守护（iOS PWA 兼容偏方） =====
   // iOS PWA(standalone WKWebView) 下，如果页面没有任何真正获得焦点的可编辑元素，
@@ -2888,7 +2885,6 @@
     loadBurstMode();
     loadGridOverlay();
     loadGridDensity();
-    loadCameraSessionCaptures();
     renderLog();
     renderSeasonButtons();
     renderStats();
@@ -2950,18 +2946,16 @@
 
     document.getElementById('openSettingsBtn').addEventListener('click', function(){ showScreen('settings'); });
     document.getElementById('openStatsBtn').addEventListener('click', function(){ showScreen('stats'); });
-    document.getElementById('openHelpBtn').addEventListener('click', function(){ showScreen('help'); });
+    document.getElementById('openHelpBtn').addEventListener('click', function(){ helpReturnScreen = 'capture'; showScreen('help'); });
     document.getElementById('statsBackBtn').addEventListener('click', function(){ showScreen('capture'); });
-    document.getElementById('helpBackBtn').addEventListener('click', function(){ showScreen('capture'); });
-    document.getElementById('cameraHelpBtn').addEventListener('click', function(){ showScreen('help'); });
+    document.getElementById('helpBackBtn').addEventListener('click', function(){ showScreen(helpReturnScreen); });
+    document.getElementById('cameraHelpBtn').addEventListener('click', function(){ helpReturnScreen = 'camera'; showScreen('help'); });
     document.getElementById('openCameraBigBtn').addEventListener('click', function(){ showScreen('camera'); });
     document.getElementById('cameraBackBtn').addEventListener('click', function(){
       clearCameraSessionCaptures();
       showScreen('capture');
     });
     document.getElementById('cameraStartBtn').addEventListener('click', function(){ toggleCameraArm(); });
-    document.getElementById('cameraContinueBtn').addEventListener('click', function(){ armCameraDetection(); });
-    document.getElementById('cameraUndoBtn').addEventListener('click', function(){ requestUndoLastCameraCapture(); });
     document.getElementById('quickModeBtn').addEventListener('click', function(){
       burstModeEnabled = false;
       saveBurstMode();
