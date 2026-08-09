@@ -53,11 +53,6 @@
   .sync-ok{background:var(--good); box-shadow:0 0 6px var(--good);}
   .sync-bad{background:var(--bad); box-shadow:0 0 6px var(--bad);}
   .sync-wait{background:var(--ink-dim);}
-  .gearbtn{
-    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
-    font-size:15px; padding:5px 11px; border-radius:8px; line-height:1;
-  }
-  .gearbtn:active{background:var(--panel-edge);}
 
   .iconbtn{
     background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
@@ -201,34 +196,54 @@
   .zoomval{flex:0 0 auto; width:34px; text-align:right; font-family:var(--mono);}
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
 
-  #captureZone{
-    flex:3 1 0; margin-top:2px;
+  .versiontag{font-size:11px; color:var(--ink-dim); font-family:var(--mono); letter-spacing:.02em;}
+
+  #timePanel{
+    flex:0 0 20vh; min-height:96px; margin-top:2px;
     background:var(--panel); border:1px solid var(--panel-edge); border-radius:20px;
-    padding:16px 10px; text-align:center; position:relative;
-    display:flex; flex-direction:column; justify-content:center; align-items:center;
-    transition:background .08s, border-color .08s;
+    display:flex; flex-direction:row; justify-content:center; align-items:baseline;
+    flex-wrap:wrap; gap:.5em; padding:8px 10px;
   }
-  #captureZone.pressed{background:#1a1f27; border-color:var(--accent-dim);}
-  .cameraEntryBtn{
-    flex:1 1 0; margin-top:10px; width:100%; border:none; border-radius:18px;
+  .datestr{font-size:13px; color:var(--ink-dim); letter-spacing:.04em; font-family:var(--mono);}
+  .timestr{
+    font-family:var(--mono); font-weight:600; letter-spacing:.01em;
+    font-size:clamp(26px, 9vw, 46px); line-height:1; color:var(--ink);
+    font-variant-numeric:tabular-nums; -webkit-font-feature-settings:"tnum";
+    display:inline-flex; align-items:baseline;
+  }
+  .timestr .ms{font-size:.42em; color:var(--accent); margin-left:.15em;}
+
+  .navArea{flex:1 1 0; display:flex; flex-direction:column; justify-content:flex-start; gap:10px; margin-top:16px; min-height:0;}
+  .navPrimaryBtn{
+    width:100%; border:none; border-radius:18px; padding:18px 10px;
     background:var(--accent); color:#1a0f04; font-size:18px; font-weight:700;
     font-family:inherit; letter-spacing:.02em;
   }
-  .cameraEntryBtn:active{background:#e57630;}
-  .datestr{font-size:14px; color:var(--ink-dim); letter-spacing:.05em; margin-bottom:8px; font-family:var(--mono);}
-  .timestr{
-    font-family:var(--mono); font-weight:600; letter-spacing:.01em;
-    font-size:17vw; line-height:1; color:var(--ink);
-    font-variant-numeric:tabular-nums; -webkit-font-feature-settings:"tnum";
-    display:flex; justify-content:center; align-items:baseline; flex-wrap:wrap;
+  .navPrimaryBtn:active{background:#e57630;}
+  .navSecondaryRow{display:flex; gap:10px;}
+  .navSecondaryBtn{
+    flex:1; background:var(--panel); border:1px solid var(--panel-edge); color:var(--ink-dim);
+    border-radius:16px; padding:14px 6px; font-family:inherit; font-size:12.5px;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
   }
-  .timestr .ms{font-size:7vw; color:var(--accent); margin-left:.15em;}
-  .summaryline{font-size:12.5px; color:var(--ink-dim); margin-top:20px; letter-spacing:.02em; min-height:16px;}
-  .taphint{font-size:11px; color:var(--ink-dim); margin-top:10px; letter-spacing:.03em;}
+  .navSecondaryBtn .navicon{font-size:20px;}
+  .navSecondaryBtn:active{background:#1a1f27; color:var(--ink); border-color:var(--accent-dim);}
+
+  .helptable{width:100%; border-collapse:collapse; font-size:12px; margin-top:4px;}
+  .helptable th, .helptable td{
+    text-align:left; padding:7px 8px; border-bottom:1px solid var(--panel-edge);
+  }
+  .helptable th{color:var(--ink-dim); font-weight:600; font-size:11px; letter-spacing:.03em;}
+  .helptable td{color:var(--ink); font-family:var(--mono);}
+  .helptable td.desc{font-family:inherit; color:var(--ink-dim);}
+  .helptable tr:last-child td{border-bottom:none;}
+  .section h5{margin:14px 0 6px; color:var(--ink-dim); font-size:11px; letter-spacing:.03em; font-weight:600;}
+  .section h5:first-child{margin-top:0;}
 
   .settopbar{display:flex; align-items:center; gap:10px; flex:0 0 auto; padding:2px 2px 10px;}
   .settitle{font-size:14px; font-weight:600; color:var(--ink);}
-  #screenSettings{overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  #screenSettings, #screenStats{overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  #helpContent{flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;}
   .section{
     margin-top:12px; padding:14px; background:var(--panel);
     border:1px solid var(--panel-edge); border-radius:12px;
@@ -317,23 +332,29 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <button id="openSettingsBtn" class="gearbtn" aria-label="设置">设置</button>
+      <span class="versiontag" id="versionTag">v3.9.0</span>
     </div>
 
-    <div id="captureZone">
-      <div class="datestr" id="datestr">----年--月--日</div>
-      <div class="timestr" id="timestr">--:--:--<span class="ms" id="msstr">.---</span></div>
-      <div class="summaryline" id="summaryLine"></div>
-      <div class="taphint">点击屏幕任意位置 · 空格/回车键 · 蓝牙小键盘 均可记录</div>
+    <div id="timePanel">
+      <span class="datestr" id="datestr">----年--月--日</span>
+      <span class="timestr" id="timestr">--:--:--<span class="ms" id="msstr">.---</span></span>
     </div>
 
-    <button id="openCameraBigBtn" class="cameraEntryBtn">📷 摄像头精确捕获模式</button>
+    <div class="navArea">
+      <button id="openCameraBigBtn" class="navPrimaryBtn">📷 摄像头精确捕获</button>
+      <div class="navSecondaryRow">
+        <button id="openSettingsBtn" class="navSecondaryBtn"><span class="navicon">⚙️</span>设置</button>
+        <button id="openStatsBtn" class="navSecondaryBtn"><span class="navicon">📊</span>统计</button>
+        <button id="openHelpBtn" class="navSecondaryBtn"><span class="navicon">❓</span>帮助</button>
+      </div>
+    </div>
   </div>
 
   <div id="screenCamera" class="screen" style="display:none;">
     <div class="settopbar">
       <button id="cameraBackBtn" class="iconbtn">‹ 返回</button>
       <span class="settitle">摄像头精确捕获</span>
+      <button id="cameraHelpBtn" class="iconbtn" style="margin-left:auto;">❓帮助</button>
     </div>
 
     <div class="cameraStage">
@@ -412,11 +433,6 @@
       <div class="diaglive" id="estLatencyDisplay">系统估算延迟: --</div>
       <button class="diagToggleBtn" id="diagToggleBtn">查看诊断详情 ▾</button>
       <div class="cameraDiagDetail" id="cameraDiagDetail" style="display:none;"></div>
-    </div>
-
-    <button class="diagToggleBtn" id="instructionsToggleBtn">使用说明 ▾</button>
-    <div class="section" id="instructionsDetail" style="display:none;">
-      <p style="margin-top:0;">把电子钟的分钟数字对准框内，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上，不需要专门买三脚架)，架好后先等两三秒让镜头自动对焦稳定下来，再点"开始监测"。检测算法把取景框划成小格，逐格比较相邻帧红色分量变化，只有少数格子变化才算真正跳变，大半格子同时变化会被判定为环境光/曝光噪声并整帧忽略，这样能自动吸收手抖和整体光照波动，只有真正的数字亮灭才会被计入差异分数。检测到框内画面发生明显变化时会自动截取当下的精确时间戳，"开始监测"按下后按钮会变成"停止监测"，左上角状态徽章"监测中..."会显示为红色小字提示正在实时监测，捕获瞬间会明显放大变色提示已抓取，闪完(或连拍继续下一次)后会恢复回红色小字"监测中..."，未开始监测时则是白色小字；连续两帧都超过阈值才会真正判定为跳变(记录首次超标那一帧的时间，不是确认帧)。误触发时"已捕获"区域下方有"撤销这条记录"，一键删掉不用切去设置页；如果按下"开始监测"后反悔(比如举着手机等太久)，再点一次同一个按钮(此时显示"停止监测")就能取消，不用等它真的捕获一次再回头删。"防抖容差"是允许多少像素范围内的偏移被当作同一位置，手持越抖可以调大，但调太大会连真正的小幅度线段变化也一起吸收掉、变得不灵敏，需要跟灵敏度配合着调。下方电平表白线是当前阈值位置，条形超过白线就会变色，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调两个滑条即可。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，越小越不容易被无关背景干扰。<b style="color:var(--ink);">蓝牙数字小键盘映射</b>(固定好手机后彻底不用碰屏幕，最大程度避免手抖)：回车＝开始/停止监测(同一键切换)；退格＝撤销上条记录(同样3秒二次确认，超时自动取消)；加号＝灵敏度+0.2，减号＝灵敏度-0.2，两个键长按0.4秒后转为每60毫秒连续快调，松开停止；乘号/除号＝防抖容差+1/-1像素；数字0＝手动立即截取；数字9＝硬件变焦(点一下+一步，按住再点减号-一步，设备不支持时会提示)；数字1＝取景框宽度、数字2＝高度、数字3＝左右位置、数字4＝上下位置，每个都是"点一下该数字键+1%，按住该数字键的同时点减号-1%(减号可连点或长按连续减，松开数字键结束)"，只影响蓝牙键盘操作，触屏拖拽/拉伸手柄照常可用；数字5-8、小数点、等号目前仍未绑定任何功能，留给以后用；Esc＝退出摄像头回到主界面。此前有个bug：只要屏幕上任意一个滑条(灵敏度/防抖容差/变焦等)因为手指碰过而拿到了焦点，蓝牙键盘所有按键都会被误判成"正在打字"而完全失效，现已修复——只有真正的文字输入框才会屏蔽快捷键，滑条不再屏蔽。<b style="color:var(--ink);">连拍模式</b>：切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间(每次之间自动重新开始监测，不用手动点)，这3条记录会打包成一个"会话"，统计计算时先用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归——不会无限反复修正，只会按当下最新模型算一轮，足够精确。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。<b style="color:var(--ink);">网格局部检测</b>：v3.7起检测算法改为把取景框划分成若干小格，逐格比较相邻两帧的红色分量(LED数字发光色)变化，而不是整个取景框算一个平均值——这样能把"数字跳变"(只影响少数几个格子)和"环境光/自动曝光整体波动"(往往同时影响一大半格子)区分开，后者会被自动判定为全局噪声并整帧忽略。取景框大小不同时，格子会自动变粗或变细以保持每格有效像素量；"网格:粗/中/细"三档可以手动调整这个基准密度——画面较暗或噪声明显时选"粗"更稳，需要抓小面积数字变化(比如"1")时选"细"更灵敏。点右上角"网格"按钮可以直接在取景框上叠加显示当前网格线，橙色高亮的格子就是本帧被判定为变化的格子，方便现场对照调参。之前的七段Mask对齐功能(手动画线段框LED区域)已在v3.7.2彻底移除，新的网格检测不依赖数字的具体形状。</p>
     </div>
 
     <canvas id="cameraCanvas" style="display:none;"></canvas>
@@ -503,6 +519,16 @@
       <p style="margin-top:8px;">完整备份包含所有记录的全部字段(含系统延迟、连拍会话标记等)，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，按记录ID去重，不会覆盖或清空当前已有的记录。</p>
     </div>
 
+  </div>
+
+  <div id="screenStats" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="statsBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">漂移统计</span>
+    </div>
+
+    <div class="summaryline" id="summaryLine" style="text-align:center; margin-top:2px;"></div>
+
     <div class="section">
       <h4>漂移统计</h4>
       <div id="statsPanel"></div>
@@ -513,23 +539,79 @@
       <h4>历史记录</h4>
       <div id="log"><div class="logempty">尚无记录</div></div>
     </div>
+  </div>
 
-    <div class="section">
-      <h4>说明</h4>
-      <p>时间来源: iPhone 系统时钟本身已通过蜂窝/WiFi网络做过高精度校时,通常比任何网页API单次往返估算都准。所以每次打开会并行查询已启用的独立网络时间源(共5个候选,可在"时间同步"里勾选启用哪些)做"交叉验证"而非直接采信——如果多个来源互相一致且都确认本机时间准确，不做任何修正；只有多个独立来源一致地指向本机时间确有明显偏差时才修正；来源之间对不上（网络抖动）或只有一个来源响应时，同样保守地信任本机时间，避免把网络噪声引入显示。哪个来源总是失败可以在诊断列表里看到，直接关掉即可。</p>
-      <p>iOS 系统本身不允许网页/PWA 拦截音量+/-键，这是系统限制。请改用 <code>空格 / 回车</code> 键，或蓝牙数字小键盘任意按键触发记录，效果与实体按键一致，且更可靠。</p>
-      <p>记录列表保存在本机 localStorage，可点导出为 CSV / JSON。</p>
-      <p>统计: 至少3条记录才会计算漂移趋势,建议间隔约1周做一次记录,间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
-      <p>季节模型: 室温影响机芯漂移速率,夏冬分开建模,同时最近的记录权重更高(约5周半衰期指数衰减),模型会自动跟着最近的室温变化微调，不用精确判断换季时间点。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
-      <p>挂钟显示时间: 每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示。这个值参与统计时优先级高于自动估算，且不受60秒周期限制，即使漂移已经超过一分钟也能算对。不填的话仍按"卡在跳变瞬间点击"的方式自动估算。</p>
-      <p>置信星级: 综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
-      <p>执行延迟补偿: Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不重新观测就忽略这段延迟，每个周期会残留约等于这段延迟的误差并线性累积。统计面板里"①②③"这三个时刻、以及主界面摘要行显示的"下次校正"，现在都已经按这里设置的秒数实时扣除，改完点保存立刻能看到面板数字变化；导出的预测JSON里relayFireTimes字段是同一套算法，可直接给继电器用，理论上每个周期都不会残留误差，不需要为此专门频繁重新测量。</p>
-      <p>摄像头精确捕获: 主界面右上角📷图标进入，全屏显示实时画面(右上角浮层同时显示PWA自己算的精确时间供对照)。取景框可以直接手指拖动移动位置，右下角圆形手柄可以拉伸大小——建议缩小到只框住分钟这一两位数字，范围越小、无关背景越少，同样的灵敏度设置越不容易被手抖或环境光误触发；调整会自动记住，下次打开还是你调好的框，也可以点"重置取景框"恢复默认大小。框好后点"开始监测"(按钮会变成"停止监测"，再点一次可随时取消)，画面在框内发生明显变化(数字跳变)时自动截取当下的精确时间戳，左上角状态徽章会放大变色提示，避免人眼反应延迟带来的误差，误触发可以在"已捕获"区域点"撤销这条记录"直接删除，不用切去设置页。LED七段数码管跳变是瞬间通断；检测算法把取景框划成小格，逐格比较相邻帧红色分量变化，只有少数格子变化才算真正跳变，大半格子同时变化会被判定为环境光/曝光噪声并整帧忽略，这样能自动吸收手抖和整体光照波动，只统计真正的数字亮灭；"差异分数"(电平表)显示的是本帧单格最大变化量，默认灵敏度对应的阈值需要按实机情况配合"防抖容差"滑条和"网格:粗/中/细"密度一起调；调到框内画面静止时数值明显低于阈值、跳变时明显超过阈值即可，连续两帧都超标才真正判定为跳变(记录的时间戳取自首次超标那一帧，不是确认帧，避免系统性晚记一帧)，减少单帧手抖误触发。"系统估算延迟"是根据相机帧率、分析耗时估算出的这套流程本身大概还残留多少毫秒误差，点"查看诊断详情"能看到相机帧率、分析帧率、丢帧率、平均分析耗时这几项原始数据。相机帧率是靠实测每次真正拿到新画面的时间间隔算出来的，不依赖<code>getVideoPlaybackQuality</code>这个接口——它在Safari上对实时摄像头画面经常不增长，直接用会一直显示0.0，换了更可靠的测法。丢帧率如果显示"N/A(此浏览器不支持测量)"就是这个接口在你的Safari版本上确实不可用，不影响其他数字准确性。每条自动检测的相机记录会额外存一个"当次估算延迟"数值(原始时间戳本身不会被改写，保持如实记录)，统计计算漂移速率时会自动扣除这个延迟，日志列表和CSV导出里都能看到具体扣了多少毫秒，跟Tuya继电器那8秒执行延迟是同一个处理思路——只在计算这一层修正，不动原始观测数据。检测失败或误触发时用"手动立即截取"兜底，这种手动截取不经过相机分析流程，不会附带这项延迟修正。离开此界面会自动关闭摄像头。蓝牙数字小键盘在摄像头界面下可用：回车切换开始/停止监测、退格撤销上条记录(3秒二次确认)、加减号微调灵敏度(长按加速)、乘除号微调防抖容差、数字0手动立即截取、Esc返回主界面。</p>
-      <p>手动补录: 若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，分隔符是固定文字不在输入框里，删不掉也打不进去，退格删到格子开头会自动跳到前一格继续删，方便精准还原当时记的时间，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
-      <p>删除保护: 记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
+  <div id="screenHelp" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="helpBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">帮助</span>
     </div>
 
-    <div class="versionfooter">校准计时器 Clock Calibrator · v3.8.4</div>
+    <div id="helpContent">
+      <div class="section">
+        <h4>时间同步</h4>
+        <p style="margin-top:0;">iPhone 系统时钟本身已通过蜂窝/WiFi网络做过高精度校时，通常比任何网页API单次往返估算都准。所以每次打开会并行查询已启用的独立网络时间源(共5个候选，可在"设置→时间同步"里勾选启用哪些)做交叉验证而非直接采信——多个来源互相一致才会修正本机时间；来源之间对不上或只有一个来源响应时，保守地信任本机时间，避免把网络噪声引入显示。哪个来源总是失败可以在诊断列表里看到，直接关掉即可。</p>
+      </div>
+
+      <div class="section">
+        <h4>统计与季节模型</h4>
+        <p style="margin-top:0;">至少3条记录才会计算漂移趋势，建议间隔约1周做一次记录，间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
+        <p>季节模型：室温影响机芯漂移速率，夏冬分开建模，同时最近的记录权重更高(约5周半衰期指数衰减)，模型会自动跟着最近的室温变化微调。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
+        <p>挂钟显示时间：每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示，参与统计时优先级高于自动估算，且不受60秒周期限制。不填的话仍按跳变瞬间点击的方式自动估算。</p>
+        <p>置信星级：综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
+      </div>
+
+      <div class="section">
+        <h4>摄像头精确捕获</h4>
+        <p style="margin-top:0;">把电子钟的分钟数字对准取景框，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上)，等镜头自动对焦稳定后再点"开始监测"。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，建议缩小到只框住分钟这一两位数字，范围越小越不容易被无关背景干扰；调整会自动记住，也可点"重置取景框"恢复默认。</p>
+        <h5>网格局部检测原理</h5>
+        <p>检测算法把取景框划分成若干小格，逐格比较相邻两帧的红色分量(LED数字发光色)变化，而不是整个取景框算一个平均值——这样能把"数字跳变"(只影响少数几个格子)和"环境光/自动曝光整体波动"(往往同时影响一大半格子)区分开，后者会被自动判定为全局噪声并整帧忽略。"网格:粗/中/细"三档可调整分格密度：画面较暗或噪声明显时选"粗"更稳，需要抓小面积数字变化(比如"1")时选"细"更灵敏。点右上角"网格"按钮可在取景框上叠加显示当前网格线，橙色高亮的格子就是本帧被判定为变化的格子，方便现场对照调参。</p>
+        <h5>灵敏度与确认机制</h5>
+        <p>下方电平表白线是当前阈值位置，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调"灵敏度"和"防抖容差"两个滑条。连续两帧都超过阈值才真正判定为跳变(记录的时间戳取自首次超标那一帧，避免系统性晚记)，减少单帧手抖误触发。</p>
+        <h5>状态与撤销</h5>
+        <p>左上角状态徽章：白色小字＝未开始监测；红色小字"监测中..."＝正在实时监测；橙底大字闪烁＝刚捕获到跳变瞬间。误触发时"已捕获"区域下方点"撤销这条记录"即可删除；按下"开始监测"后反悔，再点一次同一按钮(此时显示"停止监测")就能取消。"系统估算延迟"会在统计时自动扣除，原始时间戳本身不受影响；离开此界面会自动关闭摄像头。</p>
+      </div>
+
+      <div class="section">
+        <h4>连拍模式</h4>
+        <p style="margin-top:0;">切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间，这3条记录会打包成一个"会话"，统计时用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。</p>
+      </div>
+
+      <div class="section">
+        <h4>蓝牙数字小键盘映射</h4>
+        <p style="margin-top:0;">固定好手机后彻底不用碰屏幕，最大程度避免手抖。以下映射仅在摄像头界面下生效：</p>
+        <table class="helptable">
+          <tr><th>按键</th><th>功能</th></tr>
+          <tr><td>回车</td><td class="desc">开始/停止监测(同一键切换)</td></tr>
+          <tr><td>退格</td><td class="desc">撤销上条记录(3秒二次确认)</td></tr>
+          <tr><td>+ / -</td><td class="desc">灵敏度 ±0.2，长按连续快调</td></tr>
+          <tr><td>* / /</td><td class="desc">防抖容差 ±1px</td></tr>
+          <tr><td>数字 0</td><td class="desc">手动立即截取</td></tr>
+          <tr><td>数字 1</td><td class="desc">取景框宽度 ±1%</td></tr>
+          <tr><td>数字 2</td><td class="desc">取景框高度 ±1%</td></tr>
+          <tr><td>数字 3</td><td class="desc">取景框左右位置 ±1%</td></tr>
+          <tr><td>数字 4</td><td class="desc">取景框上下位置 ±1%</td></tr>
+          <tr><td>数字 9</td><td class="desc">硬件变焦</td></tr>
+          <tr><td>Esc</td><td class="desc">退出摄像头回主界面</td></tr>
+          <tr><td>5-8 / . / =</td><td class="desc">未分配</td></tr>
+        </table>
+        <p>数字1-4是"点一下+1%，按住该键同时点减号-1%(减号可连点/长按连续减)"，只影响蓝牙键盘操作，触屏拖拽/拉伸手柄照常可用。</p>
+      </div>
+
+      <div class="section">
+        <h4>继电器执行延迟补偿</h4>
+        <p style="margin-top:0;">Tuya继电器从收到指令到真正按下按键有固有延迟，若长期不扣除，每个周期会残留约等于这段延迟的误差并线性累积。设置里填入这个延迟秒数后，统计面板"①②③"三个时刻、导出预测JSON里的relayFireTimes字段都会自动提前扣除，理论上每个周期都不会残留误差，不需要频繁重新测量。</p>
+      </div>
+
+      <div class="section">
+        <h4>数据管理与备份</h4>
+        <p style="margin-top:0;">记录列表保存在本机 localStorage，可导出为 CSV 或预测JSON。完整备份(JSON)包含所有记录的全部字段(含系统延迟、连拍会话标记等)，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，按记录ID去重，不会覆盖或清空当前已有的记录。</p>
+        <p>手动补录：若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
+        <p>删除保护：记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
+      </div>
+    </div>
+
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.0</div>
   </div>
 
 </div>
@@ -1018,14 +1100,6 @@
     renderStats();
     trackHistory();
     return rec;
-  }
-
-  function capture(){
-    var t = nowCorrected();
-    addRecordAtTime(t, null);
-    var zone = document.getElementById('captureZone');
-    zone.classList.add('pressed');
-    setTimeout(function(){ zone.classList.remove('pressed'); }, 90);
   }
 
   var ROI_KEY = 'cc_roi_v1';
@@ -2671,18 +2745,22 @@
     currentScreen = name;
     document.getElementById('screenCapture').style.display = (name === 'capture') ? 'flex' : 'none';
     document.getElementById('screenSettings').style.display = (name === 'settings') ? 'flex' : 'none';
+    document.getElementById('screenStats').style.display = (name === 'stats') ? 'flex' : 'none';
+    document.getElementById('screenHelp').style.display = (name === 'help') ? 'flex' : 'none';
     document.getElementById('screenCamera').style.display = (name === 'camera') ? 'flex' : 'none';
     if(name === 'settings'){
+      document.getElementById('delaySecInput').value = String(delaySec);
+    }
+    if(name === 'stats'){
       renderLog();
       renderStats();
-      document.getElementById('delaySecInput').value = String(delaySec);
     }
     if(name === 'camera'){
       startCamera();
     } else {
       stopCamera();
     }
-    // 蓝牙小键盘快捷键只在 capture / camera 页生效，settings 页需要用户正常打字(如手动改日期)，不抢焦点
+    // 蓝牙小键盘快捷键只在 capture / camera 页生效，其余页面需要用户正常打字(如手动改日期)，不抢焦点
     if(name === 'capture' || name === 'camera'){
       enableBtFocusGuard();
     } else {
@@ -2729,7 +2807,6 @@
     setupBtKeypadGhost();
     showScreen('capture');
 
-    document.getElementById('captureZone').addEventListener('click', capture);
     document.getElementById('resyncBtn').addEventListener('click', syncTime);
     document.getElementById('syncStatusBtn').addEventListener('click', syncTime);
     document.getElementById('exportBtn').addEventListener('click', exportData);
@@ -2774,6 +2851,11 @@
     });
 
     document.getElementById('openSettingsBtn').addEventListener('click', function(){ showScreen('settings'); });
+    document.getElementById('openStatsBtn').addEventListener('click', function(){ showScreen('stats'); });
+    document.getElementById('openHelpBtn').addEventListener('click', function(){ showScreen('help'); });
+    document.getElementById('statsBackBtn').addEventListener('click', function(){ showScreen('capture'); });
+    document.getElementById('helpBackBtn').addEventListener('click', function(){ showScreen('capture'); });
+    document.getElementById('cameraHelpBtn').addEventListener('click', function(){ showScreen('help'); });
     document.getElementById('openCameraBigBtn').addEventListener('click', function(){ showScreen('camera'); });
     document.getElementById('cameraBackBtn').addEventListener('click', function(){ showScreen('capture'); });
     document.getElementById('cameraStartBtn').addEventListener('click', function(){ toggleCameraArm(); });
@@ -2872,13 +2954,6 @@
       el.style.display = open ? 'none' : 'block';
       btn.textContent = open ? '查看诊断详情 ▾' : '收起诊断详情 ▴';
     });
-    document.getElementById('instructionsToggleBtn').addEventListener('click', function(){
-      var el = document.getElementById('instructionsDetail');
-      var btn = document.getElementById('instructionsToggleBtn');
-      var open = el.style.display !== 'none';
-      el.style.display = open ? 'none' : 'block';
-      btn.textContent = open ? '使用说明 ▾' : '收起说明 ▴';
-    });
     document.getElementById('backBtn').addEventListener('click', function(){ showScreen('capture'); });
 
     document.getElementById('delaySaveBtn').addEventListener('click', function(){
@@ -2889,16 +2964,6 @@
       renderStats();
       document.getElementById('delaySaveBtn').textContent = '已保存';
       setTimeout(function(){ document.getElementById('delaySaveBtn').textContent = '保存'; }, 1500);
-    });
-
-    document.addEventListener('keydown', function(e){
-      if(currentScreen !== 'capture'){ return; }
-      var tag = (e.target && e.target.tagName) || '';
-      if((tag === 'INPUT' || tag === 'TEXTAREA') && !isBtGhostTarget(e.target)){ return; }
-      if(e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter' || resolveNumpadDigit(e) === '0'){
-        e.preventDefault();
-        capture();
-      }
     });
 
     var sensHoldTimer = null;
