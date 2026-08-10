@@ -124,10 +124,10 @@
   }
   .cameraTimeOverlay{
     position:absolute; top:10px; right:10px; background:rgba(0,0,0,.6); color:var(--ink);
-    font-size:13px; padding:5px 10px; border-radius:6px; font-family:var(--mono);
+    font-size:19px; font-weight:600; padding:6px 12px; border-radius:8px; font-family:var(--mono);
     font-variant-numeric:tabular-nums;
   }
-  .cameraTimeOverlay .cameraMs{color:var(--accent);}
+  .cameraTimeOverlay .cameraMs{color:var(--accent); font-size:.6em;}
   .camFloatBtn{
     position:absolute; bottom:10px; background:rgba(0,0,0,.65); color:var(--ink);
     font-size:12px; padding:9px 14px; border-radius:10px; border:1px solid rgba(255,138,61,.5);
@@ -144,7 +144,7 @@
     background:var(--accent); box-shadow:0 0 0 4px rgba(255,138,61,.3);
   }
   .btKeyStatus{
-    position:absolute; top:46px; right:10px; background:rgba(0,0,0,.6); color:var(--ink-dim);
+    position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.6); color:var(--ink-dim);
     font-size:10px; padding:4px 9px; border-radius:6px; font-family:inherit; border:none;
   }
   .btKeyStatus.ready{ color:#8ee08e; }
@@ -346,7 +346,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.3</span>
+      <span class="versiontag" id="versionTag">v3.9.4</span>
     </div>
 
     <div id="timePanel">
@@ -375,7 +375,7 @@
         <div class="roiResizeHandle" id="roiResizeHandle"></div>
         <canvas id="gridOverlayCanvas" style="display:none;"></canvas>
       </div>
-      <button class="roiResetBtn" id="roiResetBtn">重置取景框</button>
+      <button class="roiResetBtn" id="roiResetBtn">重置ROI</button>
       <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
       <div class="camToast" id="camToast" style="display:none;"></div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
@@ -568,7 +568,7 @@
 
       <div class="section">
         <h4>摄像头精确捕获</h4>
-        <p style="margin-top:0;">把电子钟的分钟数字对准取景框，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上)，等镜头自动对焦稳定后再点"开始监测"。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，建议缩小到只框住分钟这一两位数字，范围越小越不容易被无关背景干扰；调整会自动记住，也可点"重置取景框"恢复默认。</p>
+        <p style="margin-top:0;">把电子钟的分钟数字对准取景框，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上)，等镜头自动对焦稳定后再点"开始监测"。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，建议缩小到只框住分钟这一两位数字，范围越小越不容易被无关背景干扰；调整会自动记住，也可点"重置ROI"恢复默认。</p>
         <h5>网格局部检测原理</h5>
         <p>检测算法把取景框划分成若干小格，逐格比较相邻两帧的红色分量(LED数字发光色)变化，而不是整个取景框算一个平均值——这样能把"数字跳变"(只影响少数几个格子)和"环境光/自动曝光整体波动"(往往同时影响一大半格子)区分开，后者会被自动判定为全局噪声并整帧忽略。"网格:粗/中/细"三档可调整分格密度：画面较暗或噪声明显时选"粗"更稳，需要抓小面积数字变化(比如"1")时选"细"更灵敏。点右上角"网格"按钮可在取景框上叠加显示当前网格线，橙色高亮的格子就是本帧被判定为变化的格子，方便现场对照调参。</p>
         <h5>灵敏度与确认机制</h5>
@@ -618,7 +618,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.3</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.4</div>
   </div>
 
 </div>
@@ -1882,7 +1882,7 @@
     removeSessionGroupFromCameraSessionCaptures(sessionId);
   }
 
-  // ==== v3.9.3 摄像头页"本次监测最近捕获"临时列表 ====
+  // ==== v3.9.4 摄像头页"本次监测最近捕获"临时列表 ====
   // 纯内存变量，不落盘：普通切后台再切回来JS进程没死，内存自然还在，列表正常保留；
   // 一旦被系统杀掉进程重启(相当于重新走一遍init())，这个数组本来就会回到空——
   // 不需要专门判断"是杀后台还是普通resume"，内存生命周期本身就是这道分界线。
