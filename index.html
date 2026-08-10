@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.8</span>
+      <span class="versiontag" id="versionTag">v3.9.9</span>
     </div>
 
     <div id="timePanel">
@@ -392,7 +392,7 @@
     <div class="section" id="cameraParamsDetail" style="display:none;">
       <div class="tuneRow">
         <span class="zoomlabel">灵敏度</span>
-        <input type="range" id="sensitivitySlider" min="0.2" max="9.8" step="0.2" value="8.5" style="flex:1;">
+        <input type="range" id="sensitivitySlider" min="0.2" max="49.8" step="1" value="42.5" style="flex:1;">
         <span id="sensitivityVal" class="zoomval">8.5</span>
       </div>
       <div class="tuneRow">
@@ -597,7 +597,7 @@
           <tr><th>按键</th><th>功能</th></tr>
           <tr><td>回车</td><td class="desc">开始/停止监测(同一键切换)</td></tr>
           <tr><td>退格</td><td class="desc">撤销上条记录(3秒二次确认)</td></tr>
-          <tr><td>+ / -</td><td class="desc">灵敏度 ±0.2，长按连续快调</td></tr>
+          <tr><td>+ / -</td><td class="desc">灵敏度 ±1，长按连续快调</td></tr>
           <tr><td>* / /</td><td class="desc">防抖容差 ±1px</td></tr>
           <tr><td>数字 0</td><td class="desc">手动立即截取</td></tr>
           <tr><td>数字 1</td><td class="desc">取景框宽度 ±1%</td></tr>
@@ -624,7 +624,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.8</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.9</div>
   </div>
 
 </div>
@@ -1246,7 +1246,7 @@
   var cameraState = 'idle';
   var cameraLoopActive = false;
   var shakeToleranceRadius = 2;
-  var SENSITIVITY_MAX = 10;
+  var SENSITIVITY_MAX = 50;
   var sensitivityThreshold = SENSITIVITY_MAX - 8.5;
   var DIFF_METER_MAX = 100; // v3.9.8: 原20是老算法(百分比差异)遗留量级，redness差值实测常见50-70，20早就不够用了
   var cameraRafId = null;
@@ -1272,7 +1272,7 @@
   }
 
   var GRID_DENSITY_KEY = 'cc_griddensity_v1';
-  var GRID_DENSITY_PX = { coarse: 12, medium: 8, fine: 5 };
+  var GRID_DENSITY_PX = { coarse: 20, medium: 12, fine: 8 };
   var gridDensityMode = 'medium';
 
   function loadGridDensity(){
@@ -3152,17 +3152,17 @@
     function adjustSensitivity(step){
       var slider = document.getElementById('sensitivitySlider');
       var v = parseFloat(slider.value) + step;
-      v = Math.min(9.8, Math.max(0.2, v));
+      v = Math.min(49.8, Math.max(0.2, v));
       v = Math.round(v*10)/10;
       slider.value = v;
       slider.dispatchEvent(new Event('input'));
     }
 
     function startSensHold(direction){
-      adjustSensitivity(direction*0.2);
+      adjustSensitivity(direction*1.0);
       sensHoldTimer = setTimeout(function(){
         sensHoldInterval = setInterval(function(){
-          adjustSensitivity(direction*1.0);
+          adjustSensitivity(direction*5.0);
         }, 60);
       }, 400);
     }
