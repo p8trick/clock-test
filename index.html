@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.7</span>
+      <span class="versiontag" id="versionTag">v3.9.8</span>
     </div>
 
     <div id="timePanel">
@@ -624,7 +624,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.7</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.8</div>
   </div>
 
 </div>
@@ -710,7 +710,7 @@
   var SESSION_BASELINE_CYCLE_MS = 60000;
   var SESSION_CONTINUITY_LIMIT_MS = 90000;
 
-  // v3.9.7 连拍质量分级：只看两个相邻间隔各自的偏差，不看漏拍总数——
+  // v3.9.8 连拍质量分级：只看两个相邻间隔各自的偏差，不看漏拍总数——
   // 因为漏拍集中在一个间隔(连续漏)比分散在两个间隔(隔次漏)更能说明系统性问题。
   var QUALITY_TIGHT_MIN_MS = 59000;
   var QUALITY_TIGHT_MAX_MS = 61000;
@@ -1248,7 +1248,7 @@
   var shakeToleranceRadius = 2;
   var SENSITIVITY_MAX = 10;
   var sensitivityThreshold = SENSITIVITY_MAX - 8.5;
-  var DIFF_METER_MAX = 20;
+  var DIFF_METER_MAX = 100; // v3.9.8: 原20是老算法(百分比差异)遗留量级，redness差值实测常见50-70，20早就不够用了
   var cameraRafId = null;
   var cooldownTimer = null;
   var consecutiveHits = 0;
@@ -1259,7 +1259,7 @@
   var gridCols = 5;
   var gridRows = 7;
   var baselineCellAvg = null; // v3.8.4: 冻结基线，只在初始化/触发确认后刷新，不再逐帧滚动更新
-  var GRID_GLOBAL_RATIO_LIMIT = 0.5;
+  var GRID_GLOBAL_RATIO_LIMIT = 0.85; // v3.9.8: 紧框选场景下真实跳变本身就会覆盖大半格子，50%误伤太多，调高让真信号通过
   var GRID_MIN_CELLS_TO_TRIGGER = 1;
   var lastGridDiag = { changedCells: 0, totalCells: 0, globalRatio: 0, maxCellDelta: 0 };
 
@@ -1597,7 +1597,7 @@
     fillEl.style.width = fillPct + '%';
     fillEl.classList.toggle('triggered', triggered);
     if(threshEl){ threshEl.style.left = threshPct + '%'; }
-    if(labelEl){ labelEl.textContent = avgDiff.toFixed(1) + '% / ' + sensitivityThreshold.toFixed(1) + '%'; }
+    if(labelEl){ labelEl.textContent = avgDiff.toFixed(1) + ' / ' + sensitivityThreshold.toFixed(1); }
   }
 
   function resetDiffMeter(){
@@ -1606,7 +1606,7 @@
     var labelEl = document.getElementById('diffMeterLabel');
     if(fillEl){ fillEl.style.width = '0%'; fillEl.classList.remove('triggered'); }
     if(threshEl){ threshEl.style.left = Math.min(100, (sensitivityThreshold/DIFF_METER_MAX)*100) + '%'; }
-    if(labelEl){ labelEl.textContent = '--% / ' + sensitivityThreshold.toFixed(1) + '%'; }
+    if(labelEl){ labelEl.textContent = '-- / ' + sensitivityThreshold.toFixed(1); }
   }
 
   var SAMPLE_W = 50;
@@ -1925,7 +1925,7 @@
     removeSessionGroupFromCameraSessionCaptures(sessionId);
   }
 
-  // ==== v3.9.7 摄像头页"本次监测最近捕获"临时列表 ====
+  // ==== v3.9.8 摄像头页"本次监测最近捕获"临时列表 ====
   // 纯内存变量，不落盘：普通切后台再切回来JS进程没死，内存自然还在，列表正常保留；
   // 一旦被系统杀掉进程重启(相当于重新走一遍init())，这个数组本来就会回到空——
   // 不需要专门判断"是杀后台还是普通resume"，内存生命周期本身就是这道分界线。
