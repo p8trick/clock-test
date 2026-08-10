@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.9</span>
+      <span class="versiontag" id="versionTag">v3.9.9.2</span>
     </div>
 
     <div id="timePanel">
@@ -624,7 +624,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.9</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.9.2</div>
   </div>
 
 </div>
@@ -1866,13 +1866,26 @@
         updateCameraBadge('已停止(点"开始监测"继续)');
         document.getElementById('cameraStatusBadge').classList.remove('captured', 'armed');
         updateStartBtnLabel();
+        // v3.9.9.1: 快速模式/连拍最后一次capture结束都走这个共用收尾分支，
+        // 之前从未调用resetDetectionBaseline，导致基线停留在旧数字，
+        // 后续帧持续跟旧基线比对产生残留高位读数。这里复用跟stopCamera/
+        // disarmCameraDetection完全一致的reset组合，只清状态不影响判定逻辑本身。
+        resetDetectionBaseline();
+        resetDiffMeter();
       }
     }, 3000);
   }
 
   function undoLastCameraCapture(){
     if(!lastCameraRecordId){ return; }
-    deleteRecord(lastCameraRecordId);
+    var rec = records.filter(function(r){ return r.id === lastCameraRecordId; })[0];
+    if(rec && rec.sessionId){
+      // v3.9.9.2: 连拍成员(不论手动中断后实际抓了2次还是完整3次)一律整组删除，
+      // 复用迷你列表"删除整组"同一套deleteSessionGroup，不新写判断逻辑。
+      deleteSessionGroup(rec.sessionId);
+    } else {
+      deleteRecord(lastCameraRecordId);
+    }
     lastCameraRecordId = null;
     document.getElementById('cameraStatusBadge').classList.remove('captured');
   }
@@ -1899,7 +1912,9 @@
       undoLastCameraCapture();
     } else {
       pendingCameraUndo = true;
-      updateCameraBadge('退格再按一次＝删除上条');
+      var rec = records.filter(function(r){ return r.id === lastCameraRecordId; })[0];
+      var isBurstRec = !!(rec && rec.sessionId);
+      updateCameraBadge(isBurstRec ? '退格再按一次＝删除整组' : '退格再按一次＝删除上条');
       if(pendingCameraUndoTimer){ clearTimeout(pendingCameraUndoTimer); }
       pendingCameraUndoTimer = setTimeout(resetUndoBtnState, 3000);
     }
