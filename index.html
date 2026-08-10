@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.5</span>
+      <span class="versiontag" id="versionTag">v3.9.7</span>
     </div>
 
     <div id="timePanel">
@@ -567,7 +567,7 @@
         <h4>统计与季节模型</h4>
         <p style="margin-top:0;">至少3条记录才会计算漂移趋势，建议间隔约1周做一次记录，间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
         <p>季节模型：室温影响机芯漂移速率，夏冬分开建模，同时最近的记录权重更高(约5周半衰期指数衰减)，模型会自动跟着最近的室温变化微调。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
-        <p>挂钟显示时间：每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示，参与统计时优先级高于自动估算，且不受60秒周期限制。不填的话仍按跳变瞬间点击的方式自动估算。</p>
+        <p>挂钟显示时间：每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示，参与统计时优先级高于自动估算，且不受60秒周期限制。不填的话仍按跳变瞬间点击的方式自动估算。连拍会话(3次)展开后，3条记录各自都能填，跟单条记录完全一样，互不影响；某一条不填就用自动估算补上，3条最终会一起参与漂移速率补偿平均，抹平摄像头检测本身的毫秒级抖动。</p>
         <p>置信星级：综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
       </div>
 
@@ -624,7 +624,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.5</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.7</div>
   </div>
 
 </div>
@@ -710,7 +710,7 @@
   var SESSION_BASELINE_CYCLE_MS = 60000;
   var SESSION_CONTINUITY_LIMIT_MS = 90000;
 
-  // v3.9.5 连拍质量分级：只看两个相邻间隔各自的偏差，不看漏拍总数——
+  // v3.9.7 连拍质量分级：只看两个相邻间隔各自的偏差，不看漏拍总数——
   // 因为漏拍集中在一个间隔(连续漏)比分散在两个间隔(隔次漏)更能说明系统性问题。
   var QUALITY_TIGHT_MIN_MS = 59000;
   var QUALITY_TIGHT_MAX_MS = 61000;
@@ -1925,7 +1925,7 @@
     removeSessionGroupFromCameraSessionCaptures(sessionId);
   }
 
-  // ==== v3.9.5 摄像头页"本次监测最近捕获"临时列表 ====
+  // ==== v3.9.7 摄像头页"本次监测最近捕获"临时列表 ====
   // 纯内存变量，不落盘：普通切后台再切回来JS进程没死，内存自然还在，列表正常保留；
   // 一旦被系统杀掉进程重启(相当于重新走一遍init())，这个数组本来就会回到空——
   // 不需要专门判断"是杀后台还是普通resume"，内存生命周期本身就是这道分界线。
@@ -2209,8 +2209,7 @@
     if(expanded){
       var body = document.createElement('div');
       body.className = 'bundlebody';
-      for(var i=0;i<members.length;i++){
-        var m = members[i];
+      members.forEach(function(m, i){
         var item = document.createElement('div');
         var gapMs = i > 0 ? (m.t - members[i-1].t) : null;
         var missedGap = gapMs !== null && gapMs > SESSION_CONTINUITY_LIMIT_MS;
@@ -2224,8 +2223,32 @@
         var gapText = gapMs !== null ? ('间隔' + formatInterval(gapMs) + (missedGap ? '(疑似漏抓)' : '') + ' · ') : '';
         ild.textContent = gapText + latText + '来源 📷摄像头自动检测';
         item.appendChild(ilt); item.appendChild(ild);
+
+        var mClockRow = document.createElement('div');
+        mClockRow.className = 'clockrow';
+        var mLabel = document.createElement('span');
+        mLabel.className = 'clocklabel';
+        mLabel.textContent = '挂钟显示';
+        var mInput = document.createElement('input');
+        mInput.type = 'time';
+        mInput.className = 'clockinput';
+        mInput.value = m.clockDisplay || '';
+        mInput.addEventListener('click', function(e){ e.stopPropagation(); });
+        mInput.addEventListener('change', function(){ setClockDisplay(m.id, mInput.value); });
+        var mDrift = document.createElement('span');
+        mDrift.className = 'driftresult';
+        mDrift.id = 'drift-' + m.id;
+        if(m.explicitDriftMs !== null && m.explicitDriftMs !== undefined){
+          var mds = m.explicitDriftMs / 1000;
+          mDrift.textContent = mds >= 0
+            ? ('本次发现挂钟已漂移 ' + mds.toFixed(1) + ' 秒(落后)')
+            : ('本次发现挂钟领先 ' + Math.abs(mds).toFixed(1) + ' 秒');
+        }
+        mClockRow.appendChild(mLabel); mClockRow.appendChild(mInput); mClockRow.appendChild(mDrift);
+        item.appendChild(mClockRow);
+
         body.appendChild(item);
-      }
+      });
       var btnrow = document.createElement('div');
       btnrow.className = 'bundlebtnrow';
       var delBtn = document.createElement('button');
