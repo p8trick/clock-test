@@ -325,6 +325,11 @@
   .bundlehead .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:3px; line-height:1.6;}
   .continuitytag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
   .continuitytag.warn{border-color:var(--bad); color:var(--bad);}
+  .continuitytag.q-excellent{border-color:var(--good); color:var(--good);}
+  .continuitytag.q-ok{border-color:#e8c547; color:#e8c547;}
+  .continuitytag.q-poor{border-color:var(--accent); color:var(--accent);}
+  .continuitytag.q-bad{border-color:var(--bad); color:var(--bad);}
+  .continuitytag.q-junk{border-color:var(--ink-dim); color:var(--ink-dim);}
   .bundleExpandBtn{background:none; border:none; color:var(--ink-dim); font-size:14px; padding:4px 8px;}
   .bundlebody{margin-top:8px; padding-left:10px; border-left:2px solid var(--panel-edge);}
   .bundleitem{padding:6px 0; font-size:12px;}
@@ -346,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.4</span>
+      <span class="versiontag" id="versionTag">v3.9.5</span>
     </div>
 
     <div id="timePanel">
@@ -582,6 +587,7 @@
       <div class="section">
         <h4>连拍模式</h4>
         <p style="margin-top:0;">切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间，这3条记录会打包成一个"会话"，统计时用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。</p>
+        <p>连拍完成后会自动打一个质量标签：<span class="continuitytag q-excellent" style="margin-left:0;">优秀</span>两次间隔都精准落在59-61秒；<span class="continuitytag q-ok" style="margin-left:0;">一般</span>没漏拍但不够精准，或只漏了1分钟；<span class="continuitytag q-poor" style="margin-left:0;">差劲</span>两次间隔各漏了1分钟(隔次漏)；<span class="continuitytag q-bad" style="margin-left:0;">糟糕</span>某个间隔连续漏了2分钟以上；<span class="continuitytag q-junk" style="margin-left:0;">异常</span>间隔明显短于1分钟，基本不是真实跳变，建议直接删除整组。这个标签在摄像头页"本次监测最近捕获"和统计页历史记录的连拍卡片上都能看到。</p>
       </div>
 
       <div class="section">
@@ -618,7 +624,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.4</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.5</div>
   </div>
 
 </div>
@@ -704,19 +710,48 @@
   var SESSION_BASELINE_CYCLE_MS = 60000;
   var SESSION_CONTINUITY_LIMIT_MS = 90000;
 
+  // v3.9.5 连拍质量分级：只看两个相邻间隔各自的偏差，不看漏拍总数——
+  // 因为漏拍集中在一个间隔(连续漏)比分散在两个间隔(隔次漏)更能说明系统性问题。
+  var QUALITY_TIGHT_MIN_MS = 59000;
+  var QUALITY_TIGHT_MAX_MS = 61000;
+  var QUALITY_JUNK_GAP_MS = 50000; // 间隔明显短于1分钟，基本不可能是真实分钟跳变，判定为疑似误触发
+
+  function classifySessionQuality(gaps){
+    if(gaps.some(function(dt){ return dt < QUALITY_JUNK_GAP_MS; })){
+      return { tier:'junk', label:'⚠️ 数据异常，疑似误触发，建议删除整组' };
+    }
+    var allTight = gaps.every(function(dt){ return dt >= QUALITY_TIGHT_MIN_MS && dt <= QUALITY_TIGHT_MAX_MS; });
+    if(allTight){
+      return { tier:'excellent', label:'优秀' };
+    }
+    var misses = gaps.map(function(dt){ return Math.max(0, Math.round(dt / SESSION_BASELINE_CYCLE_MS) - 1); });
+    var maxMiss = Math.max.apply(null, misses);
+    var minMiss = Math.min.apply(null, misses);
+    if(maxMiss === 0){ return { tier:'ok', label:'一般' }; }
+    if(maxMiss === 1 && minMiss === 0){ return { tier:'ok', label:'一般' }; }
+    if(maxMiss === 1 && minMiss === 1){ return { tier:'poor', label:'差劲' }; }
+    return { tier:'bad', label:'糟糕' };
+  }
+
   function computeSessionContinuity(sessionId){
     var members = records.filter(function(r){ return r.sessionId === sessionId; }).sort(function(a,b){ return a.t - b.t; });
     if(members.length < 2){ return; }
     var gaps = [];
     var missedTotal = 0;
     var isContinuous = true;
+    var missedMinutes = [];
     for(var i=1;i<members.length;i++){
       var dt = members[i].t - members[i-1].t;
       gaps.push(dt);
       if(dt > SESSION_CONTINUITY_LIMIT_MS){
         isContinuous = false;
         var expectedCycles = Math.round(dt / SESSION_BASELINE_CYCLE_MS);
-        missedTotal += Math.max(0, expectedCycles - 1);
+        var gapMissCount = Math.max(0, expectedCycles - 1);
+        missedTotal += gapMissCount;
+        for(var k=1;k<=gapMissCount;k++){
+          var md = new Date(members[i-1].t + SESSION_BASELINE_CYCLE_MS * k);
+          missedMinutes.push(pad(md.getHours(),2) + ':' + pad(md.getMinutes(),2));
+        }
       }
     }
     var actualSpanMs = members[members.length-1].t - members[0].t;
@@ -725,14 +760,18 @@
     var avgLatencyMs = latencies.length ? (latencies.reduce(function(a,b){ return a+b; }, 0) / latencies.length) : null;
     var totalCycles = gaps.length + missedTotal;
     var compensatedAvgCycleMs = totalCycles > 0 ? (actualSpanMs / totalCycles) : avgDeltaMs;
+    var quality = classifySessionQuality(gaps);
     sessionMeta[sessionId] = {
       count: members.length,
       isContinuous: isContinuous,
       actualSpanMs: actualSpanMs,
       missedCount: missedTotal,
+      missedMinutes: missedMinutes,
       avgLatencyMs: avgLatencyMs,
       avgDeltaMs: avgDeltaMs,
       compensatedAvgCycleMs: compensatedAvgCycleMs,
+      quality: quality.tier,
+      qualityLabel: quality.label,
       completedAt: Date.now()
     };
     saveSessionMeta();
@@ -1806,9 +1845,13 @@
     if(isBurstActive){
       computeSessionContinuity(sessionIdForThisCapture);
       var metaDone = sessionMeta[sessionIdForThisCapture];
-      var contNote = metaDone && !metaDone.isContinuous ? (' · 疑似漏抓' + metaDone.missedCount + '次') : '';
       var burstMemberIds = records.filter(function(r){ return r.sessionId === sessionIdForThisCapture; }).map(function(r){ return r.id; });
-      cameraSessionCaptures.unshift({ kind:'burst', sessionId: sessionIdForThisCapture, ids: burstMemberIds, t: t, note: contNote });
+      cameraSessionCaptures.unshift({
+        kind:'burst', sessionId: sessionIdForThisCapture, ids: burstMemberIds, t: t,
+        quality: metaDone ? metaDone.quality : null,
+        qualityLabel: metaDone ? metaDone.qualityLabel : null,
+        missedMinutes: metaDone ? metaDone.missedMinutes : []
+      });
       renderCameraSessionList();
       burstSessionId = null;
       burstCaptureIndex = 0;
@@ -1882,7 +1925,7 @@
     removeSessionGroupFromCameraSessionCaptures(sessionId);
   }
 
-  // ==== v3.9.4 摄像头页"本次监测最近捕获"临时列表 ====
+  // ==== v3.9.5 摄像头页"本次监测最近捕获"临时列表 ====
   // 纯内存变量，不落盘：普通切后台再切回来JS进程没死，内存自然还在，列表正常保留；
   // 一旦被系统杀掉进程重启(相当于重新走一遍init())，这个数组本来就会回到空——
   // 不需要专门判断"是杀后台还是普通resume"，内存生命周期本身就是这道分界线。
@@ -1932,7 +1975,18 @@
       var timeStr = formatDateStr(d) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2) + ':' + pad(d.getSeconds(),2) + '.' + pad(d.getMilliseconds(),3);
       var key = item.kind === 'burst' ? ('b:' + item.sessionId) : ('r:' + item.id);
       var isPending = (pendingSessionDeleteId === key);
-      var label = item.kind === 'burst' ? ('连拍×' + item.ids.length + ' · 最后一次 ' + timeStr + (item.note || '')) : timeStr;
+      var label;
+      if(item.kind === 'burst'){
+        label = '连拍×' + item.ids.length + ' · 最后一次 ' + timeStr;
+        if(item.quality){
+          var missNote = (item.quality !== 'junk' && item.missedMinutes && item.missedMinutes.length)
+            ? (' · 漏拍 ' + item.missedMinutes.join('、')) : '';
+          label += '<br><span class="continuitytag q-' + item.quality + '" style="margin-left:0;">' +
+            item.qualityLabel + missNote + '</span>';
+        }
+      } else {
+        label = timeStr;
+      }
       var delText = isPending ? '确认删除？' : (item.kind === 'burst' ? '删除整组' : '×');
       html += '<div class="sessionCard"><span>' + label + '</span>' +
         '<button class="sessionCardDel' + (isPending ? ' pending' : '') + '" data-key="' + key + '">' + delText + '</button></div>';
@@ -2123,7 +2177,15 @@
       ld.textContent = '会话数据不完整(可能是旧版本记录)';
     }
     var tag = document.createElement('span');
-    if(meta && !meta.isContinuous){
+    if(meta && meta.quality){
+      tag.className = 'continuitytag q-' + meta.quality;
+      if(meta.quality === 'junk'){
+        tag.textContent = meta.qualityLabel;
+      } else {
+        var missNote = (meta.missedMinutes && meta.missedMinutes.length) ? (' · 漏拍 ' + meta.missedMinutes.join('、')) : '';
+        tag.textContent = meta.qualityLabel + missNote;
+      }
+    } else if(meta && !meta.isContinuous){
       tag.className = 'continuitytag warn';
       tag.textContent = '跨越' + formatInterval(meta.actualSpanMs) + ' · 疑似漏抓' + meta.missedCount + '次';
     } else {
