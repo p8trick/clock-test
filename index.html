@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.4</span>
+      <span class="versiontag" id="versionTag">v4.0.5</span>
     </div>
 
     <div id="timePanel">
@@ -371,8 +371,11 @@
     <div class="settopbar">
       <button id="cameraBackBtn" class="iconbtn">‹ 返回</button>
       <span class="settitle">摄像头精确捕获</span>
-      <button id="cameraHelpBtn" class="iconbtn" style="margin-left:auto;">❓帮助</button>
-      <button id="devModeBtn" class="iconbtn">🛠️Dev</button>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button id="devExportBtn" class="iconbtn" style="display:none;">💾导出</button>
+        <button id="devModeBtn" class="iconbtn">🛠️Dev</button>
+        <button id="cameraHelpBtn" class="iconbtn">❓帮助</button>
+      </div>
     </div>
 
     <div class="cameraStage">
@@ -625,7 +628,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.4</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.5</div>
   </div>
 
 </div>
@@ -1998,6 +2001,7 @@
 
   var devState = 'IDLE'; // IDLE | READY | RUNNING | STOPPING | STOPPED
   var devRefreshParamsToggleLabel = function(){}; // 占位，真正实现在按钮事件绑定处赋值
+  var devUpdateExportBtnVisibility = function(){}; // 占位，真正实现在按钮事件绑定处赋值
   var devLogBuffer = null;
   var devHeartbeatTimer = null;
   var devUiTickTimer = null;
@@ -2044,6 +2048,7 @@
     devState = 'READY';
     devSetModeButtonsLocked(true);
     devRefreshParamsToggleLabel();
+    devUpdateExportBtnVisibility();
   }
 
   var devWakeLock = null;
@@ -2206,6 +2211,7 @@
     devState = 'STOPPED';
     devSetModeButtonsLocked(false);
     devRefreshParamsToggleLabel();
+    devUpdateExportBtnVisibility();
     updateCameraBadge(cameraState === 'armed' ? '监测中...' : '已停止(点"开始监测"继续)');
   }
 
@@ -2273,6 +2279,7 @@
       devLogBuffer = null;
       devSetModeButtonsLocked(false);
       devRefreshParamsToggleLabel();
+      devUpdateExportBtnVisibility();
       updateCameraBadge(cameraState === 'armed' ? '监测中...' : '已停止(点"开始监测"继续)');
     }
   }
@@ -2285,6 +2292,7 @@
     devLogBuffer = null;
     devSetModeButtonsLocked(false);
     devRefreshParamsToggleLabel();
+    devUpdateExportBtnVisibility();
   }
   // ==== End v4.0.0 Dev Mode Data Collector ====
 
@@ -3464,6 +3472,16 @@
         var next = !currentlyCollapsed;
         applyCollapsed(next);
         saveCameraParamsCollapsed(next);
+      });
+    })();
+    (function(){
+      var exportBtn = document.getElementById('devExportBtn');
+      devUpdateExportBtnVisibility = function(){
+        var hasExportableData = (devState === 'STOPPED' && devLogBuffer && devLogBuffer.stopReason);
+        exportBtn.style.display = hasExportableData ? '' : 'none';
+      };
+      exportBtn.addEventListener('click', function(){
+        if(devLogBuffer && devLogBuffer.stopReason){ devTriggerDownload(); }
       });
     })();
     document.getElementById('diagToggleBtn').addEventListener('click', function(){
