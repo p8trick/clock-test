@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.5</span>
+      <span class="versiontag" id="versionTag">v4.0.6</span>
     </div>
 
     <div id="timePanel">
@@ -396,7 +396,7 @@
     <div class="section" id="cameraParamsDetail" style="display:none;">
       <div class="tuneRow">
         <span class="zoomlabel">灵敏度</span>
-        <input type="range" id="sensitivitySlider" min="0.2" max="49.8" step="1" value="42.5" style="flex:1;">
+        <input type="range" id="sensitivitySlider" min="0" max="50" step="1" value="43" style="flex:1;">
         <span id="sensitivityVal" class="zoomval">8.5</span>
       </div>
       <div class="tuneRow">
@@ -621,6 +621,19 @@
       </div>
 
       <div class="section">
+        <h4>开发者模式(Dev Mode)</h4>
+        <p style="margin-top:0;">用于无人值守连续采集最长11分钟的原始检测数据(电平/噪声占比/触发间隔)，导出成Markdown交给AI分析视觉算法表现，不产生任何时钟漂移统计记录。摄像头页右上角"🛠️Dev"按钮进入，双击确认(第一次点显示提示，3秒内再点一次才真正进入)，进入后"开始监测"按钮变成开始采样的入口，点击后才真正开始计时和记录。</p>
+        <h5>运行期间的行为差异</h5>
+        <p>Dev运行期间，快速/连拍模式切换按钮会变暗锁定，防止实验途中参数不一致；每次捕获(或一组连拍)完成后会立即自动重新武装，不需要手动点"开始监测"续接；普通的时钟漂移records、摄像头页下方"最近捕获"迷你列表、退格键撤销，这些统计相关的记录全部暂停，不会被Dev模式的密集捕获污染。</p>
+        <h5>四种终止方式</h5>
+        <p>满11分钟自动结束；手动点"停止Dev采样"；20秒内触发超过4次视为高频异常自动熔断(仍会记录进日志供分析，只是同时终止实验)；切到后台或锁屏当场停止，数据到此为止，不会等你回来后接着采——这是为了避免"录一段、断一段、又续一段"的碎片化日志误导AI分析。四种情况都会自动弹出保存文件的界面；如果不小心划掉了保存界面，右上角会出现一个"💾导出"按钮(平时不出现)，可以随时重新触发保存，直到你离开摄像头页或开启下一轮实验为止。</p>
+        <h5>防止无操作自动锁屏</h5>
+        <p>开始采样时会尝试请求系统"屏幕常亮"权限(Screen Wake Lock)，避免11分钟内因为手机自动锁屏设置(不是手动锁屏/切走)而被判定为中断。这个请求不保证100%成功(取决于iOS版本、低电量模式等)，如果发现常锁屏，可以去系统设置里把自动锁屏时长调成"永不"作为保底。</p>
+        <h5>网格密度选择建议(基于实测日志的经验)</h5>
+        <p>不同网格密度下同一次真实跳变的peakLevel读数差异很大：网格越细，单格越容易精确落在数字笔画区域而不被背景稀释，peakLevel反而越高；网格越粗，读数相对偏低。粗网格(3×4)因为总格子数少(12格)，真实跳变很容易让格子占比冲到七八成，容易被GRID_GLOBAL_RATIO_LIMIT(85%)这道"防噪声"线误伤，实测出现过连续55秒左右的漏拍空窗——若要用粗网格，建议ROI框选时适当带入更多背景（不要框得太紧贴数字），降低跳变本身的格子占比，减少被误伤的概率。中/细网格实测未出现类似问题。</p>
+      </div>
+
+      <div class="section">
         <h4>数据管理与备份</h4>
         <p style="margin-top:0;">记录列表保存在本机 localStorage，可导出为 CSV 或预测JSON。完整备份(JSON)包含所有记录的全部字段(含系统延迟、连拍会话标记等)，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，按记录ID去重，不会覆盖或清空当前已有的记录。</p>
         <p>手动补录：若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
@@ -628,7 +641,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.5</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.6</div>
   </div>
 
 </div>
@@ -1252,7 +1265,7 @@
   var shakeToleranceRadius = 2;
   var SENSITIVITY_MAX = 50;
   var sensitivityThreshold = SENSITIVITY_MAX - 8.5;
-  var DIFF_METER_MAX = 100; // v3.9.8: 原20是老算法(百分比差异)遗留量级，redness差值实测常见50-70，20早就不够用了
+  var DIFF_METER_MAX = 200; // v4.0.6: 100时细网格常规读数(170-220)长期顶格，看不出相对大小；实测细网格最高220+，200仍不能完全覆盖，但比100好得多
   var cameraRafId = null;
   var cooldownTimer = null;
   var consecutiveHits = 0;
@@ -1831,50 +1844,57 @@
     updateCameraBadge('已捕获，冷却中');
     document.getElementById('cameraStatusBadge').classList.add('captured');
     updateStartBtnLabel();
-    resetUndoBtnState();
-    var tag = sourceTag || 'camera';
-    var latencyForThisCapture = (tag === 'camera') ? cameraDiagStats.estLatencyMs : null;
 
-    var sessionIdForThisCapture = null;
-    var isBurstActive = burstModeEnabled && tag === 'camera';
-    if(isBurstActive){
-      if(!burstSessionId){ burstSessionId = 'burst' + t; burstCaptureIndex = 0; }
-      burstCaptureIndex++;
-      sessionIdForThisCapture = burstSessionId;
+    if(devState !== 'RUNNING'){
+      // v4.0.6: Dev模式RUNNING期间整段跳过——不写入普通records/统计表/迷你列表/
+      // 撤销指针，因为Dev模式的唯一目的是拿11分钟实验日志(已经通过上面的
+      // devRecordCapture记录)，不应该污染日常时钟漂移统计数据。
+      resetUndoBtnState();
+      var tag = sourceTag || 'camera';
+      var latencyForThisCapture = (tag === 'camera') ? cameraDiagStats.estLatencyMs : null;
+
+      var sessionIdForThisCapture = null;
+      var isBurstActive = burstModeEnabled && tag === 'camera';
+      if(isBurstActive){
+        if(!burstSessionId){ burstSessionId = 'burst' + t; burstCaptureIndex = 0; }
+        burstCaptureIndex++;
+        sessionIdForThisCapture = burstSessionId;
+      }
+
+      var rec = addRecordAtTime(t, tag, latencyForThisCapture, sessionIdForThisCapture);
+      lastCameraRecordId = rec.id;
+
+      if(isBurstActive && burstCaptureIndex < BURST_TARGET_COUNT){
+        cooldownTimer = setTimeout(function(){
+          armCameraDetection();
+        }, 3000);
+        return;
+      }
+
+      if(isBurstActive){
+        computeSessionContinuity(sessionIdForThisCapture);
+        var metaDone = sessionMeta[sessionIdForThisCapture];
+        var burstMemberIds = records.filter(function(r){ return r.sessionId === sessionIdForThisCapture; }).map(function(r){ return r.id; });
+        cameraSessionCaptures.unshift({
+          kind:'burst', sessionId: sessionIdForThisCapture, ids: burstMemberIds, t: t,
+          quality: metaDone ? metaDone.quality : null,
+          qualityLabel: metaDone ? metaDone.qualityLabel : null,
+          missedMinutes: metaDone ? metaDone.missedMinutes : []
+        });
+        renderCameraSessionList();
+        burstSessionId = null;
+        burstCaptureIndex = 0;
+        renderLog();
+      } else {
+        cameraSessionCaptures.unshift({ kind:'single', id: rec.id, t: t });
+        renderCameraSessionList();
+      }
     }
 
-    var rec = addRecordAtTime(t, tag, latencyForThisCapture, sessionIdForThisCapture);
-    lastCameraRecordId = rec.id;
-
-    if(isBurstActive && burstCaptureIndex < BURST_TARGET_COUNT){
-      cooldownTimer = setTimeout(function(){
-        armCameraDetection();
-      }, 3000);
-      return;
-    }
-
-    if(isBurstActive){
-      computeSessionContinuity(sessionIdForThisCapture);
-      var metaDone = sessionMeta[sessionIdForThisCapture];
-      var burstMemberIds = records.filter(function(r){ return r.sessionId === sessionIdForThisCapture; }).map(function(r){ return r.id; });
-      cameraSessionCaptures.unshift({
-        kind:'burst', sessionId: sessionIdForThisCapture, ids: burstMemberIds, t: t,
-        quality: metaDone ? metaDone.quality : null,
-        qualityLabel: metaDone ? metaDone.qualityLabel : null,
-        missedMinutes: metaDone ? metaDone.missedMinutes : []
-      });
-      renderCameraSessionList();
-      burstSessionId = null;
-      burstCaptureIndex = 0;
-      renderLog();
-    } else {
-      cameraSessionCaptures.unshift({ kind:'single', id: rec.id, t: t });
-      renderCameraSessionList();
-    }
     cooldownTimer = setTimeout(function(){
       if(cameraState === 'cooldown'){
         cameraState = 'idle';
-        updateCameraBadge('已停止(点"开始监测"继续)');
+        updateCameraBadge(devState === 'RUNNING' ? 'Dev采样中...' : '已停止(点"开始监测"继续)');
         document.getElementById('cameraStatusBadge').classList.remove('captured', 'armed');
         updateStartBtnLabel();
         // v3.9.9.1: 快速模式/连拍最后一次capture结束都走这个共用收尾分支，
@@ -2157,10 +2177,10 @@
     lines.push('```');
     lines.push('');
     lines.push('## Captures');
-    lines.push('| # | elapsedMs | intervalMs | peakLevel | noiseRatio | source |');
-    lines.push('|---|---|---|---|---|---|');
+    lines.push('| # | timestamp | elapsedMs | intervalMs | peakLevel | noiseRatio | source |');
+    lines.push('|---|---|---|---|---|---|---|');
     b.captures.forEach(function(c){
-      lines.push('| ' + c.captureIndex + ' | ' + c.elapsedMs + ' | ' + (c.intervalMs===null?'-':c.intervalMs) + ' | ' + c.peakLevel.toFixed(1) + ' | ' + (c.noiseRatio*100).toFixed(1) + '% | ' + c.sourceTag + ' |');
+      lines.push('| ' + c.captureIndex + ' | ' + c.timestamp + ' | ' + c.elapsedMs + ' | ' + (c.intervalMs===null?'-':c.intervalMs) + ' | ' + c.peakLevel.toFixed(1) + ' | ' + (c.noiseRatio*100).toFixed(1) + '% | ' + c.sourceTag + ' |');
     });
     lines.push('');
     lines.push('## Heartbeats');
@@ -3509,7 +3529,7 @@
     function adjustSensitivity(step){
       var slider = document.getElementById('sensitivitySlider');
       var v = parseFloat(slider.value) + step;
-      v = Math.min(49.8, Math.max(0.2, v));
+      v = Math.min(50, Math.max(0, v));
       v = Math.round(v*10)/10;
       slider.value = v;
       slider.dispatchEvent(new Event('input'));
