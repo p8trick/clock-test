@@ -178,6 +178,8 @@
   .diffMeterBar{position:relative; height:15px; background:#1a1e25; border:1px solid var(--panel-edge); border-radius:6px; overflow:hidden;}
   .diffMeterFill{position:absolute; top:0; left:0; bottom:0; width:0%; background:var(--good); transition:width .05s linear, background .1s linear;}
   .diffMeterFill.triggered{background:var(--accent);}
+  .diffMeterFill.overWarn{background:#ffd93d;}
+  .diffMeterFill.overDanger{background:var(--bad);}
   .diffMeterThreshold{position:absolute; top:0; bottom:0; width:3px; background:#fff; left:0%;}
   .diffMeterLabel{margin-top:3px; text-align:center; font-size:11px; font-family:var(--mono); color:var(--ink-dim);}
   .paramsMetaRow{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:8px;}
@@ -351,7 +353,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.6</span>
+      <span class="versiontag" id="versionTag">v4.0.7</span>
     </div>
 
     <div id="timePanel">
@@ -641,7 +643,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.6</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.7</div>
   </div>
 
 </div>
@@ -1266,6 +1268,7 @@
   var SENSITIVITY_MAX = 50;
   var sensitivityThreshold = SENSITIVITY_MAX - 8.5;
   var DIFF_METER_MAX = 200; // v4.0.6: 100时细网格常规读数(170-220)长期顶格，看不出相对大小；实测细网格最高220+，200仍不能完全覆盖，但比100好得多
+  var DIFF_METER_DANGER = 250; // v4.0.7: 超过DIFF_METER_MAX后电平条满格显示，200~250黄色，>250红色，不再需要靠不断上调MAX来追峰值
   var cameraRafId = null;
   var cooldownTimer = null;
   var consecutiveHits = 0;
@@ -1619,6 +1622,8 @@
     var triggered = avgDiff > sensitivityThreshold;
     fillEl.style.width = fillPct + '%';
     fillEl.classList.toggle('triggered', triggered);
+    fillEl.classList.toggle('overWarn', avgDiff > DIFF_METER_MAX && avgDiff <= DIFF_METER_DANGER);
+    fillEl.classList.toggle('overDanger', avgDiff > DIFF_METER_DANGER);
     if(threshEl){ threshEl.style.left = threshPct + '%'; }
     if(labelEl){ labelEl.textContent = avgDiff.toFixed(1) + ' / ' + sensitivityThreshold.toFixed(1); }
   }
@@ -1627,7 +1632,7 @@
     var fillEl = document.getElementById('diffMeterFill');
     var threshEl = document.getElementById('diffMeterThresholdMarker');
     var labelEl = document.getElementById('diffMeterLabel');
-    if(fillEl){ fillEl.style.width = '0%'; fillEl.classList.remove('triggered'); }
+    if(fillEl){ fillEl.style.width = '0%'; fillEl.classList.remove('triggered', 'overWarn', 'overDanger'); }
     if(threshEl){ threshEl.style.left = Math.min(100, (sensitivityThreshold/DIFF_METER_MAX)*100) + '%'; }
     if(labelEl){ labelEl.textContent = '-- / ' + sensitivityThreshold.toFixed(1); }
   }
