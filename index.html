@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.2</span>
+      <span class="versiontag" id="versionTag">v4.0.4</span>
     </div>
 
     <div id="timePanel">
@@ -625,7 +625,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.2</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.4</div>
   </div>
 
 </div>
@@ -1641,8 +1641,7 @@
     var sensText = sensSlider ? parseFloat(sensSlider.value).toFixed(1) : '--';
     var shakeText = shakeSlider ? shakeSlider.value + 'px' : '--';
     var modeText = burstModeEnabled ? '连拍模式' : '快捷模式';
-    var devSuffix = (devState === 'READY' || devState === 'RUNNING') ? ' · Dev模式' : '';
-    el.textContent = '灵敏度' + sensText + ' · 防抖' + shakeText + ' · ' + modeText + devSuffix;
+    el.textContent = '灵敏度' + sensText + ' · 防抖' + shakeText + ' · ' + modeText;
   }
 
   function getVisibleVideoRect(video){
@@ -1998,6 +1997,7 @@
   var DEV_SESSION_KEY = 'cc_devsession_running_v1'; // 仅sessionStorage，用于kill后恢复识别
 
   var devState = 'IDLE'; // IDLE | READY | RUNNING | STOPPING | STOPPED
+  var devRefreshParamsToggleLabel = function(){}; // 占位，真正实现在按钮事件绑定处赋值
   var devLogBuffer = null;
   var devHeartbeatTimer = null;
   var devUiTickTimer = null;
@@ -2043,6 +2043,26 @@
     };
     devState = 'READY';
     devSetModeButtonsLocked(true);
+    devRefreshParamsToggleLabel();
+  }
+
+  var devWakeLock = null;
+
+  function devRequestWakeLock(){
+    if('wakeLock' in navigator){
+      navigator.wakeLock.request('screen').then(function(lock){
+        devWakeLock = lock;
+      }).catch(function(e){
+        // 请求失败(权限/设备不支持/低电量模式等)不阻塞实验本身，只是没有防锁屏保护
+      });
+    }
+  }
+
+  function devReleaseWakeLock(){
+    if(devWakeLock){
+      try{ devWakeLock.release(); }catch(e){}
+      devWakeLock = null;
+    }
   }
 
   function devStartExperiment(){
@@ -2054,6 +2074,7 @@
     try{
       sessionStorage.setItem(DEV_SESSION_KEY, JSON.stringify(devLogBuffer));
     }catch(e){}
+    devRequestWakeLock();
     devHeartbeatTimer = setInterval(devRecordHeartbeat, DEV_HEARTBEAT_MS);
     devUiTickTimer = setInterval(devUiTick, 1000);
     devUiTick();
@@ -2165,6 +2186,7 @@
   function devStopExperiment(reason){
     if(devState !== 'RUNNING'){ return; } // 防重复stop：已STOPPING/STOPPED直接忽略
     devState = 'STOPPING';
+    devReleaseWakeLock();
     if(devHeartbeatTimer){ clearInterval(devHeartbeatTimer); devHeartbeatTimer = null; }
     if(devUiTickTimer){ clearInterval(devUiTickTimer); devUiTickTimer = null; }
     devLogBuffer.stopReason = reason;
@@ -2183,6 +2205,7 @@
     }
     devState = 'STOPPED';
     devSetModeButtonsLocked(false);
+    devRefreshParamsToggleLabel();
     updateCameraBadge(cameraState === 'armed' ? '监测中...' : '已停止(点"开始监测"继续)');
   }
 
@@ -2195,7 +2218,7 @@
       devPendingBackgroundExport = false;
       try{ sessionStorage.removeItem(DEV_SESSION_KEY); }catch(e){}
       devTriggerDownload();
-      alert('检测到刚才切到了后台，Dev采样已在切出瞬间停止并已导出（捕获' + devLogBuffer.captures.length + '次，心跳' + devLogBuffer.heartbeats.length + '次）。');
+      updateCameraBadge('Dev已中断并导出(捕获' + devLogBuffer.captures.length + '次)');
     }
   });
 
@@ -2210,23 +2233,47 @@
       devLogBuffer.dataCompleteness = 'Partial';
       devLogBuffer.endTimestamp = new Date().toISOString();
       devTriggerDownload();
-      alert('检测到上次Dev采样被系统中断，已尝试导出已采集的部分数据（捕获' + devLogBuffer.captures.length + '次，心跳' + devLogBuffer.heartbeats.length + '次）。');
+      // v4.0.2: 不用alert通知——相机页此时可能还没显示，badge文字也不保证被看到，
+      // 且弹窗在相机页有卡死历史(用户实测反馈)，这里索性不弹任何提示，
+      // 下载的.md文件本身就是证据，用户在Files/下载目录能看到。
     }catch(e){}
     try{ sessionStorage.removeItem(DEV_SESSION_KEY); }catch(e){}
     devState = 'IDLE';
     devLogBuffer = null;
   }
 
+  var pendingDevEntry = false;
+  var pendingDevEntryTimer = null;
+
   function devHandleDevBtn(){
     if(devState === 'RUNNING'){ return; } // 运行中不响应，走主按钮"停止Dev采样"
     if(devState === 'IDLE' || devState === 'STOPPED'){
-      var ok = confirm('进入开发者模式？\n\n开发者模式将进行最长11分钟的数据采集，用于分析视觉检测算法。\n进入后仍可以像普通模式一样调整相关参数。\n只有点击"开始监测"后才会真正开始记录数据。');
-      if(ok){ devEnterReady(); updateCameraBadge('Dev就绪，点\"开始监测\"开始采样'); }
+      if(pendingDevEntry){
+        pendingDevEntry = false;
+        if(pendingDevEntryTimer){ clearTimeout(pendingDevEntryTimer); }
+        devState = 'IDLE'; // 若之前是STOPPED，先归位再进READY，避免残留上一轮buffer
+        devLogBuffer = null;
+        devEnterReady();
+        updateCameraBadge('Dev就绪，点"开始监测"开始采样');
+      } else {
+        pendingDevEntry = true;
+        updateCameraBadge('再按一次🛠️Dev＝进入11分钟采集模式');
+        pendingDevEntryTimer = setTimeout(function(){
+          pendingDevEntry = false;
+          if(cameraState === 'armed'){ updateCameraBadge('监测中...'); }
+          else if(cameraState === 'cooldown'){ updateCameraBadge('已捕获，冷却中'); }
+          else { updateCameraBadge('已停止(点"开始监测"继续)'); }
+        }, 3000);
+      }
       return;
     }
     if(devState === 'READY'){
-      // 已在READY，重复点击无需特殊处理
-      return;
+      // 已在READY，再点一次视为退出准备状态，回到IDLE(尚未开始记录，没有数据可丢)
+      devState = 'IDLE';
+      devLogBuffer = null;
+      devSetModeButtonsLocked(false);
+      devRefreshParamsToggleLabel();
+      updateCameraBadge(cameraState === 'armed' ? '监测中...' : '已停止(点"开始监测"继续)');
     }
   }
 
@@ -2237,6 +2284,7 @@
     devState = 'IDLE';
     devLogBuffer = null;
     devSetModeButtonsLocked(false);
+    devRefreshParamsToggleLabel();
   }
   // ==== End v4.0.0 Dev Mode Data Collector ====
 
@@ -3398,12 +3446,18 @@
       var detail = document.getElementById('cameraParamsDetail');
       var btn = document.getElementById('cameraParamsToggleBtn');
       var summary = document.getElementById('cameraParamsSummaryText');
+      function currentCollapsedLabel(){
+        var collapsed = detail.style.display === 'none';
+        var devSuffix = (devState === 'READY' || devState === 'RUNNING') ? ' · 🛠️Dev模式' : '';
+        return (collapsed ? '拍摄参数 ▾' : '收起拍摄参数 ▴') + devSuffix;
+      }
       function applyCollapsed(collapsed){
         detail.style.display = collapsed ? 'none' : 'block';
         summary.style.display = collapsed ? '' : 'none';
-        btn.textContent = collapsed ? '拍摄参数 ▾' : '收起拍摄参数 ▴';
+        btn.textContent = currentCollapsedLabel();
         if(collapsed){ updateCameraParamsSummary(); }
       }
+      devRefreshParamsToggleLabel = function(){ btn.textContent = currentCollapsedLabel(); };
       applyCollapsed(loadCameraParamsCollapsed());
       btn.addEventListener('click', function(){
         var currentlyCollapsed = detail.style.display === 'none';
