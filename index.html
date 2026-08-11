@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v3.9.9.2</span>
+      <span class="versiontag" id="versionTag">v4.0.1</span>
     </div>
 
     <div id="timePanel">
@@ -372,6 +372,7 @@
       <button id="cameraBackBtn" class="iconbtn">‹ 返回</button>
       <span class="settitle">摄像头精确捕获</span>
       <button id="cameraHelpBtn" class="iconbtn" style="margin-left:auto;">❓帮助</button>
+      <button id="devModeBtn" class="iconbtn">🛠️Dev</button>
     </div>
 
     <div class="cameraStage">
@@ -624,7 +625,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v3.9.9.2</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.1</div>
   </div>
 
 </div>
@@ -1539,8 +1540,10 @@
 
   function toggleCameraArm(){
     if(cameraState === 'armed'){
+      if(devState === 'RUNNING'){ devStopExperiment('Manual_Stop'); }
       disarmCameraDetection();
     } else {
+      if(devState === 'READY'){ devStartExperiment(); }
       armCameraDetection();
     }
   }
@@ -1549,7 +1552,11 @@
     var btn = document.getElementById('cameraStartBtn');
     if(!btn){ return; }
     var isArmed = (cameraState === 'armed');
-    btn.textContent = isArmed ? '停止监测' : '开始监测';
+    if(devState === 'RUNNING'){
+      btn.textContent = '停止 Dev 采样';
+    } else {
+      btn.textContent = isArmed ? '停止监测' : '开始监测';
+    }
     btn.classList.toggle('bigCamBtn-stop', isArmed);
     btn.classList.toggle('bigCamBtn-primary', !isArmed);
   }
@@ -1634,7 +1641,8 @@
     var sensText = sensSlider ? parseFloat(sensSlider.value).toFixed(1) : '--';
     var shakeText = shakeSlider ? shakeSlider.value + 'px' : '--';
     var modeText = burstModeEnabled ? '连拍模式' : '快捷模式';
-    el.textContent = '灵敏度' + sensText + ' · 防抖' + shakeText + ' · ' + modeText;
+    var devSuffix = (devState === 'READY' || devState === 'RUNNING') ? ' · Dev模式' : '';
+    el.textContent = '灵敏度' + sensText + ' · 防抖' + shakeText + ' · ' + modeText + devSuffix;
   }
 
   function getVisibleVideoRect(video){
@@ -1814,6 +1822,7 @@
   var lastCameraRecordId = null;
 
   function onCameraDetected(t, sourceTag){
+    devRecordCapture(t, sourceTag);
     cameraState = 'cooldown';
     consecutiveHits = 0;
     firstHitTimestamp = null;
@@ -1872,6 +1881,11 @@
         // disarmCameraDetection完全一致的reset组合，只清状态不影响判定逻辑本身。
         resetDetectionBaseline();
         resetDiffMeter();
+        if(devState === 'RUNNING'){
+          // v4.0.1: Dev模式无人值守——一次capture(或一组连拍)完成后立即自动重新武装，
+          // 不等待手动点击，直到11分钟/高频熔断/手动停止三种条件之一发生为止。
+          armCameraDetection();
+        }
       }
     }, 3000);
   }
@@ -1972,6 +1986,240 @@
       renderCameraSessionList();
     }
   }
+
+  // ==== v4.0.0 Dev Mode Data Collector ====
+  // 纯观察者：只读现有算法已经算好的数据(lastGridDiag/sensitivityThreshold等)，
+  // 不重新实现任何一套Baseline/Noise/Capture判定逻辑，不影响普通模式行为。
+  // 默认关闭，不落localStorage，每次启动/进入PWA都是IDLE，需用户主动开启。
+  var DEV_MAX_DURATION_MS = 660000; // 11分钟
+  var DEV_HEARTBEAT_MS = 5000;
+  var DEV_HIGHFREQ_WINDOW_MS = 20000;
+  var DEV_HIGHFREQ_THRESHOLD = 4; // 连续auto重新武装下限约3秒/次，20秒窗口理论上限约7次；阈值4(即5次+)远高于真实60秒走字节奏，同时留有余量不贴着理论上限
+  var DEV_SESSION_KEY = 'cc_devsession_running_v1'; // 仅sessionStorage，用于kill后恢复识别
+
+  var devState = 'IDLE'; // IDLE | READY | RUNNING | STOPPING | STOPPED
+  var devLogBuffer = null;
+  var devHeartbeatTimer = null;
+  var devUiTickTimer = null;
+
+  function devMakeId(prefix){
+    return prefix + Date.now() + '_' + Math.floor(Math.random()*10000);
+  }
+
+  function devSnapshotConfig(){
+    return {
+      gridDensityMode: gridDensityMode,
+      gridCols: gridCols, gridRows: gridRows,
+      sensitivityThreshold: sensitivityThreshold,
+      burstModeEnabled: burstModeEnabled,
+      GRID_GLOBAL_RATIO_LIMIT: GRID_GLOBAL_RATIO_LIMIT,
+      DIFF_METER_MAX: DIFF_METER_MAX
+    };
+  }
+
+  function devSetModeButtonsLocked(locked){
+    var q = document.getElementById('quickModeBtn');
+    var b = document.getElementById('burstModeBtn');
+    [q, b].forEach(function(el){
+      if(!el){ return; }
+      el.disabled = locked;
+      el.style.opacity = locked ? '0.4' : '';
+      el.style.pointerEvents = locked ? 'none' : '';
+    });
+  }
+
+  function devEnterReady(){
+    devLogBuffer = {
+      experimentId: devMakeId('exp'),
+      sessionId: devMakeId('sess'),
+      startTimestamp: null,
+      startPerfTime: null,
+      initialConfig: null,
+      heartbeats: [],
+      captures: [],
+      stopReason: null,
+      dataCompleteness: null,
+      endTimestamp: null
+    };
+    devState = 'READY';
+    devSetModeButtonsLocked(true);
+  }
+
+  function devStartExperiment(){
+    if(devState !== 'READY'){ return; }
+    devLogBuffer.startTimestamp = new Date().toISOString();
+    devLogBuffer.startPerfTime = performance.now();
+    devLogBuffer.initialConfig = devSnapshotConfig();
+    devState = 'RUNNING';
+    try{
+      sessionStorage.setItem(DEV_SESSION_KEY, JSON.stringify(devLogBuffer));
+    }catch(e){}
+    devHeartbeatTimer = setInterval(devRecordHeartbeat, DEV_HEARTBEAT_MS);
+    devUiTickTimer = setInterval(devUiTick, 1000);
+    devUiTick();
+  }
+
+  function devRecordHeartbeat(){
+    if(devState !== 'RUNNING'){ return; }
+    var elapsedMs = performance.now() - devLogBuffer.startPerfTime;
+    devLogBuffer.heartbeats.push({
+      timestamp: new Date().toISOString(),
+      elapsedMs: Math.round(elapsedMs),
+      baselineNoiseLevel: lastGridDiag.maxCellDelta,
+      noiseRatio: lastGridDiag.globalRatio
+    });
+    try{ sessionStorage.setItem(DEV_SESSION_KEY, JSON.stringify(devLogBuffer)); }catch(e){}
+  }
+
+  function devUiTick(){
+    if(devState !== 'RUNNING'){ return; }
+    var elapsedMs = performance.now() - devLogBuffer.startPerfTime;
+    var remainingMs = Math.max(0, DEV_MAX_DURATION_MS - elapsedMs);
+    if(remainingMs <= 0){
+      devStopExperiment('11min_Completed');
+      return;
+    }
+    var remainingSec = Math.ceil(remainingMs/1000);
+    var mm = Math.floor(remainingSec/60), ss = remainingSec%60;
+    updateCameraBadge('Dev ' + mm + ':' + (ss<10?'0':'')+ss + '（捕获：' + devLogBuffer.captures.length + '）');
+  }
+
+  function devRecordCapture(t, sourceTag){
+    if(devState !== 'RUNNING'){ return; }
+    var elapsedMs = performance.now() - devLogBuffer.startPerfTime;
+    var caps = devLogBuffer.captures;
+    var prev = caps.length ? caps[caps.length-1] : null;
+    var entry = {
+      captureIndex: caps.length + 1,
+      timestamp: new Date().toISOString(),
+      elapsedMs: Math.round(elapsedMs),
+      intervalMs: prev ? Math.round(elapsedMs - prev.elapsedMs) : null,
+      peakLevel: lastGridDiag.maxCellDelta,
+      noiseRatio: lastGridDiag.globalRatio,
+      baselineNoiseLevel: lastGridDiag.maxCellDelta,
+      sourceTag: sourceTag || 'camera'
+    };
+    caps.push(entry);
+    // 高频异常熔断：10秒窗口内 >5 次
+    var windowStart = elapsedMs - DEV_HIGHFREQ_WINDOW_MS;
+    var recentCount = 0;
+    for(var i=caps.length-1; i>=0; i--){
+      if(caps[i].elapsedMs >= windowStart){ recentCount++; } else { break; }
+    }
+    if(recentCount > DEV_HIGHFREQ_THRESHOLD){
+      devStopExperiment('High_Freq_Abort');
+    }
+  }
+
+  function devBuildMarkdown(){
+    var b = devLogBuffer;
+    var lines = [];
+    lines.push('# Clock Calibrator Dev Mode 实验日志');
+    lines.push('');
+    lines.push('- Experiment ID: ' + b.experimentId);
+    lines.push('- Session ID: ' + b.sessionId);
+    lines.push('- Start: ' + b.startTimestamp);
+    lines.push('- End: ' + b.endTimestamp);
+    lines.push('- Stop Reason: ' + b.stopReason);
+    lines.push('- Data Completeness: ' + b.dataCompleteness);
+    lines.push('- Capture Count: ' + b.captures.length);
+    lines.push('- Heartbeat Count: ' + b.heartbeats.length);
+    lines.push('');
+    lines.push('## Initial Configuration');
+    lines.push('```json');
+    lines.push(JSON.stringify(b.initialConfig, null, 2));
+    lines.push('```');
+    lines.push('');
+    lines.push('## Captures');
+    lines.push('| # | elapsedMs | intervalMs | peakLevel | noiseRatio | source |');
+    lines.push('|---|---|---|---|---|---|');
+    b.captures.forEach(function(c){
+      lines.push('| ' + c.captureIndex + ' | ' + c.elapsedMs + ' | ' + (c.intervalMs===null?'-':c.intervalMs) + ' | ' + c.peakLevel.toFixed(1) + ' | ' + (c.noiseRatio*100).toFixed(1) + '% | ' + c.sourceTag + ' |');
+    });
+    lines.push('');
+    lines.push('## Heartbeats');
+    lines.push('| elapsedMs | baselineNoiseLevel | noiseRatio |');
+    lines.push('|---|---|---|');
+    b.heartbeats.forEach(function(h){
+      lines.push('| ' + h.elapsedMs + ' | ' + h.baselineNoiseLevel.toFixed(1) + ' | ' + (h.noiseRatio*100).toFixed(1) + '% |');
+    });
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  function devTriggerDownload(){
+    var md = devBuildMarkdown();
+    var blob = new Blob([md], {type:'text/markdown'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'dev-log-' + Date.now() + '.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function devStopExperiment(reason){
+    if(devState !== 'RUNNING'){ return; } // 防重复stop：已STOPPING/STOPPED直接忽略
+    devState = 'STOPPING';
+    if(devHeartbeatTimer){ clearInterval(devHeartbeatTimer); devHeartbeatTimer = null; }
+    if(devUiTickTimer){ clearInterval(devUiTickTimer); devUiTickTimer = null; }
+    devLogBuffer.stopReason = reason;
+    devLogBuffer.dataCompleteness = (reason === '11min_Completed') ? 'Complete' : 'Partial';
+    devLogBuffer.endTimestamp = new Date().toISOString();
+    try{ sessionStorage.removeItem(DEV_SESSION_KEY); }catch(e){}
+    devTriggerDownload();
+    devState = 'STOPPED';
+    devSetModeButtonsLocked(false);
+    updateCameraBadge(cameraState === 'armed' ? '监测中...' : '已停止(点"开始监测"继续)');
+  }
+  // v4.0.1: 切后台不再是终止条件——无人值守跑完11分钟是Dev模式的核心目的，
+  // 只有11分钟自然结束/高频熔断/手动停止三种情况会真正终止实验。
+  // 注：iOS上摄像头视频流本身在切后台时大概率会被系统暂停，这是浏览器/系统层面的限制，
+  // 代码层面无法绕过——切后台期间大概率不会有新的真实frame数据可处理，
+  // 但这属于"物理上不可控的数据缺口"，不等同于App主动放弃/中断实验，所以不再单独标记成一种stopReason。
+
+  function devCheckKilledRecovery(){
+    var raw = null;
+    try{ raw = sessionStorage.getItem(DEV_SESSION_KEY); }catch(e){}
+    if(!raw){ return; }
+    try{
+      var recovered = JSON.parse(raw);
+      devLogBuffer = recovered;
+      devLogBuffer.stopReason = 'Killed_Background';
+      devLogBuffer.dataCompleteness = 'Partial';
+      devLogBuffer.endTimestamp = new Date().toISOString();
+      devTriggerDownload();
+      alert('检测到上次Dev采样被系统中断，已尝试导出已采集的部分数据（捕获' + devLogBuffer.captures.length + '次，心跳' + devLogBuffer.heartbeats.length + '次）。');
+    }catch(e){}
+    try{ sessionStorage.removeItem(DEV_SESSION_KEY); }catch(e){}
+    devState = 'IDLE';
+    devLogBuffer = null;
+  }
+
+  function devHandleDevBtn(){
+    if(devState === 'RUNNING'){ return; } // 运行中不响应，走主按钮"停止Dev采样"
+    if(devState === 'IDLE' || devState === 'STOPPED'){
+      var ok = confirm('进入开发者模式？\n\n开发者模式将进行最长11分钟的数据采集，用于分析视觉检测算法。\n进入后仍可以像普通模式一样调整相关参数。\n只有点击"开始监测"后才会真正开始记录数据。');
+      if(ok){ devEnterReady(); updateCameraBadge('Dev就绪，点\"开始监测\"开始采样'); }
+      return;
+    }
+    if(devState === 'READY'){
+      // 已在READY，重复点击无需特殊处理
+      return;
+    }
+  }
+
+  function devHandleBackNavigation(){
+    if(devState === 'RUNNING'){
+      devStopExperiment('Manual_Stop'); // 离开前自动结算导出，不丢数据、不额外弹确认
+    }
+    devState = 'IDLE';
+    devLogBuffer = null;
+    devSetModeButtonsLocked(false);
+  }
+  // ==== End v4.0.0 Dev Mode Data Collector ====
 
 
   function renderCameraSessionList(){
@@ -2976,6 +3224,7 @@
   }
 
   function init(){
+    devCheckKilledRecovery();
     loadRecords();
     loadSessionMeta();
     loadSeason();
@@ -3053,8 +3302,10 @@
     document.getElementById('openCameraBigBtn').addEventListener('click', function(){ showScreen('camera'); });
     document.getElementById('cameraBackBtn').addEventListener('click', function(){
       clearCameraSessionCaptures();
+      devHandleBackNavigation();
       showScreen('capture');
     });
+    document.getElementById('devModeBtn').addEventListener('click', function(){ devHandleDevBtn(); });
     document.getElementById('cameraStartBtn').addEventListener('click', function(){ toggleCameraArm(); });
     document.getElementById('quickModeBtn').addEventListener('click', function(){
       burstModeEnabled = false;
