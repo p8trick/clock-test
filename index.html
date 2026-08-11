@@ -351,7 +351,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.1</span>
+      <span class="versiontag" id="versionTag">v4.0.2</span>
     </div>
 
     <div id="timePanel">
@@ -625,7 +625,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.1</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.2</div>
   </div>
 
 </div>
@@ -2160,6 +2160,8 @@
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
   }
 
+  var devPendingBackgroundExport = false;
+
   function devStopExperiment(reason){
     if(devState !== 'RUNNING'){ return; } // 防重复stop：已STOPPING/STOPPED直接忽略
     devState = 'STOPPING';
@@ -2168,17 +2170,34 @@
     devLogBuffer.stopReason = reason;
     devLogBuffer.dataCompleteness = (reason === '11min_Completed') ? 'Complete' : 'Partial';
     devLogBuffer.endTimestamp = new Date().toISOString();
-    try{ sessionStorage.removeItem(DEV_SESSION_KEY); }catch(e){}
-    devTriggerDownload();
+    if(reason === 'Interrupted_Background'){
+      // v4.0.2: 切后台=当场停机，数据到此为止，不再尝试恢复/续接，避免产生"断了又续"的
+      // 支离破碎日志误导AI分析。但切后台瞬间触发下载UI的可靠性没有把握，
+      // 所以下载动作延后到用户回到前台的那一刻再触发；期间保留sessionStorage镜像，
+      // 万一回前台之前App被系统彻底杀掉，还能走下面的killed-recovery路径捞回来。
+      devPendingBackgroundExport = true;
+      try{ sessionStorage.setItem(DEV_SESSION_KEY, JSON.stringify(devLogBuffer)); }catch(e){}
+    } else {
+      try{ sessionStorage.removeItem(DEV_SESSION_KEY); }catch(e){}
+      devTriggerDownload();
+    }
     devState = 'STOPPED';
     devSetModeButtonsLocked(false);
     updateCameraBadge(cameraState === 'armed' ? '监测中...' : '已停止(点"开始监测"继续)');
   }
-  // v4.0.1: 切后台不再是终止条件——无人值守跑完11分钟是Dev模式的核心目的，
-  // 只有11分钟自然结束/高频熔断/手动停止三种情况会真正终止实验。
-  // 注：iOS上摄像头视频流本身在切后台时大概率会被系统暂停，这是浏览器/系统层面的限制，
-  // 代码层面无法绕过——切后台期间大概率不会有新的真实frame数据可处理，
-  // 但这属于"物理上不可控的数据缺口"，不等同于App主动放弃/中断实验，所以不再单独标记成一种stopReason。
+
+  // 切后台/锁屏立即终止实验(只在RUNNING时生效，不影响蓝牙焦点那个已有的visibilitychange监听)
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden && devState === 'RUNNING'){
+      devStopExperiment('Interrupted_Background');
+    }
+    if(!document.hidden && devPendingBackgroundExport){
+      devPendingBackgroundExport = false;
+      try{ sessionStorage.removeItem(DEV_SESSION_KEY); }catch(e){}
+      devTriggerDownload();
+      alert('检测到刚才切到了后台，Dev采样已在切出瞬间停止并已导出（捕获' + devLogBuffer.captures.length + '次，心跳' + devLogBuffer.heartbeats.length + '次）。');
+    }
+  });
 
   function devCheckKilledRecovery(){
     var raw = null;
