@@ -353,7 +353,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.9</span>
+      <span class="versiontag" id="versionTag">v4.0.10</span>
     </div>
 
     <div id="timePanel">
@@ -643,7 +643,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.9</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.10</div>
   </div>
 
 </div>
@@ -2148,6 +2148,7 @@
     var elapsedMs = performance.now() - devLogBuffer.startPerfTime;
     var caps = devLogBuffer.captures;
     var prev = caps.length ? caps[caps.length-1] : null;
+    var tag = sourceTag || 'camera';
     var entry = {
       captureIndex: caps.length + 1,
       timestamp: new Date().toISOString(),
@@ -2156,7 +2157,13 @@
       peakLevel: lastGridDiag.maxCellDelta,
       noiseRatio: lastGridDiag.globalRatio,
       baselineNoiseLevel: lastGridDiag.maxCellDelta,
-      sourceTag: sourceTag || 'camera'
+      // v4.0.10: 补上检测延迟，口径跟普通records(1859行)一致——只有真正
+      // 自动检测触发的才有意义记录，手动强制拍(camera-manual)记null，
+      // 目的是让11分钟快速模式的多次独立事件也能喂给AI做延迟抖动统计，
+      // 不需要靠连拍模式凑组(2.2节的9-10ms数据来自手动连拍走的另一条
+      // records管线，跟Dev导出无关，这里是给Dev日志单独补齐这项能力)。
+      detectionLatencyMs: (tag === 'camera') ? cameraDiagStats.estLatencyMs : null,
+      sourceTag: tag
     };
     caps.push(entry);
     // 高频异常熔断：10秒窗口内 >5 次
@@ -2190,10 +2197,10 @@
     lines.push('```');
     lines.push('');
     lines.push('## Captures');
-    lines.push('| # | timestamp | elapsedMs | intervalMs | peakLevel | noiseRatio | source |');
-    lines.push('|---|---|---|---|---|---|---|');
+    lines.push('| # | timestamp | elapsedMs | intervalMs | peakLevel | noiseRatio | latencyMs | source |');
+    lines.push('|---|---|---|---|---|---|---|---|');
     b.captures.forEach(function(c){
-      lines.push('| ' + c.captureIndex + ' | ' + c.timestamp + ' | ' + c.elapsedMs + ' | ' + (c.intervalMs===null?'-':c.intervalMs) + ' | ' + c.peakLevel.toFixed(1) + ' | ' + (c.noiseRatio*100).toFixed(1) + '% | ' + c.sourceTag + ' |');
+      lines.push('| ' + c.captureIndex + ' | ' + c.timestamp + ' | ' + c.elapsedMs + ' | ' + (c.intervalMs===null?'-':c.intervalMs) + ' | ' + c.peakLevel.toFixed(1) + ' | ' + (c.noiseRatio*100).toFixed(1) + '% | ' + (typeof c.detectionLatencyMs === 'number' ? Math.round(c.detectionLatencyMs) : '-') + ' | ' + c.sourceTag + ' |');
     });
     lines.push('');
     lines.push('## Heartbeats');
