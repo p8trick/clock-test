@@ -322,9 +322,16 @@
 
   .bundlecard{border-bottom:1px solid var(--panel-edge); padding:10px 0;}
   .bundlecard:last-child{border-bottom:none;}
+  .bundlecard.calmarked{background:rgba(255,138,61,.06);}
   .bundlehead{display:flex; justify-content:space-between; align-items:flex-start; cursor:pointer;}
   .bundlehead .lt{font-family:var(--mono); color:var(--ink); font-size:13px;}
   .bundlehead .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:3px; line-height:1.6;}
+  .bundlehead .statline{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--ink-dim);}
+  .bundlehead .statline.st-anchor{color:var(--good);}
+  .bundlehead .statline.st-raw{color:#e8c547;}
+  .bundlehead .statline.st-excluded{color:var(--ink-dim);}
+  .bundlehead .noteinput{margin-top:4px;}
+  .bundlehead .bundleheadcalrow{margin-top:5px;}
   .continuitytag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
   .continuitytag.warn{border-color:var(--bad); color:var(--bad);}
   .continuitytag.q-excellent{border-color:var(--good); color:var(--good);}
@@ -353,7 +360,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.10</span>
+      <span class="versiontag" id="versionTag">v4.1.1</span>
     </div>
 
     <div id="timePanel">
@@ -643,7 +650,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.10</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.1</div>
   </div>
 
 </div>
@@ -712,6 +719,9 @@
   var SESSION_META_KEY = 'cc_sessionmeta_v1';
   var sessionMeta = {};
   var expandedSessionIds = {};
+  // v4.1.1 每次 computeStats() 重算后，缓存每个连拍会话最终以什么形式参与了统计
+  // （合并锚点 / 因样本不足按原始3条参与 / 排在校准点之前被排除），供折叠头展示用
+  var lastCollapsedBySession = {};
 
   function loadSessionMeta(){
     try{
@@ -780,6 +790,8 @@
     var totalCycles = gaps.length + missedTotal;
     var compensatedAvgCycleMs = totalCycles > 0 ? (actualSpanMs / totalCycles) : avgDeltaMs;
     var quality = classifySessionQuality(gaps);
+    // v4.1.1 保留用户已填写的整组备注，避免被重算覆盖
+    var existingNote = (sessionMeta[sessionId] && sessionMeta[sessionId].note) || '';
     sessionMeta[sessionId] = {
       count: members.length,
       isContinuous: isContinuous,
@@ -791,8 +803,15 @@
       compensatedAvgCycleMs: compensatedAvgCycleMs,
       quality: quality.tier,
       qualityLabel: quality.label,
-      completedAt: Date.now()
+      completedAt: Date.now(),
+      note: existingNote
     };
+    saveSessionMeta();
+  }
+
+  function updateSessionNote(sessionId, val){
+    if(!sessionMeta[sessionId]){ sessionMeta[sessionId] = {}; }
+    sessionMeta[sessionId].note = val;
     saveSessionMeta();
   }
 
@@ -1982,6 +2001,7 @@
     records = records.filter(function(r){ return r.sessionId !== sessionId; });
     recomputeAllDeltas();
     delete sessionMeta[sessionId];
+    delete lastCollapsedBySession[sessionId];
     saveSessionMeta();
     saveRecords();
     renderLog();
@@ -2044,7 +2064,9 @@
   }
 
   function devSnapshotConfig(){
+    var vEl = document.getElementById('versionTag');
     return {
+      appVersion: vEl ? vEl.textContent : null,
       gridDensityMode: gridDensityMode,
       gridCols: gridCols, gridRows: gridRows,
       sensitivityThreshold: sensitivityThreshold,
@@ -2463,6 +2485,33 @@
     renderStats();
   }
 
+  // v4.1.1 连拍会话设为校准点：标在组内时间最早的一条成员上，
+  // 这样 getActiveRecords() 按时间切割时，整组三条都会保留在有效集合里，
+  // 后续 collapseSessionsForRegression() 会把这组自动合并成一条去抖动的平均锚点参与统计——
+  // 校准点本身不需要单独实现"平均值"逻辑，通用合并机制已经覆盖了这个场景。
+  function setSessionCalibration(sessionId){
+    var members = records.filter(function(r){ return r.sessionId === sessionId; }).sort(function(a,b){ return a.t - b.t; });
+    if(!members.length){ return; }
+    var earliestId = members[0].id;
+    for(var i=0;i<records.length;i++){
+      records[i].isCalibration = (records[i].id === earliestId);
+    }
+  }
+
+  function toggleSessionCalibration(sessionId){
+    var members = records.filter(function(r){ return r.sessionId === sessionId; });
+    if(!members.length){ return; }
+    var isCurrentlyCal = members.some(function(r){ return r.isCalibration; });
+    if(isCurrentlyCal){
+      members.forEach(function(r){ r.isCalibration = false; });
+    } else {
+      setSessionCalibration(sessionId);
+    }
+    saveRecords();
+    renderLog();
+    renderStats();
+  }
+
   function renderSingleLogRow(r){
     var row = document.createElement('div');
     row.className = 'logrow' + (r.isCalibration ? ' calmarked' : '');
@@ -2533,11 +2582,33 @@
     return row;
   }
 
+  // v4.1.1 折叠头"参与统计"状态行——直接读 computeStats() 顺手缓存的结果，
+  // 保证展示的数值和真正参与回归拟合的是同一次计算产物
+  function formatSessionStatsLine(sessionId, memberCount){
+    var st = lastCollapsedBySession[sessionId];
+    if(!st){ return { cls:'st-pending', text:'参与统计: 尚未计算' }; }
+    if(st.status === 'anchor'){
+      var sec = (st.avgY / 1000).toFixed(2);
+      return { cls:'st-anchor', text:'参与统计: 已合并为锚点 · 锚点时间 ' + shortDT(st.meanT) + ' · 相位值 ' + Math.round(st.avgY) + 'ms(' + sec + 's)' };
+    }
+    if(st.status === 'raw'){
+      return { cls:'st-raw', text:'参与统计: 当前总样本不足，本组未合并，' + memberCount + '条按原始记录分别参与' };
+    }
+    if(st.status === 'not_enough_data'){
+      return { cls:'st-excluded', text:'参与统计: 当前总数据不足3条，尚未计算' };
+    }
+    if(st.status === 'excluded_before_calibration'){
+      return { cls:'st-excluded', text:'参与统计: 排在校准点之前，已被排除' };
+    }
+    return { cls:'st-pending', text:'参与统计: 尚未计算' };
+  }
+
   function renderBundleCard(sessionId, members){
     var meta = sessionMeta[sessionId];
     var expanded = !!expandedSessionIds[sessionId];
+    var sessionIsCal = members.some(function(r){ return r.isCalibration; });
     var card = document.createElement('div');
-    card.className = 'bundlecard';
+    card.className = 'bundlecard' + (sessionIsCal ? ' calmarked' : '');
 
     var head = document.createElement('div');
     head.className = 'bundlehead';
@@ -2548,11 +2619,12 @@
     lt.textContent = '🔗连拍会话 · ' + members[members.length-1].display + ' · 共' + members.length + '次';
     var ld = document.createElement('div');
     ld.className = 'ld';
+    var deltaText = (members[0].deltaMs !== null && members[0].deltaMs !== undefined) ? ('距上次 ' + formatInterval(members[0].deltaMs) + ' · ') : '';
     if(meta){
       var avgLatText = (typeof meta.avgLatencyMs === 'number') ? (Math.round(meta.avgLatencyMs) + 'ms') : '--';
-      ld.textContent = '平均延迟 ' + avgLatText + ' · 平均间隔 ' + formatInterval(meta.avgDeltaMs) + ' · 补偿后平均周期 ' + formatInterval(meta.compensatedAvgCycleMs);
+      ld.textContent = deltaText + '平均延迟 ' + avgLatText + ' · 平均间隔 ' + formatInterval(meta.avgDeltaMs) + ' · 补偿后平均周期 ' + formatInterval(meta.compensatedAvgCycleMs);
     } else {
-      ld.textContent = '会话数据不完整(可能是旧版本记录)';
+      ld.textContent = deltaText + '会话数据不完整(可能是旧版本记录)';
     }
     var tag = document.createElement('span');
     if(meta && meta.quality){
@@ -2571,7 +2643,28 @@
       tag.textContent = '连续';
     }
     ld.appendChild(tag);
-    left.appendChild(lt); left.appendChild(ld);
+
+    var statLine = document.createElement('div');
+    var statInfo = formatSessionStatsLine(sessionId, members.length);
+    statLine.className = 'statline ' + statInfo.cls;
+    statLine.textContent = statInfo.text;
+
+    var note = document.createElement('input');
+    note.className = 'noteinput';
+    note.placeholder = '整组备注';
+    note.value = (meta && meta.note) || '';
+    note.addEventListener('click', function(e){ e.stopPropagation(); });
+    note.addEventListener('change', function(){ updateSessionNote(sessionId, note.value); });
+
+    var calRow = document.createElement('div');
+    calRow.className = 'bundleheadcalrow';
+    var calBtn = document.createElement('button');
+    calBtn.className = 'calbtn' + (sessionIsCal ? ' calactive' : '');
+    calBtn.textContent = sessionIsCal ? '\u2605 校准点(点击取消)' : '设为校准点';
+    calBtn.addEventListener('click', function(e){ e.stopPropagation(); toggleSessionCalibration(sessionId); });
+    calRow.appendChild(calBtn);
+
+    left.appendChild(lt); left.appendChild(ld); left.appendChild(statLine); left.appendChild(note); left.appendChild(calRow);
 
     var expandBtn = document.createElement('button');
     expandBtn.className = 'bundleExpandBtn';
@@ -2640,7 +2733,16 @@
     return card;
   }
 
+  // v4.1.1 renderLog() 不一定总跟在 renderStats() 后面调用（比如连拍刚完成时），
+  // 这里保底跑一遍两季的 computeStats() 只为刷新 lastCollapsedBySession 缓存，
+  // 保证折叠头显示的"参与统计"状态不会用到上一次数据变更前的旧值。
+  function refreshSessionCollapseCache(){
+    computeStats('summer');
+    computeStats('winter');
+  }
+
   function renderLog(){
+    refreshSessionCollapseCache();
     var log = document.getElementById('log');
     if(!records.length){
       log.innerHTML = '<div class="logempty">尚无记录</div>';
@@ -2800,9 +2902,29 @@
     return collapsed;
   }
 
+  // v4.1.1 每次重算，先把这个季节所有已知会话的缓存状态重置一遍，
+  // 再按实际结果覆盖——这样"排在校准点之前被切掉"的会话也能被正确标记，
+  // 而不是停留在上一次计算时的旧状态。
+  function resetSessionCollapseCache(season, activeSessionIds){
+    records.forEach(function(r){
+      if(r.sessionId && (r.season || 'summer') === season){
+        if(!activeSessionIds[r.sessionId]){
+          lastCollapsedBySession[r.sessionId] = { status:'excluded_before_calibration' };
+        }
+      }
+    });
+  }
+
   function computeStats(season){
     var active = getActiveRecords(season);
+    var activeSessionIds = {};
+    active.forEach(function(r){ if(r.sessionId){ activeSessionIds[r.sessionId] = true; } });
+    resetSessionCollapseCache(season, activeSessionIds);
+
     if(active.length < 3){
+      Object.keys(activeSessionIds).forEach(function(sid){
+        lastCollapsedBySession[sid] = { status:'not_enough_data' };
+      });
       return { ok:false, count: active.length, needed: 3 - active.length };
     }
 
@@ -2814,7 +2936,22 @@
     var prelimSlope = prelimReg.slope > 0 ? prelimReg.slope : 0;
 
     var collapsed = collapseSessionsForRegression(active, prelimSlope);
-    if(collapsed.length < 3){ collapsed = active; }
+    var fellBackToRaw = collapsed.length < 3;
+    if(fellBackToRaw){ collapsed = active; }
+
+    Object.keys(activeSessionIds).forEach(function(sid){
+      if(fellBackToRaw){
+        lastCollapsedBySession[sid] = { status:'raw' };
+        return;
+      }
+      var synthetic = null;
+      for(var ci=0; ci<collapsed.length; ci++){
+        if(collapsed[ci].isSessionSynthetic && collapsed[ci].sessionId === sid){ synthetic = collapsed[ci]; break; }
+      }
+      lastCollapsedBySession[sid] = synthetic
+        ? { status:'anchor', meanT: synthetic.t, avgY: synthetic.explicitDriftMs, memberCount: synthetic.memberCount }
+        : { status:'raw' };
+    });
 
     var t0 = collapsed[0].t;
     var xs = collapsed.map(function(r){ return (r.t - t0) / 86400000; });
