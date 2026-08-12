@@ -178,8 +178,8 @@
   .diffMeterBar{position:relative; height:15px; background:#1a1e25; border:1px solid var(--panel-edge); border-radius:6px; overflow:hidden;}
   .diffMeterFill{position:absolute; top:0; left:0; bottom:0; width:0%; background:var(--good); transition:width .05s linear, background .1s linear;}
   .diffMeterFill.triggered{background:var(--accent);}
-  .diffMeterFill.overWarn{background:#ffd93d;}
-  .diffMeterFill.overDanger{background:var(--bad);}
+  .diffMeterFill.overWarn{background:#ffd93d; transition:width .05s linear;}
+  .diffMeterFill.overDanger{background:var(--bad); transition:width .05s linear;}
   .diffMeterThreshold{position:absolute; top:0; bottom:0; width:3px; background:#fff; left:0%;}
   .diffMeterLabel{margin-top:3px; text-align:center; font-size:11px; font-family:var(--mono); color:var(--ink-dim);}
   .paramsMetaRow{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:8px;}
@@ -353,7 +353,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.0.7</span>
+      <span class="versiontag" id="versionTag">v4.0.9</span>
     </div>
 
     <div id="timePanel">
@@ -643,7 +643,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.7</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.0.9</div>
   </div>
 
 </div>
@@ -1908,6 +1908,14 @@
         // disarmCameraDetection完全一致的reset组合，只清状态不影响判定逻辑本身。
         resetDetectionBaseline();
         resetDiffMeter();
+        // v4.0.9: 手动连拍第3张结束后ROI橘色/电平表残留高位的根因排查——
+        // Dev模式收尾多了下面armCameraDetection()这一步，其内部会调用
+        // computeGridDims()把lastCellChanged重新分配为全零数组，相当于
+        // 比手动模式多一层保险，这也是Dev模式无人值守从未复现过这个bug的原因。
+        // 这里把这层保险原样搬到手动路径，但不触发armCameraDetection()本身，
+        // 不强制重新武装，行为仍是"拍完就停，等用户手动点开始监测"。
+        computeGridDims();
+        clearGridOverlayCanvas();
         if(devState === 'RUNNING'){
           // v4.0.1: Dev模式无人值守——一次capture(或一组连拍)完成后立即自动重新武装，
           // 不等待手动点击，直到11分钟/高频熔断/手动停止三种条件之一发生为止。
