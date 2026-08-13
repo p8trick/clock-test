@@ -328,6 +328,8 @@
   }
   .calbtn.calactive{border-color:var(--accent); color:var(--accent);}
   .calbtn.calmarked-locked{cursor:default;}
+  .calbtn.calbtn-locked{color:var(--ink-dim); opacity:.6; cursor:default;}
+  .lx.lx-locked{color:var(--ink-dim); opacity:.4; cursor:default;}
 
   .bundlecard{border-bottom:1px solid var(--panel-edge); padding:10px 0;}
   .bundlecard:last-child{border-bottom:none;}
@@ -369,7 +371,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.5</span>
+      <span class="versiontag" id="versionTag">v4.1.6</span>
     </div>
 
     <div id="timePanel">
@@ -541,10 +543,6 @@
           <label for="manualLatencyInput" style="font-size:12px; color:var(--ink-dim); margin-right:8px;">扣除系统延迟(ms，可留空)</label>
           <input type="number" min="0" step="1" id="manualLatencyInput" class="clockinput" style="width:80px;" placeholder="0">
         </div>
-        <div class="chkrow">
-          <input type="checkbox" id="manualCalChk">
-          <label for="manualCalChk">标记为校准点(该时刻挂钟已被调至与真实时间一致)</label>
-        </div>
         <div class="mbtnrow">
           <button class="iconbtn" id="manualCancelBtn">取消</button>
           <button class="iconbtn" id="manualConfirmBtn">确认添加</button>
@@ -671,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.5</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.6</div>
   </div>
 
 </div>
@@ -785,24 +783,114 @@
     saveDriftPeriods();
   }
 
-  var PRECAL_COLLAPSE_KEY = 'cc_precal_collapsed_v1';
-  var preCalCollapsed = false;
+  // v4.1.6 数据包(打包)系统——替代 v4.1.3 那种"校准点之前全部合并成一坨"的旧设计。
+  // 每个包是显式记录的成员id列表，边界一旦确定就不会因为以后数据增长而自动变化，
+  // 也不会因为任何重算逻辑而被悄悄合并。
+  var PACKAGES_KEY = 'cc_packages_v1';
+  var dataPackages = [];
 
-  function loadPreCalCollapsed(){
+  function loadPackages(){
     try{
-      preCalCollapsed = localStorage.getItem(PRECAL_COLLAPSE_KEY) === '1';
-    }catch(e){ preCalCollapsed = false; }
+      var raw = localStorage.getItem(PACKAGES_KEY);
+      dataPackages = raw ? JSON.parse(raw) : [];
+    }catch(e){ dataPackages = []; }
   }
 
-  function savePreCalCollapsed(){
-    try{ localStorage.setItem(PRECAL_COLLAPSE_KEY, preCalCollapsed ? '1' : '0'); }catch(e){}
+  function savePackages(){
+    try{ localStorage.setItem(PACKAGES_KEY, JSON.stringify(dataPackages)); }catch(e){}
   }
 
-  function togglePreCalCollapse(){
-    preCalCollapsed = !preCalCollapsed;
-    savePreCalCollapsed();
+  // 校准切换时间线——每次真正切换校准点都记一笔，不管当时算不算得出漂移率。
+  // "历史校准分期"(driftPeriods)按季节分开算，数据不够时不会留下记录，不可靠，
+  // 所以打包边界必须依赖这份独立、始终完整的记录，否则可能把两次真实切换之间的
+  // 数据混进同一个包，包自己的漂移率就会因为中间那次"相位跳变"算出垃圾数字。
+  var CAL_SWITCH_LOG_KEY = 'cc_calswitchlog_v1';
+  var calibrationSwitchLog = [];
+
+  function loadCalSwitchLog(){
+    try{
+      var raw = localStorage.getItem(CAL_SWITCH_LOG_KEY);
+      calibrationSwitchLog = raw ? JSON.parse(raw) : [];
+    }catch(e){ calibrationSwitchLog = []; }
+  }
+
+  function saveCalSwitchLog(){
+    try{ localStorage.setItem(CAL_SWITCH_LOG_KEY, JSON.stringify(calibrationSwitchLog)); }catch(e){}
+  }
+
+  // 包内成员自己单独跑一遍轻量回归，只用来给这个包一个"大概每天变慢多少"的参考数字，
+  // 不区分季节(原始列表本来就是混季节的)，也不接入 collapseSessionsForRegression 那套
+  // 面向"正式预测"的复杂锚点合并——这里只是历史记录层面的摘要，要求没有那么高。
+  function computePackageDrift(members){
+    if(members.length < 3){ return { ok:false, count: members.length }; }
+    var sorted = members.slice().sort(function(a,b){ return a.t - b.t; });
+    var t0 = sorted[0].t;
+    var xs = sorted.map(function(r){ return (r.t - t0) / 86400000; });
+    var ys = computeLagSeries(sorted);
+    var ws = computeWeights(sorted);
+    var reg = weightedRegression(xs, ys, ws);
+    if(!reg || !(reg.slope > 0)){ return { ok:false, count: sorted.length, noDrift:true }; }
+    return { ok:true, count: sorted.length, driftSecPerDay: reg.slope / 1000, r2: reg.r2 };
+  }
+
+  // 找出"还没被任何包认领、且早于当前生效校准点"的散装数据，按 calibrationSwitchLog
+  // 里记录的历次真实切换时间点切成若干段——每一段都保证不横跨任何一次真实切换。
+  // 只有最早的一段(segments[0])允许被打包，其余的哪怕已经可以看到，也要等前面的先打包。
+  function findAllPendingSegments(){
+    var calRecord = null;
+    for(var ci=0; ci<records.length; ci++){ if(records[ci].isCalibration){ calRecord = records[ci]; break; } }
+    if(!calRecord){ return []; }
+    var liveBoundary = calRecord.t;
+
+    var packagedIds = {};
+    dataPackages.forEach(function(pkg){ pkg.recordIds.forEach(function(id){ packagedIds[id] = true; }); });
+    var loose = records.filter(function(r){ return r.t < liveBoundary && !packagedIds[r.id]; }).sort(function(a,b){ return a.t - b.t; });
+    if(!loose.length){ return []; }
+
+    var lastPackagedEndT = -Infinity;
+    if(dataPackages.length){
+      var lastPkg = dataPackages[dataPackages.length - 1];
+      lastPkg.recordIds.forEach(function(id){
+        var rec = null;
+        for(var i=0;i<records.length;i++){ if(records[i].id === id){ rec = records[i]; break; } }
+        if(rec && rec.t > lastPackagedEndT){ lastPackagedEndT = rec.t; }
+      });
+    }
+
+    var boundaries = calibrationSwitchLog
+      .map(function(e){ return e.t; })
+      .filter(function(t){ return t > lastPackagedEndT && t <= liveBoundary; })
+      .sort(function(a,b){ return a - b; });
+    if(!boundaries.length || boundaries[boundaries.length-1] !== liveBoundary){
+      boundaries.push(liveBoundary);
+    }
+
+    var segments = [];
+    var cursor = 0;
+    boundaries.forEach(function(b){
+      var seg = [];
+      while(cursor < loose.length && loose[cursor].t < b){
+        seg.push(loose[cursor]);
+        cursor++;
+      }
+      if(seg.length){ segments.push(seg); }
+    });
+    return segments;
+  }
+
+  function packageNextSegment(){
+    var pending = findAllPendingSegments();
+    if(!pending.length){ return; }
+    var segment = pending[0];
+    dataPackages.push({
+      id: 'pkg_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      recordIds: segment.map(function(r){ return r.id; }),
+      packagedAt: Date.now()
+    });
+    savePackages();
     renderLog();
   }
+
 
   function loadRecords(){
     try{
@@ -1244,7 +1332,7 @@
     recomputeAllDeltas();
   }
 
-  function manualAddRecord(t, markCal, latencyMs){
+  function manualAddRecord(t, latencyMs){
     if(isNaN(t)){ alert('时间不完整或无效，请检查每一格数字'); return false; }
     var d = new Date(t);
     var rec = {
@@ -1262,7 +1350,6 @@
       sessionId: null
     };
     insertRecordSorted(rec);
-    if(markCal){ setSingleCalibration(rec.id); }
     saveRecords();
     renderLog();
     renderStats();
@@ -2578,6 +2665,23 @@
     }
   }
 
+  // v4.1.6 如果新校准点落在"最新那一个"数据包里，说明用户正在展开它重新选边界——
+  // 按讨论过的设计，这一步会把整个包解散（不是裁剪），成员重新变回散装数据。
+  // 如果落在更早、已经被锁定的包里，直接拒绝（正常 UI 下不会走到这里，这里只是保底）。
+  function dissolveMostRecentPackageIfContains(recordId){
+    if(!dataPackages.length){ return true; }
+    var lastPkg = dataPackages[dataPackages.length - 1];
+    if(lastPkg.recordIds.indexOf(recordId) !== -1){
+      dataPackages.pop();
+      savePackages();
+      return true;
+    }
+    for(var i=0;i<dataPackages.length-1;i++){
+      if(dataPackages[i].recordIds.indexOf(recordId) !== -1){ return false; }
+    }
+    return true;
+  }
+
   // v4.1.5 校准点不再允许"原地点掉"——已经是当前校准点时点击不做任何事。
   // 要更换校准点，必须去点另一条记录的"设为校准点"，这样系统永远保证：
   // 只要 records 不为空，就一定有且只有一条处于校准点状态，不会退回"没有校准点=
@@ -2586,7 +2690,10 @@
     var target = null;
     for(var i=0;i<records.length;i++){ if(records[i].id === id){ target = records[i]; break; } }
     if(!target || target.isCalibration){ return; }
+    if(!dissolveMostRecentPackageIfContains(id)){ return; }
     archiveCurrentPeriods(target.t, id);
+    calibrationSwitchLog.push({ recordId:id, t: target.t });
+    saveCalSwitchLog();
     setSingleCalibration(id);
     saveRecords();
     renderLog();
@@ -2613,7 +2720,10 @@
     var isCurrentlyCal = members.some(function(r){ return r.isCalibration; });
     if(isCurrentlyCal){ return; }
     var earliest = members.slice().sort(function(a,b){ return a.t - b.t; })[0];
+    if(!dissolveMostRecentPackageIfContains(earliest.id)){ return; }
     archiveCurrentPeriods(earliest.t, earliest.id);
+    calibrationSwitchLog.push({ recordId: earliest.id, t: earliest.t });
+    saveCalSwitchLog();
     setSessionCalibration(sessionId);
     saveRecords();
     renderLog();
@@ -2621,7 +2731,8 @@
     renderPeriodsList();
   }
 
-  function renderSingleLogRow(r){
+
+  function renderSingleLogRow(r, locked){
     var row = document.createElement('div');
     row.className = 'logrow' + (r.isCalibration ? ' calmarked' : '');
     var left = document.createElement('div');
@@ -2654,6 +2765,7 @@
     clockInput.type = 'time';
     clockInput.className = 'clockinput';
     clockInput.value = r.clockDisplay || '';
+    clockInput.disabled = !!locked;
     clockInput.addEventListener('change', function(){ setClockDisplay(r.id, clockInput.value); });
     var driftSpan = document.createElement('span');
     driftSpan.className = 'driftresult';
@@ -2674,19 +2786,31 @@
     note.className = 'noteinput';
     note.placeholder = '备注';
     note.value = r.note || '';
+    note.disabled = !!locked;
     note.addEventListener('change', function(){ updateNote(r.id, note.value); });
     var btnrow = document.createElement('div');
     btnrow.className = 'logbtnrow';
     var calBtn = document.createElement('button');
-    calBtn.className = 'calbtn' + (r.isCalibration ? ' calactive calmarked-locked' : '');
-    calBtn.textContent = r.isCalibration ? '\u2605 当前校准点' : '设为校准点';
-    calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
+    if(locked){
+      calBtn.className = 'calbtn calbtn-locked';
+      calBtn.textContent = '🔒 已锁定期次，不可更改';
+      calBtn.disabled = true;
+    } else {
+      calBtn.className = 'calbtn' + (r.isCalibration ? ' calactive calmarked-locked' : '');
+      calBtn.textContent = r.isCalibration ? '\u2605 当前校准点' : '设为校准点';
+      calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
+    }
     btnrow.appendChild(calBtn);
     left.appendChild(lt); left.appendChild(ld); left.appendChild(clockRow); left.appendChild(note); left.appendChild(btnrow);
     var del = document.createElement('button');
-    del.className = 'lx' + (pendingDeleteId === r.id ? ' lxconfirm' : '');
-    del.textContent = (pendingDeleteId === r.id) ? '确认删除' : '\u00d7';
-    del.addEventListener('click', function(){ requestDelete(r.id); });
+    if(locked){
+      del.className = 'lx lx-locked';
+      del.disabled = true;
+    } else {
+      del.className = 'lx' + (pendingDeleteId === r.id ? ' lxconfirm' : '');
+      del.textContent = (pendingDeleteId === r.id) ? '确认删除' : '\u00d7';
+      del.addEventListener('click', function(){ requestDelete(r.id); });
+    }
     row.appendChild(left); row.appendChild(del);
     return row;
   }
@@ -2712,7 +2836,7 @@
     return { cls:'st-pending', text:'参与统计: 尚未计算' };
   }
 
-  function renderBundleCard(sessionId, members){
+  function renderBundleCard(sessionId, members, locked){
     var meta = sessionMeta[sessionId];
     var expanded = !!expandedSessionIds[sessionId];
     var sessionIsCal = members.some(function(r){ return r.isCalibration; });
@@ -2762,15 +2886,22 @@
     note.className = 'noteinput';
     note.placeholder = '整组备注';
     note.value = (meta && meta.note) || '';
+    note.disabled = !!locked;
     note.addEventListener('click', function(e){ e.stopPropagation(); });
     note.addEventListener('change', function(){ updateSessionNote(sessionId, note.value); });
 
     var calRow = document.createElement('div');
     calRow.className = 'bundleheadcalrow';
     var calBtn = document.createElement('button');
-    calBtn.className = 'calbtn' + (sessionIsCal ? ' calactive calmarked-locked' : '');
-    calBtn.textContent = sessionIsCal ? '\u2605 当前校准点' : '设为校准点';
-    calBtn.addEventListener('click', function(e){ e.stopPropagation(); toggleSessionCalibration(sessionId); });
+    if(locked){
+      calBtn.className = 'calbtn calbtn-locked';
+      calBtn.textContent = '🔒 已锁定期次，不可更改';
+      calBtn.disabled = true;
+    } else {
+      calBtn.className = 'calbtn' + (sessionIsCal ? ' calactive calmarked-locked' : '');
+      calBtn.textContent = sessionIsCal ? '\u2605 当前校准点' : '设为校准点';
+      calBtn.addEventListener('click', function(e){ e.stopPropagation(); toggleSessionCalibration(sessionId); });
+    }
     calRow.appendChild(calBtn);
 
     left.appendChild(lt); left.appendChild(ld); left.appendChild(statLine); left.appendChild(note); left.appendChild(calRow);
@@ -2813,6 +2944,7 @@
         mInput.type = 'time';
         mInput.className = 'clockinput';
         mInput.value = m.clockDisplay || '';
+        mInput.disabled = !!locked;
         mInput.addEventListener('click', function(e){ e.stopPropagation(); });
         mInput.addEventListener('change', function(){ setClockDisplay(m.id, mInput.value); });
         var mDrift = document.createElement('span');
@@ -2832,9 +2964,15 @@
       var btnrow = document.createElement('div');
       btnrow.className = 'bundlebtnrow';
       var delBtn = document.createElement('button');
-      delBtn.className = 'lx' + (pendingDeleteId === ('group:' + sessionId) ? ' lxconfirm' : '');
-      delBtn.textContent = (pendingDeleteId === ('group:' + sessionId)) ? '确认删除整组' : '删除整组';
-      delBtn.addEventListener('click', function(e){ e.stopPropagation(); requestDeleteGroup(sessionId); });
+      if(locked){
+        delBtn.className = 'lx lx-locked';
+        delBtn.textContent = '🔒 已锁定期次';
+        delBtn.disabled = true;
+      } else {
+        delBtn.className = 'lx' + (pendingDeleteId === ('group:' + sessionId) ? ' lxconfirm' : '');
+        delBtn.textContent = (pendingDeleteId === ('group:' + sessionId)) ? '确认删除整组' : '删除整组';
+        delBtn.addEventListener('click', function(e){ e.stopPropagation(); requestDeleteGroup(sessionId); });
+      }
       btnrow.appendChild(delBtn);
       body.appendChild(btnrow);
       card.appendChild(body);
@@ -2852,29 +2990,90 @@
 
   // v4.1.3 手动折叠校准点之前的历史数据——纯粹为了收起列表长度，不做任何自动触发，
   // 也不在摘要里放漂移率(那个由"历史校准分期"独立记录，两者是分开的两件事)
-  function renderPreCalDividerRow(count){
+  var packageExpandedIds = {};
+
+  // v4.1.6 数据包卡片——最新的那个包(isLatest)允许展开后点成员的"设为校准点"来解散重选，
+  // 更早的包展开只是纯浏览，calBtn/备注/挂钟输入/删除按钮全部禁用，做到真正锁定。
+  function renderPackageCard(pkg, isLatest){
+    var members = pkg.recordIds
+      .map(function(id){ for(var i=0;i<records.length;i++){ if(records[i].id === id){ return records[i]; } } return null; })
+      .filter(Boolean)
+      .sort(function(a,b){ return a.t - b.t; });
+    if(!members.length){
+      // 包里的成员全被删除了，这个包本身也没有意义了，静默跳过不渲染
+      return document.createDocumentFragment();
+    }
+    var expanded = !!packageExpandedIds[pkg.id];
+    var drift = computePackageDrift(members);
+
+    var card = document.createElement('div');
+    card.className = 'bundlecard';
+    var head = document.createElement('div');
+    head.className = 'bundlehead';
+    var left = document.createElement('div');
+    left.style.flex = '1';
+    var lt = document.createElement('div');
+    lt.className = 'lt';
+    lt.textContent = '📦 数据包 · ' + shortDT(members[0].t) + ' ~ ' + shortDT(members[members.length-1].t) + ' · 共' + members.length + '条';
+    var ld = document.createElement('div');
+    ld.className = 'ld';
+    ld.textContent = drift.ok
+      ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '%')
+      : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
+    var lockTag = document.createElement('span');
+    lockTag.className = 'continuitytag';
+    lockTag.textContent = isLatest ? '可重新选择校准点' : '\u{1F512}已锁定';
+    ld.appendChild(lockTag);
+    left.appendChild(lt); left.appendChild(ld);
+
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'bundleExpandBtn';
+    expandBtn.textContent = expanded ? '▴' : '▾';
+    head.addEventListener('click', function(){
+      packageExpandedIds[pkg.id] = !expanded;
+      renderLog();
+    });
+    head.appendChild(left); head.appendChild(expandBtn);
+    card.appendChild(head);
+
+    if(expanded){
+      var body = document.createElement('div');
+      body.className = 'bundlebody';
+      var renderedInPkg = {};
+      members.forEach(function(m){
+        if(m.sessionId){
+          if(renderedInPkg[m.sessionId]){ return; }
+          renderedInPkg[m.sessionId] = true;
+          var sessMembers = members.filter(function(x){ return x.sessionId === m.sessionId; });
+          body.appendChild(renderBundleCard(m.sessionId, sessMembers, !isLatest));
+        } else {
+          body.appendChild(renderSingleLogRow(m, !isLatest));
+        }
+      });
+      card.appendChild(body);
+    }
+    return card;
+  }
+
+  function renderPendingSegmentRow(segment, canPackage){
     var row = document.createElement('div');
     row.className = 'precaldivider';
     var text = document.createElement('span');
-    text.textContent = '——— 校准点之前 ' + count + ' 条记录 ———';
-    var btn = document.createElement('button');
-    btn.className = 'precalToggleBtn';
-    btn.textContent = '折叠';
-    btn.addEventListener('click', function(){ togglePreCalCollapse(); });
-    row.appendChild(text); row.appendChild(btn);
-    return row;
-  }
-
-  function renderPreCalSummaryRow(count, earliestT, latestT){
-    var row = document.createElement('div');
-    row.className = 'precalsummary';
-    var text = document.createElement('span');
-    text.textContent = '📦 已折叠校准点之前 ' + count + ' 条记录(' + shortDT(earliestT) + ' ~ ' + shortDT(latestT) + ')';
-    var btn = document.createElement('button');
-    btn.className = 'precalToggleBtn';
-    btn.textContent = '展开';
-    btn.addEventListener('click', function(){ togglePreCalCollapse(); });
-    row.appendChild(text); row.appendChild(btn);
+    text.textContent = '——— 待打包 ' + segment.length + ' 条(' + shortDT(segment[0].t) + ' ~ ' + shortDT(segment[segment.length-1].t) + ') ———';
+    row.appendChild(text);
+    if(canPackage){
+      var btn = document.createElement('button');
+      btn.className = 'precalToggleBtn';
+      btn.textContent = '打包';
+      btn.addEventListener('click', function(){ packageNextSegment(); });
+      row.appendChild(btn);
+    } else {
+      var note = document.createElement('span');
+      note.style.fontSize = '10px';
+      note.style.color = 'var(--ink-dim)';
+      note.textContent = '(需先打包更早的一段)';
+      row.appendChild(note);
+    }
     return row;
   }
 
@@ -2891,34 +3090,13 @@
     for(var ci=0; ci<records.length; ci++){
       if(records[ci].isCalibration){ calRecord = records[ci]; break; }
     }
-    var boundary = calRecord ? calRecord.t : null;
-    var preCalCount = 0, preCalEarliestT = null, preCalLatestT = null;
-    if(boundary !== null){
-      records.forEach(function(r){
-        if(r.t < boundary){
-          preCalCount++;
-          if(preCalEarliestT === null || r.t < preCalEarliestT){ preCalEarliestT = r.t; }
-          if(preCalLatestT === null || r.t > preCalLatestT){ preCalLatestT = r.t; }
-        }
-      });
-    }
-    var dividerInserted = false;
+    var liveBoundary = calRecord ? calRecord.t : null;
 
+    // 1. 活跃区间(校准点当天起)，跟以前一样倒序展示
     var renderedSessions = {};
     for(var i = records.length - 1; i >= 0; i--){
       var r = records[i];
-      var isPreCal = (boundary !== null && r.t < boundary);
-      if(isPreCal && preCalCollapsed){
-        if(!dividerInserted){
-          log.appendChild(renderPreCalSummaryRow(preCalCount, preCalEarliestT, preCalLatestT));
-          dividerInserted = true;
-        }
-        continue;
-      }
-      if(isPreCal && !preCalCollapsed && !dividerInserted){
-        log.appendChild(renderPreCalDividerRow(preCalCount));
-        dividerInserted = true;
-      }
+      if(liveBoundary !== null && r.t < liveBoundary){ continue; }
       if(r.sessionId){
         if(renderedSessions[r.sessionId]){ continue; }
         renderedSessions[r.sessionId] = true;
@@ -2928,6 +3106,19 @@
         log.appendChild(renderSingleLogRow(r));
       }
     }
+
+    if(liveBoundary === null){ return; }
+
+    // 2. 已打包的数据包，从最新到最旧
+    for(var pi = dataPackages.length - 1; pi >= 0; pi--){
+      log.appendChild(renderPackageCard(dataPackages[pi], pi === dataPackages.length - 1));
+    }
+
+    // 3. 还没打包的散装区间，按真实校准切换边界切好，只有最早一段能点"打包"
+    var pending = findAllPendingSegments();
+    pending.forEach(function(seg, idx){
+      log.appendChild(renderPendingSegmentRow(seg, idx === 0));
+    });
   }
 
   function getActiveRecords(season){
@@ -3739,7 +3930,8 @@
     loadDelay();
     loadRelayInstalled();
     loadDriftPeriods();
-    loadPreCalCollapsed();
+    loadPackages();
+    loadCalSwitchLog();
     loadEnabledSources();
     loadBurstMode();
     loadGridOverlay();
@@ -3796,13 +3988,11 @@
     });
     document.getElementById('manualConfirmBtn').addEventListener('click', function(){
       var t = parseSegmentsToTimestamp();
-      var markCal = document.getElementById('manualCalChk').checked;
       var latRaw = document.getElementById('manualLatencyInput').value;
       var latencyMs = latRaw !== '' ? parseFloat(latRaw) : null;
       if(latencyMs !== null && (isNaN(latencyMs) || latencyMs < 0)){ latencyMs = null; }
-      if(manualAddRecord(t, markCal, latencyMs)){
+      if(manualAddRecord(t, latencyMs)){
         document.getElementById('manualForm').classList.remove('open');
-        document.getElementById('manualCalChk').checked = false;
         document.getElementById('manualLatencyInput').value = '';
       }
     });
