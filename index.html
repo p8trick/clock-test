@@ -92,8 +92,9 @@
   .sourcetogglerow label{flex:1;}
   .diagempty{color:var(--ink-dim); font-size:11px; padding:6px 0;}
   .diagrow{font-size:11px; font-family:var(--mono); padding:4px 0; line-height:1.5;}
-  .periodrow{font-size:11px; font-family:var(--mono); padding:5px 0; line-height:1.5; border-bottom:1px solid var(--panel-edge); color:var(--ink);}
+  .periodrow{font-size:11px; font-family:var(--mono); padding:5px 0; line-height:1.5; border-bottom:1px solid var(--panel-edge); color:var(--ink); display:flex; align-items:center; justify-content:space-between; gap:8px;}
   .periodrow:last-child{border-bottom:none;}
+  .periodDeleteBtn{background:none; border:1px solid var(--panel-edge); color:var(--bad); font-size:12px; width:22px; height:22px; line-height:1; border-radius:5px; flex-shrink:0;}
   .precaldivider, .precalsummary{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink-dim); padding:8px 4px; border-top:1px dashed var(--panel-edge); border-bottom:1px dashed var(--panel-edge); margin:4px 0;}
   .precalToggleBtn{background:none; border:1px solid var(--panel-edge); color:var(--accent); font-size:11px; padding:3px 10px; border-radius:6px; flex-shrink:0;}
   .diag-ok{color:var(--good);}
@@ -326,6 +327,7 @@
     font-size:10px; padding:3px 8px; border-radius:5px; font-family:inherit; white-space:nowrap;
   }
   .calbtn.calactive{border-color:var(--accent); color:var(--accent);}
+  .calbtn.calmarked-locked{cursor:default;}
 
   .bundlecard{border-bottom:1px solid var(--panel-edge); padding:10px 0;}
   .bundlecard:last-child{border-bottom:none;}
@@ -367,7 +369,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.4</span>
+      <span class="versiontag" id="versionTag">v4.1.5</span>
     </div>
 
     <div id="timePanel">
@@ -669,7 +671,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.4</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.5</div>
   </div>
 
 </div>
@@ -781,12 +783,6 @@
       driftPeriods = driftPeriods.slice(driftPeriods.length - PERIODS_KEEP_MAX);
     }
     saveDriftPeriods();
-  }
-
-  function removePeriodsCreatedBy(calRecordId){
-    var before = driftPeriods.length;
-    driftPeriods = driftPeriods.filter(function(p){ return p.createdByCalibrationId !== calRecordId; });
-    if(driftPeriods.length !== before){ saveDriftPeriods(); }
   }
 
   var PRECAL_COLLAPSE_KEY = 'cc_precal_collapsed_v1';
@@ -1235,8 +1231,16 @@
     }
   }
 
+  // v4.1.5 全新起点(此前一条记录都没有)时，不管是手动补录、单次拍摄还是连拍的第一枪，
+  // 只要是历史上第一条落进 records 的数据，自动标为校准点。这样"没有任何有效校准点"这个状态
+  // 只存在于 records 完全为空的那一瞬间，一旦有数据，永远有且只有一条是当前校准点——
+  // 避免今后数据量很大时，不小心把校准点清空导致整个历史全部一起参与回归计算。
   function insertRecordSorted(rec){
+    var isFirstRecordEver = (records.length === 0);
     records.push(rec);
+    if(isFirstRecordEver){
+      rec.isCalibration = true;
+    }
     recomputeAllDeltas();
   }
 
@@ -2574,17 +2578,16 @@
     }
   }
 
+  // v4.1.5 校准点不再允许"原地点掉"——已经是当前校准点时点击不做任何事。
+  // 要更换校准点，必须去点另一条记录的"设为校准点"，这样系统永远保证：
+  // 只要 records 不为空，就一定有且只有一条处于校准点状态，不会退回"没有校准点=
+  // 整个历史全部参与回归"这种在数据量很大时代价惊人的状态。
   function toggleCalibration(id){
     var target = null;
     for(var i=0;i<records.length;i++){ if(records[i].id === id){ target = records[i]; break; } }
-    if(!target){ return; }
-    if(target.isCalibration){
-      target.isCalibration = false;
-      removePeriodsCreatedBy(id);
-    } else {
-      archiveCurrentPeriods(target.t, id);
-      setSingleCalibration(id);
-    }
+    if(!target || target.isCalibration){ return; }
+    archiveCurrentPeriods(target.t, id);
+    setSingleCalibration(id);
     saveRecords();
     renderLog();
     renderStats();
@@ -2607,15 +2610,11 @@
   function toggleSessionCalibration(sessionId){
     var members = records.filter(function(r){ return r.sessionId === sessionId; });
     if(!members.length){ return; }
-    var earliest = members.slice().sort(function(a,b){ return a.t - b.t; })[0];
     var isCurrentlyCal = members.some(function(r){ return r.isCalibration; });
-    if(isCurrentlyCal){
-      members.forEach(function(r){ r.isCalibration = false; });
-      removePeriodsCreatedBy(earliest.id);
-    } else {
-      archiveCurrentPeriods(earliest.t, earliest.id);
-      setSessionCalibration(sessionId);
-    }
+    if(isCurrentlyCal){ return; }
+    var earliest = members.slice().sort(function(a,b){ return a.t - b.t; })[0];
+    archiveCurrentPeriods(earliest.t, earliest.id);
+    setSessionCalibration(sessionId);
     saveRecords();
     renderLog();
     renderStats();
@@ -2679,8 +2678,8 @@
     var btnrow = document.createElement('div');
     btnrow.className = 'logbtnrow';
     var calBtn = document.createElement('button');
-    calBtn.className = 'calbtn' + (r.isCalibration ? ' calactive' : '');
-    calBtn.textContent = r.isCalibration ? '\u2605 校准点(点击取消)' : '设为校准点';
+    calBtn.className = 'calbtn' + (r.isCalibration ? ' calactive calmarked-locked' : '');
+    calBtn.textContent = r.isCalibration ? '\u2605 当前校准点' : '设为校准点';
     calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
     btnrow.appendChild(calBtn);
     left.appendChild(lt); left.appendChild(ld); left.appendChild(clockRow); left.appendChild(note); left.appendChild(btnrow);
@@ -2769,8 +2768,8 @@
     var calRow = document.createElement('div');
     calRow.className = 'bundleheadcalrow';
     var calBtn = document.createElement('button');
-    calBtn.className = 'calbtn' + (sessionIsCal ? ' calactive' : '');
-    calBtn.textContent = sessionIsCal ? '\u2605 校准点(点击取消)' : '设为校准点';
+    calBtn.className = 'calbtn' + (sessionIsCal ? ' calactive calmarked-locked' : '');
+    calBtn.textContent = sessionIsCal ? '\u2605 当前校准点' : '设为校准点';
     calBtn.addEventListener('click', function(e){ e.stopPropagation(); toggleSessionCalibration(sessionId); });
     calRow.appendChild(calBtn);
 
@@ -3286,6 +3285,9 @@
 
   // v4.1.3 多期漂移记录——每次设新校准点时 archiveCurrentPeriods() 顺手存一条，
   // 这里只负责列表展示，先不做图表(讨论时明确了列表就够，图表以后再说)
+  // v4.1.5 校准点本身不能原地取消了，但手滑设错校准点、连带产生一条没意义的分期记录
+  // 这种情况还是可能发生——这里留一个"×"，只删这一条历史存档，不碰当前生效的校准点，
+  // 不会触发"回到没有校准点"那种危险状态，纯粹是历史记录层面的清理。
   function renderPeriodsList(){
     var el = document.getElementById('periodsList');
     if(!el){ return; }
@@ -3296,9 +3298,19 @@
     var sorted = driftPeriods.slice().sort(function(a,b){ return b.periodEnd - a.periodEnd; });
     el.innerHTML = sorted.map(function(p){
       var icon = p.season === 'winter' ? '\u2744\ufe0f' : '\u2600\ufe0f';
-      return '<div class="periodrow">' + icon + ' ' + shortDT(p.periodStart) + ' ~ ' + shortDT(p.periodEnd) +
-        ' · 每天变慢 ' + p.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(p.r2*100) + '% · ' + p.count + '条</div>';
+      return '<div class="periodrow"><span>' + icon + ' ' + shortDT(p.periodStart) + ' ~ ' + shortDT(p.periodEnd) +
+        ' · 每天变慢 ' + p.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(p.r2*100) + '% · ' + p.count + '条</span>' +
+        '<button class="periodDeleteBtn" data-period-id="' + p.id + '">\u00d7</button></div>';
     }).join('');
+    el.querySelectorAll('.periodDeleteBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){ deletePeriodEntry(btn.getAttribute('data-period-id')); });
+    });
+  }
+
+  function deletePeriodEntry(periodId){
+    driftPeriods = driftPeriods.filter(function(p){ return p.id !== periodId; });
+    saveDriftPeriods();
+    renderPeriodsList();
   }
 
   function exportPrediction(){
