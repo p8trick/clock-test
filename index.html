@@ -79,16 +79,23 @@
   .predlist{font-size:12px; color:var(--ink); line-height:1.9; margin-top:2px;}
   .predlist b{color:var(--ink); font-weight:600;}
   .predrel{color:var(--ink-dim); font-size:11px;}
+  .predExpandBtn{background:none; border:1px solid var(--panel-edge); color:var(--accent); font-size:11px; padding:3px 8px; border-radius:6px; margin-top:4px;}
   .progresswrap{margin-top:8px;}
   .progresslabel{font-size:11px; color:var(--ink-dim); margin-bottom:4px;}
   .progressbar{height:8px; background:#1a1e25; border-radius:4px; overflow:hidden; border:1px solid var(--panel-edge);}
-  .progressfill{height:100%; background:var(--accent); border-radius:4px; transition:width .3s;}
+  .progressfill{height:100%; background:var(--good); border-radius:4px; transition:width .3s;}
+  .progressfill.over1{background:#ffd93d;}
+  .progressfill.over2{background:var(--bad);}
   .delayrow{display:flex; align-items:center; gap:8px; margin-top:8px;}
   .sourcetogglerow{display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--panel-edge); font-size:12px; color:var(--ink-dim);}
   .sourcetogglerow:last-child{border-bottom:none;}
   .sourcetogglerow label{flex:1;}
   .diagempty{color:var(--ink-dim); font-size:11px; padding:6px 0;}
   .diagrow{font-size:11px; font-family:var(--mono); padding:4px 0; line-height:1.5;}
+  .periodrow{font-size:11px; font-family:var(--mono); padding:5px 0; line-height:1.5; border-bottom:1px solid var(--panel-edge); color:var(--ink);}
+  .periodrow:last-child{border-bottom:none;}
+  .precaldivider, .precalsummary{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink-dim); padding:8px 4px; border-top:1px dashed var(--panel-edge); border-bottom:1px dashed var(--panel-edge); margin:4px 0;}
+  .precalToggleBtn{background:none; border:1px solid var(--panel-edge); color:var(--accent); font-size:11px; padding:3px 10px; border-radius:6px; flex-shrink:0;}
   .diag-ok{color:var(--good);}
   .diag-bad{color:var(--bad);}
 
@@ -360,7 +367,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.1</span>
+      <span class="versiontag" id="versionTag">v4.1.4</span>
     </div>
 
     <div id="timePanel">
@@ -492,6 +499,18 @@
         <span style="font-size:12px;color:var(--ink-dim);">秒</span>
         <button class="iconbtn" id="delaySaveBtn" style="margin-left:auto;">保存</button>
       </div>
+      <label class="mtitle" style="margin-top:12px;">继电器安装状态</label>
+      <p style="margin-top:0;">观察模式下漂移允许自然超过60秒继续累积，不代表异常；已安装模式仅作状态标记，用于导出JSON时附带背景信息，不影响任何计算。</p>
+      <div class="seasonrow">
+        <button class="seasonbtn" id="relayObserveBtn">🔧 观察模式(未安装)</button>
+        <button class="seasonbtn" id="relayInstalledBtn">⚡ 已安装(自动运行)</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>历史校准分期</h4>
+      <p style="margin-top:0;">每次设新校准点时自动存档上一段区间的漂移率，方便以后对比全年不同时期(比如温差)测得的差异。仅供参考，不参与当前计算。</p>
+      <div id="periodsList"><div class="diagempty">尚无历史分期(设置新校准点时自动生成)</div></div>
     </div>
 
     <div class="section">
@@ -650,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.1</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.4</div>
   </div>
 
 </div>
@@ -663,12 +682,27 @@
   var SEASON_KEY = 'cc_season_v1';
   var HISTORY_KEY = 'cc_history_v1';
   var DELAY_KEY = 'cc_delay_v1';
+  var RELAY_INSTALLED_KEY = 'cc_relay_installed_v1';
   var offsetMs = 0;
   var lastSyncInfo = null;
   var records = [];
   var seasonMode = 'summer';
   var driftHistory = { summer: [], winter: [] };
   var delaySec = 8;
+  // v4.1.2 观察模式/继电器已装模式的显式开关——纯状态标记，不参与任何漂移计算，
+  // 只影响建议时刻的文案措辞，以及导出JSON里附带的数据来源背景。默认观察模式，
+  // 因为现在外置继电器确实还没装好，也不打算手动纠正时钟。
+  var relayInstalled = false;
+
+  function loadRelayInstalled(){
+    try{
+      relayInstalled = localStorage.getItem(RELAY_INSTALLED_KEY) === '1';
+    }catch(e){ relayInstalled = false; }
+  }
+
+  function saveRelayInstalled(){
+    try{ localStorage.setItem(RELAY_INSTALLED_KEY, relayInstalled ? '1' : '0'); }catch(e){}
+  }
 
   function loadDelay(){
     try{
@@ -703,6 +737,75 @@
 
   function saveHistory(){
     try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(driftHistory)); }catch(e){}
+  }
+
+  var PERIODS_KEY = 'cc_periods_v1';
+  var driftPeriods = [];
+
+  function loadDriftPeriods(){
+    try{
+      var raw = localStorage.getItem(PERIODS_KEY);
+      driftPeriods = raw ? JSON.parse(raw) : [];
+    }catch(e){ driftPeriods = []; }
+  }
+
+  function saveDriftPeriods(){
+    try{ localStorage.setItem(PERIODS_KEY, JSON.stringify(driftPeriods)); }catch(e){}
+  }
+
+  // v4.1.3 每次真正设一个新校准点时(不是取消)，把即将被这个新校准点切掉的那一段
+  // 数据存档成一条独立的"分期"记录——起止时间、这段时期测得的日漂移率、季节、拟合优度。
+  // 必须在改动 isCalibration 之前调用，这样 computeStats() 算出来的还是"旧"的有效区间。
+  var PERIODS_KEEP_MAX = 200;
+
+  // v4.1.4 每条分期记录带上 createdByCalibrationId——记录是哪个校准点的"设为校准点"动作
+  // 产生的这条存档。这样"取消校准点"才能精确撤销掉当初连带产生的那条(最多两条：夏/冬各一)
+  // 分期记录，而不是留一条永久孤儿数据在历史列表里，跟折叠功能一样做到真正可逆。
+  function archiveCurrentPeriods(newCalTimestamp, newCalRecordId){
+    ['summer','winter'].forEach(function(season){
+      var s = computeStats(season);
+      if(!s.ok){ return; }
+      driftPeriods.push({
+        id: 'period_' + Date.now() + '_' + season + '_' + Math.random().toString(36).slice(2,7),
+        season: season,
+        periodStart: s.baselineT,
+        periodEnd: newCalTimestamp,
+        driftSecPerDay: s.driftSecPerDay,
+        r2: s.r2,
+        count: s.count,
+        archivedAt: Date.now(),
+        createdByCalibrationId: newCalRecordId
+      });
+    });
+    if(driftPeriods.length > PERIODS_KEEP_MAX){
+      driftPeriods = driftPeriods.slice(driftPeriods.length - PERIODS_KEEP_MAX);
+    }
+    saveDriftPeriods();
+  }
+
+  function removePeriodsCreatedBy(calRecordId){
+    var before = driftPeriods.length;
+    driftPeriods = driftPeriods.filter(function(p){ return p.createdByCalibrationId !== calRecordId; });
+    if(driftPeriods.length !== before){ saveDriftPeriods(); }
+  }
+
+  var PRECAL_COLLAPSE_KEY = 'cc_precal_collapsed_v1';
+  var preCalCollapsed = false;
+
+  function loadPreCalCollapsed(){
+    try{
+      preCalCollapsed = localStorage.getItem(PRECAL_COLLAPSE_KEY) === '1';
+    }catch(e){ preCalCollapsed = false; }
+  }
+
+  function savePreCalCollapsed(){
+    try{ localStorage.setItem(PRECAL_COLLAPSE_KEY, preCalCollapsed ? '1' : '0'); }catch(e){}
+  }
+
+  function togglePreCalCollapse(){
+    preCalCollapsed = !preCalCollapsed;
+    savePreCalCollapsed();
+    renderLog();
   }
 
   function loadRecords(){
@@ -2477,12 +2580,15 @@
     if(!target){ return; }
     if(target.isCalibration){
       target.isCalibration = false;
+      removePeriodsCreatedBy(id);
     } else {
+      archiveCurrentPeriods(target.t, id);
       setSingleCalibration(id);
     }
     saveRecords();
     renderLog();
     renderStats();
+    renderPeriodsList();
   }
 
   // v4.1.1 连拍会话设为校准点：标在组内时间最早的一条成员上，
@@ -2501,15 +2607,19 @@
   function toggleSessionCalibration(sessionId){
     var members = records.filter(function(r){ return r.sessionId === sessionId; });
     if(!members.length){ return; }
+    var earliest = members.slice().sort(function(a,b){ return a.t - b.t; })[0];
     var isCurrentlyCal = members.some(function(r){ return r.isCalibration; });
     if(isCurrentlyCal){
       members.forEach(function(r){ r.isCalibration = false; });
+      removePeriodsCreatedBy(earliest.id);
     } else {
+      archiveCurrentPeriods(earliest.t, earliest.id);
       setSessionCalibration(sessionId);
     }
     saveRecords();
     renderLog();
     renderStats();
+    renderPeriodsList();
   }
 
   function renderSingleLogRow(r){
@@ -2741,6 +2851,34 @@
     computeStats('winter');
   }
 
+  // v4.1.3 手动折叠校准点之前的历史数据——纯粹为了收起列表长度，不做任何自动触发，
+  // 也不在摘要里放漂移率(那个由"历史校准分期"独立记录，两者是分开的两件事)
+  function renderPreCalDividerRow(count){
+    var row = document.createElement('div');
+    row.className = 'precaldivider';
+    var text = document.createElement('span');
+    text.textContent = '——— 校准点之前 ' + count + ' 条记录 ———';
+    var btn = document.createElement('button');
+    btn.className = 'precalToggleBtn';
+    btn.textContent = '折叠';
+    btn.addEventListener('click', function(){ togglePreCalCollapse(); });
+    row.appendChild(text); row.appendChild(btn);
+    return row;
+  }
+
+  function renderPreCalSummaryRow(count, earliestT, latestT){
+    var row = document.createElement('div');
+    row.className = 'precalsummary';
+    var text = document.createElement('span');
+    text.textContent = '📦 已折叠校准点之前 ' + count + ' 条记录(' + shortDT(earliestT) + ' ~ ' + shortDT(latestT) + ')';
+    var btn = document.createElement('button');
+    btn.className = 'precalToggleBtn';
+    btn.textContent = '展开';
+    btn.addEventListener('click', function(){ togglePreCalCollapse(); });
+    row.appendChild(text); row.appendChild(btn);
+    return row;
+  }
+
   function renderLog(){
     refreshSessionCollapseCache();
     var log = document.getElementById('log');
@@ -2749,9 +2887,39 @@
       return;
     }
     log.innerHTML = '';
+
+    var calRecord = null;
+    for(var ci=0; ci<records.length; ci++){
+      if(records[ci].isCalibration){ calRecord = records[ci]; break; }
+    }
+    var boundary = calRecord ? calRecord.t : null;
+    var preCalCount = 0, preCalEarliestT = null, preCalLatestT = null;
+    if(boundary !== null){
+      records.forEach(function(r){
+        if(r.t < boundary){
+          preCalCount++;
+          if(preCalEarliestT === null || r.t < preCalEarliestT){ preCalEarliestT = r.t; }
+          if(preCalLatestT === null || r.t > preCalLatestT){ preCalLatestT = r.t; }
+        }
+      });
+    }
+    var dividerInserted = false;
+
     var renderedSessions = {};
     for(var i = records.length - 1; i >= 0; i--){
       var r = records[i];
+      var isPreCal = (boundary !== null && r.t < boundary);
+      if(isPreCal && preCalCollapsed){
+        if(!dividerInserted){
+          log.appendChild(renderPreCalSummaryRow(preCalCount, preCalEarliestT, preCalLatestT));
+          dividerInserted = true;
+        }
+        continue;
+      }
+      if(isPreCal && !preCalCollapsed && !dividerInserted){
+        log.appendChild(renderPreCalDividerRow(preCalCount));
+        dividerInserted = true;
+      }
       if(r.sessionId){
         if(renderedSessions[r.sessionId]){ continue; }
         renderedSessions[r.sessionId] = true;
@@ -2801,6 +2969,10 @@
   }
 
   var HALF_LIFE_DAYS = 35;
+  // v4.1.2 建议触发时刻列表长度——12个大致对应实测漂移率下一整年的周期数，
+  // 方便一次性抄进Tuya等平台按月配置自动化场景（这类App通常不支持超长天数倒计时）
+  var PREDICTION_COUNT = 12;
+  var predListExpanded = { summer:false, winter:false };
 
   function computeWeights(active){
     var lastT = active[active.length-1].t;
@@ -2965,13 +3137,27 @@
     var cycleDays = 60000 / reg.slope;
     var target1 = (Math.floor(lastY/60000) + 1) * 60000;
     var xTarget1 = (target1 - reg.intercept) / reg.slope;
-    var predictedTime1 = t0 + xTarget1*86400000;
-    var predictedTime2 = predictedTime1 + cycleDays*86400000;
-    var predictedTime3 = predictedTime2 + cycleDays*86400000;
+    var basePredicted = t0 + xTarget1*86400000;
+    // v4.1.2 建议触发时刻改成"永远盯着未来"的滚动列表：不再固定输出模型算出的头3个理论时刻，
+    // 而是从 basePredicted 起按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
+    // 取接下来 PREDICTION_COUNT 个。系统时间前跳测试、或者长期没有新记录时，列表也会自动往后滚，
+    // 不会停留在一个早已过去的日期上。
+    var cycleMs = cycleDays * 86400000;
+    var elapsedSinceBase = Date.now() - basePredicted;
+    var startIdx = elapsedSinceBase > 0 ? Math.ceil(elapsedSinceBase / cycleMs) : 0;
+    var predictedTimes = [];
+    for(var pi=0; pi<PREDICTION_COUNT; pi++){
+      predictedTimes.push(basePredicted + (startIdx + pi) * cycleMs);
+    }
     var stars = computeConfidence(collapsed, reg);
     var xNow = (Date.now() - t0) / 86400000;
     var projectedNowY = reg.intercept + reg.slope*xNow;
-    var progressPct = Math.max(0, Math.min(100, ((projectedNowY % 60000) / 60000) * 100));
+    // v4.1.2 progressPct 不再在这里就地取模封顶——改成保留真实累计值(可能>100%)，
+    // 只在渲染层把"跑表宽度"和"第几圈决定颜色"分开算，标签上仍然显示未清零的真实百分比
+    var rawProgressPct = Math.max(0, (projectedNowY / 60000) * 100);
+    var progressTier = Math.floor(rawProgressPct / 100);
+    var progressDisplayPct = rawProgressPct % 100;
+    if(progressDisplayPct === 0 && rawProgressPct > 0){ progressDisplayPct = 100; }
     return {
       ok:true,
       count: collapsed.length,
@@ -2981,11 +3167,11 @@
       r2: reg.r2,
       cycleDays: cycleDays,
       stars: stars,
-      progressPct: progressPct,
-      predictedTime1: predictedTime1,
-      predictedTime2: predictedTime2,
-      predictedTime3: predictedTime3,
-      daysFromNow: (predictedTime1 - Date.now()) / 86400000
+      progressPct: rawProgressPct,
+      progressDisplayPct: progressDisplayPct,
+      progressTier: progressTier,
+      predictedTimes: predictedTimes,
+      daysFromNow: (predictedTimes[0] - Date.now()) / 86400000
     };
   }
 
@@ -3026,18 +3212,35 @@
     html += '<div class="statsline">' + starHtml(s.stars) + '</div>';
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(2) + ' 秒 · 拟合优度 ' + Math.round(s.r2*100) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
+    var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
     html += '<div class="progresswrap"><div class="progresslabel">本周期已漂移进度 ' + Math.round(s.progressPct) + '%</div>';
-    html += '<div class="progressbar"><div class="progressfill" style="width:' + s.progressPct.toFixed(1) + '%"></div></div></div>';
+    html += '<div class="progressbar"><div class="progressfill' + tierClass + '" style="width:' + s.progressDisplayPct.toFixed(1) + '%"></div></div></div>';
 
+    // v4.1.2 预测列表：已装继电器时显示"扣除执行延迟后的实际触发时刻"，
+    // 观察模式下继电器不会真的动作，扣延迟没有意义，改显示未扣延迟的理论完成时刻，
+    // 单纯作为"这时候已经该攒够多少偏差了"的参考。列表本身已经是永远面向未来的滚动结果，
+    // 默认只展开前3个，其余9个可以点开一次性看完整年份，方便照着抄进Tuya自动化。
     var delayMs = delaySec * 1000;
-    var relay1 = s.predictedTime1 - delayMs;
-    var relay2 = s.predictedTime2 - delayMs;
-    var relay3 = s.predictedTime3 - delayMs;
+    var predTimes = s.predictedTimes.map(function(t){ return relayInstalled ? (t - delayMs) : t; });
+    var expanded = !!predListExpanded[season];
+    var visibleCount = expanded ? predTimes.length : Math.min(3, predTimes.length);
+    var circled = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫'];
     html += '<div class="predlist">';
-    html += '<div style="font-size:10px;color:var(--ink-dim);margin-bottom:2px;">继电器建议触发时刻(已扣除执行延迟' + delaySec + '秒)</div>';
-    html += '① ' + shortDT(relay1) + ' <span class="predrel">(' + relDays(relay1) + ')</span><br>';
-    html += '② ' + shortDT(relay2) + ' <span class="predrel">(' + relDays(relay2) + ')</span><br>';
-    html += '③ ' + shortDT(relay3) + ' <span class="predrel">(' + relDays(relay3) + ')</span>';
+    html += '<div style="font-size:10px;color:var(--ink-dim);margin-bottom:2px;">' +
+      (relayInstalled
+        ? ('继电器建议触发时刻(已扣除执行延迟' + delaySec + '秒)')
+        : ('参考时刻(观察模式·继电器未安装，不会自动触发，未扣执行延迟)')) +
+      '</div>';
+    var predLines = [];
+    for(var pl=0; pl<visibleCount; pl++){
+      var mark = circled[pl] || (pl+1) + '.';
+      predLines.push(mark + ' ' + shortDT(predTimes[pl]) + ' <span class="predrel">(' + relDays(predTimes[pl]) + ')</span>');
+    }
+    html += predLines.join('<br>');
+    if(predTimes.length > 3){
+      html += '<br><button class="predExpandBtn" id="predExpandBtn-' + season + '">' +
+        (expanded ? '收起' : ('展开全部' + predTimes.length + '个(全年Tuya模板参考)')) + '</button>';
+    }
     html += '</div>';
 
     var hist = driftHistory[season];
@@ -3058,9 +3261,14 @@
       el.textContent = seasonIcon + ' · 还需更多记录才能预测(设置里补录/查看)';
       return;
     }
-    var pd = new Date(s.predictedTime1 - delaySec*1000);
+    var pd = new Date(relayInstalled ? (s.predictedTimes[0] - delaySec*1000) : s.predictedTimes[0]);
     el.textContent = seasonIcon + ' · ' + s.stars.toFixed(1) + '\u2605 · 下次校正约 ' +
       (pd.getMonth()+1) + '/' + pd.getDate() + ' ' + pad(pd.getHours(),2) + ':' + pad(pd.getMinutes(),2);
+  }
+
+  function togglePredList(season){
+    predListExpanded[season] = !predListExpanded[season];
+    renderStats();
   }
 
   function renderStats(){
@@ -3070,6 +3278,27 @@
     html += renderModelBlock(otherSeason, false);
     el.innerHTML = html;
     renderSummaryLine();
+    ['summer','winter'].forEach(function(ssn){
+      var btn = document.getElementById('predExpandBtn-' + ssn);
+      if(btn){ btn.addEventListener('click', function(){ togglePredList(ssn); }); }
+    });
+  }
+
+  // v4.1.3 多期漂移记录——每次设新校准点时 archiveCurrentPeriods() 顺手存一条，
+  // 这里只负责列表展示，先不做图表(讨论时明确了列表就够，图表以后再说)
+  function renderPeriodsList(){
+    var el = document.getElementById('periodsList');
+    if(!el){ return; }
+    if(!driftPeriods.length){
+      el.innerHTML = '<div class="diagempty">尚无历史分期(设置新校准点时自动生成)</div>';
+      return;
+    }
+    var sorted = driftPeriods.slice().sort(function(a,b){ return b.periodEnd - a.periodEnd; });
+    el.innerHTML = sorted.map(function(p){
+      var icon = p.season === 'winter' ? '\u2744\ufe0f' : '\u2600\ufe0f';
+      return '<div class="periodrow">' + icon + ' ' + shortDT(p.periodStart) + ' ~ ' + shortDT(p.periodEnd) +
+        ' · 每天变慢 ' + p.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(p.r2*100) + '% · ' + p.count + '条</div>';
+    }).join('');
   }
 
   function exportPrediction(){
@@ -3087,17 +3316,15 @@
         confidenceStars: s.stars,
         cycleDays: s.cycleDays,
         correctionAction: '+1 minute',
+        // v4.1.2 从固定3个改成滚动的 PREDICTION_COUNT 个，永远是"此刻起未来N个"，
+        // 方便一次性抄进Tuya等平台按月配置自动化场景(全年参考模板)
         theoreticalCorrectionTimes: {
-          note: '模型算出的漂移满60秒的理论时刻,未扣除继电器执行延迟',
-          first: s.predictedTime1,
-          second: s.predictedTime2,
-          third: s.predictedTime3
+          note: '模型算出的漂移满60秒的理论时刻,未扣除继电器执行延迟,列表长度' + s.predictedTimes.length + '个,永远是从当前时刻起最近的未来N个',
+          times: s.predictedTimes
         },
         relayFireTimes: {
           note: '已扣除executionDelaySec,继电器可直接在这个时刻发指令,执行完成时理论上正好补满60秒',
-          first: s.predictedTime1 - delayMs,
-          second: s.predictedTime2 - delayMs,
-          third: s.predictedTime3 - delayMs
+          times: s.predictedTimes.map(function(t){ return t - delayMs; })
         }
       };
     }
@@ -3111,6 +3338,7 @@
       generatedAt: Date.now(),
       activeSeason: seasonMode,
       executionDelaySec: delaySec,
+      relayInstalled: relayInstalled,
       models: { summer: summerPacked, winter: winterPacked }
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -3300,6 +3528,21 @@
     renderStats();
   }
 
+  function renderRelayStatusButtons(){
+    var oBtn = document.getElementById('relayObserveBtn');
+    var iBtn = document.getElementById('relayInstalledBtn');
+    if(!oBtn || !iBtn){ return; }
+    oBtn.className = 'seasonbtn' + (!relayInstalled ? ' active' : '');
+    iBtn.className = 'seasonbtn' + (relayInstalled ? ' active' : '');
+  }
+
+  function setRelayInstalled(installed){
+    relayInstalled = installed;
+    saveRelayInstalled();
+    renderRelayStatusButtons();
+    renderStats();
+  }
+
   var currentScreen = 'capture';
   var helpReturnScreen = 'capture'; // 帮助页"返回"要回到打开它之前所在的页面(主页或摄像头页)
 
@@ -3482,13 +3725,18 @@
     loadSeason();
     loadHistory();
     loadDelay();
+    loadRelayInstalled();
+    loadDriftPeriods();
+    loadPreCalCollapsed();
     loadEnabledSources();
     loadBurstMode();
     loadGridOverlay();
     loadGridDensity();
     renderLog();
     renderSeasonButtons();
+    renderRelayStatusButtons();
     renderStats();
+    renderPeriodsList();
     renderSourceToggleList();
     renderBurstModeButtons();
     renderGridDensityButtons();
@@ -3518,6 +3766,8 @@
     document.getElementById('clearBtn').addEventListener('click', clearLog);
     document.getElementById('seasonSummerBtn').addEventListener('click', function(){ setSeason('summer'); });
     document.getElementById('seasonWinterBtn').addEventListener('click', function(){ setSeason('winter'); });
+    document.getElementById('relayObserveBtn').addEventListener('click', function(){ setRelayInstalled(false); });
+    document.getElementById('relayInstalledBtn').addEventListener('click', function(){ setRelayInstalled(true); });
 
     setupSegmentedInputs();
 
