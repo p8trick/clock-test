@@ -371,7 +371,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.6</span>
+      <span class="versiontag" id="versionTag">v4.1.7</span>
     </div>
 
     <div id="timePanel">
@@ -669,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.6</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.7</div>
   </div>
 
 </div>
@@ -2182,7 +2182,19 @@
     }
   }
 
+  // v4.1.7 校准点删除漏洞修复：v4.1.5 只堵住了"原地取消校准点"这条路(toggleCalibration no-op)，
+  // 但删除按钮(deleteRecord/deleteSessionGroup)完全没检查目标是不是当前校准点——只要校准点所在
+  // 记录还没被数据包锁定，删除后 records 里就没有任何一条 isCalibration===true，
+  // getActiveRecords() 的 lastCalIdx 退回 -1，直接退化成"全部历史参与回归"，正是 v4.1.5 想
+  // 彻底消灭的危险状态。修法：在这两个真正的删除入口上加保护，所有删除路径(日志页、摄像头最近
+  // 捕获列表)都走这两个函数，改一处即可全覆盖。清空全部数据仍走独立的 clearLog()，不受影响。
   function deleteRecord(id){
+    var target = null;
+    for(var i=0;i<records.length;i++){ if(records[i].id === id){ target = records[i]; break; } }
+    if(target && target.isCalibration){
+      alert('这条是当前校准点，不能直接删除。请先在另一条记录上点"设为校准点"完成转移，再回来删除这条。');
+      return;
+    }
     records = records.filter(function(r){ return r.id !== id; });
     recomputeAllDeltas();
     saveRecords();
@@ -2192,6 +2204,11 @@
   }
 
   function deleteSessionGroup(sessionId){
+    var hasCalibration = records.some(function(r){ return r.sessionId === sessionId && r.isCalibration; });
+    if(hasCalibration){
+      alert('这组包含当前校准点，不能整组删除。请先在另一条记录(或另一组)上设为校准点完成转移，再回来删除这组。');
+      return;
+    }
     records = records.filter(function(r){ return r.sessionId !== sessionId; });
     recomputeAllDeltas();
     delete sessionMeta[sessionId];
