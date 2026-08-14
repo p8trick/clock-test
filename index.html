@@ -371,7 +371,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.9</span>
+      <span class="versiontag" id="versionTag">v4.1.10</span>
     </div>
 
     <div id="timePanel">
@@ -669,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.9</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.10</div>
   </div>
 
 </div>
@@ -830,7 +830,8 @@
     var ws = computeWeights(sorted);
     var reg = weightedRegression(xs, ys, ws);
     if(!reg || !(reg.slope > 0)){ return { ok:false, count: sorted.length, noDrift:true }; }
-    return { ok:true, count: sorted.length, driftSecPerDay: reg.slope / 1000, r2: reg.r2 };
+    var stars = computeConfidence(sorted, reg);
+    return { ok:true, count: sorted.length, driftSecPerDay: reg.slope / 1000, r2: reg.r2, stars: stars };
   }
 
   // 找出"还没被任何包认领、且早于当前生效校准点"的散装数据。
@@ -3020,8 +3021,8 @@
     lt.textContent = '📦 数据包 · ' + shortDT(members[0].t) + ' ~ ' + shortDT(members[members.length-1].t) + ' · 共' + members.length + '条';
     var ld = document.createElement('div');
     ld.className = 'ld';
-    ld.textContent = drift.ok
-      ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '%')
+    ld.innerHTML = drift.ok
+      ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '% · ' + starHtml(drift.stars))
       : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
     var lockTag = document.createElement('span');
     lockTag.className = 'continuitytag';
