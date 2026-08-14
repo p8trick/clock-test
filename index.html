@@ -388,7 +388,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.13</span>
+      <span class="versiontag" id="versionTag">v4.1.15</span>
     </div>
 
     <div id="timePanel">
@@ -696,10 +696,11 @@
         <p>手动补录：若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
         <p>删除保护：记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
         <p>终极清空：设置页"清空记录"按钮点击后会弹出详细提示，列出即将删除的记录条数、时间跨度、数据包期数、校准点状态，并提供一键导出备份的快捷入口；确认按钮会先禁用3秒防止手滑，倒计时结束才能点击，清空后原始记录、数据包、校准切换日志三者一并清除，无法撤销。</p>
+        <p>导出方式：点导出CSV/预测JSON/完整备份，会直接弹出系统原生的分享菜单(底部半屏)，"存储到文件"就在里面，不需要先跳转到文件预览页再找箭头按钮。不支持这种弹出方式的环境会自动退回原来的下载方式，行为不变。</p>
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.13</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.15</div>
   </div>
 
 </div>
@@ -3565,6 +3566,35 @@
     renderPeriodsList();
   }
 
+  // v4.1.15: 导出方式统一改成Web Share API——iOS上会弹出系统原生的底部半屏"分享"菜单，
+  // 菜单里直接有"存储到文件"选项，不再需要"先跳转到文件预览页，再点右上角箭头按钮"这一步。
+  // 参考PlantSteward后期加入的同款处理。不支持的环境(navigator.share/canShare缺失，
+  // 或者File构造/canShare判断为false)一律退回原来的<a download>方案兜底，行为不变。
+  function shareOrDownloadBlob(blob, filename, mimeType){
+    var file = null;
+    try{ file = new File([blob], filename, { type: mimeType }); }catch(e){ file = null; }
+    if(file && navigator.canShare && navigator.canShare({ files: [file] })){
+      navigator.share({ files: [file] }).catch(function(err){
+        // AbortError＝用户自己点了取消，是正常操作，不当失败处理，不再退回下载兜底，
+        // 避免"取消分享"却又弹出一次下载的诡异体验；其他原因(权限/异常)才退回兜底
+        if(err && err.name === 'AbortError'){ return; }
+        legacyDownloadBlob(blob, filename);
+      });
+      return;
+    }
+    legacyDownloadBlob(blob, filename);
+  }
+
+  function legacyDownloadBlob(blob, filename){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  }
+
   function exportPrediction(){
     var summer = computeStats('summer');
     var winter = computeStats('winter');
@@ -3606,13 +3636,7 @@
       models: { summer: summerPacked, winter: winterPacked }
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'clock-prediction-' + Date.now() + '.json';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+    shareOrDownloadBlob(blob, 'clock-prediction-' + Date.now() + '.json', 'application/json');
   }
 
   function exportData(){
@@ -3630,13 +3654,7 @@
     });
     var csv = lines.join('\n');
     var blob = new Blob([csv], {type:'text/csv'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'clock-calibration-' + Date.now() + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+    shareOrDownloadBlob(blob, 'clock-calibration-' + Date.now() + '.csv', 'text/csv');
   }
 
   function exportFullBackup(){
@@ -3652,13 +3670,7 @@
       calibrationSwitchLog: calibrationSwitchLog
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'clock-full-backup-' + Date.now() + '.json';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+    shareOrDownloadBlob(blob, 'clock-full-backup-' + Date.now() + '.json', 'application/json');
   }
 
   function importFullBackup(file){
