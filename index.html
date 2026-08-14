@@ -371,7 +371,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.7</span>
+      <span class="versiontag" id="versionTag">v4.1.8</span>
     </div>
 
     <div id="timePanel">
@@ -669,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.7</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.8</div>
   </div>
 
 </div>
@@ -2823,12 +2823,16 @@
     if(locked){
       del.className = 'lx lx-locked';
       del.disabled = true;
+    } else if(r.isCalibration){
+      // v4.1.8：校准点本来就在 deleteRecord() 里被拦，但那是"点了才发现不行"。
+      // 直接不渲染删除按钮，用户一眼就知道这条动不了，不需要先点再看提示。
+      del = null;
     } else {
       del.className = 'lx' + (pendingDeleteId === r.id ? ' lxconfirm' : '');
       del.textContent = (pendingDeleteId === r.id) ? '确认删除' : '\u00d7';
       del.addEventListener('click', function(){ requestDelete(r.id); });
     }
-    row.appendChild(left); row.appendChild(del);
+    row.appendChild(left); if(del){ row.appendChild(del); }
     return row;
   }
 
@@ -2981,17 +2985,23 @@
       var btnrow = document.createElement('div');
       btnrow.className = 'bundlebtnrow';
       var delBtn = document.createElement('button');
+      var showBtnRow = true;
       if(locked){
         delBtn.className = 'lx lx-locked';
         delBtn.textContent = '🔒 已锁定期次';
         delBtn.disabled = true;
+        btnrow.appendChild(delBtn);
+      } else if(sessionIsCal){
+        // v4.1.8：整组含当前校准点时同样直接不渲染，理由同单条记录；
+        // 连按钮外层的行都不加，避免留一条空白margin
+        showBtnRow = false;
       } else {
         delBtn.className = 'lx' + (pendingDeleteId === ('group:' + sessionId) ? ' lxconfirm' : '');
         delBtn.textContent = (pendingDeleteId === ('group:' + sessionId)) ? '确认删除整组' : '删除整组';
         delBtn.addEventListener('click', function(e){ e.stopPropagation(); requestDeleteGroup(sessionId); });
+        btnrow.appendChild(delBtn);
       }
-      btnrow.appendChild(delBtn);
-      body.appendChild(btnrow);
+      if(showBtnRow){ body.appendChild(btnrow); }
       card.appendChild(body);
     }
     return card;
