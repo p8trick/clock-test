@@ -371,7 +371,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.8</span>
+      <span class="versiontag" id="versionTag">v4.1.9</span>
     </div>
 
     <div id="timePanel">
@@ -669,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.8</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.9</div>
   </div>
 
 </div>
@@ -833,9 +833,13 @@
     return { ok:true, count: sorted.length, driftSecPerDay: reg.slope / 1000, r2: reg.r2 };
   }
 
-  // 找出"还没被任何包认领、且早于当前生效校准点"的散装数据，按 calibrationSwitchLog
-  // 里记录的历次真实切换时间点切成若干段——每一段都保证不横跨任何一次真实切换。
-  // 只有最早的一段(segments[0])允许被打包，其余的哪怕已经可以看到，也要等前面的先打包。
+  // 找出"还没被任何包认领、且早于当前生效校准点"的散装数据。
+  // v4.1.9 之前的版本会额外按 calibrationSwitchLog 里的历史切换时间点把这批数据拆成
+  // 好几段，每段都要单独打包——这是错误设计：切换记录只是"活跃区间从哪条记录起算"的
+  // 操作历史，不代表数据边界，漂移计算(computeLagSeries)本身跟切换历史无关。
+  // 多轮反复切换校准点后，散装数据被拆得越来越碎，最终退化成一条条独立的单条"打包"，
+  // 样本量不足、漂移率算不出来。现在改成：不管中途切换过几次，只要还没被打包、且早于
+  // 当前生效校准点，一律算同一批，合并成一个 segment 一起打包。
   function findAllPendingSegments(){
     var calRecord = null;
     for(var ci=0; ci<records.length; ci++){ if(records[ci].isCalibration){ calRecord = records[ci]; break; } }
@@ -847,35 +851,7 @@
     var loose = records.filter(function(r){ return r.t < liveBoundary && !packagedIds[r.id]; }).sort(function(a,b){ return a.t - b.t; });
     if(!loose.length){ return []; }
 
-    var lastPackagedEndT = -Infinity;
-    if(dataPackages.length){
-      var lastPkg = dataPackages[dataPackages.length - 1];
-      lastPkg.recordIds.forEach(function(id){
-        var rec = null;
-        for(var i=0;i<records.length;i++){ if(records[i].id === id){ rec = records[i]; break; } }
-        if(rec && rec.t > lastPackagedEndT){ lastPackagedEndT = rec.t; }
-      });
-    }
-
-    var boundaries = calibrationSwitchLog
-      .map(function(e){ return e.t; })
-      .filter(function(t){ return t > lastPackagedEndT && t <= liveBoundary; })
-      .sort(function(a,b){ return a - b; });
-    if(!boundaries.length || boundaries[boundaries.length-1] !== liveBoundary){
-      boundaries.push(liveBoundary);
-    }
-
-    var segments = [];
-    var cursor = 0;
-    boundaries.forEach(function(b){
-      var seg = [];
-      while(cursor < loose.length && loose[cursor].t < b){
-        seg.push(loose[cursor]);
-        cursor++;
-      }
-      if(seg.length){ segments.push(seg); }
-    });
-    return segments;
+    return [ loose ];
   }
 
   function packageNextSegment(){
@@ -3067,7 +3043,11 @@
       var body = document.createElement('div');
       body.className = 'bundlebody';
       var renderedInPkg = {};
-      members.forEach(function(m){
+      // v4.1.9：包内成员原来按 members(升序，最旧在前) 直接 forEach，导致展开后最上面是
+      // 最旧的数据，跟主列表"最新在顶部"的惯例反着来，容易造成误操作(比如误以为最下面
+      // 那条是最新数据从而点错)。这里改成倒序渲染，跟主列表保持一致；header 摘要行和
+      // 漂移计算仍然用升序的 members，不受影响。
+      members.slice().reverse().forEach(function(m){
         if(m.sessionId){
           if(renderedInPkg[m.sessionId]){ return; }
           renderedInPkg[m.sessionId] = true;
