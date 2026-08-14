@@ -59,6 +59,23 @@
     font-size:11px; padding:5px 10px; border-radius:6px; font-family:inherit;
   }
   .iconbtn:active{background:var(--panel-edge); color:var(--ink);}
+  .iconbtn:disabled{opacity:.4;}
+
+  /* v4.1.13 终极清空强提示弹窗——轻量自定义弹窗，不用原生confirm/alert，
+     这个按钮只存在于设置页，不涉及摄像头页那种视频流+蓝牙焦点守卫的连续性任务，
+     没有原生阻塞式弹窗会打断检测循环的风险。 */
+  .modaloverlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.6);
+    display:flex; align-items:center; justify-content:center;
+    z-index:500; padding:20px;
+  }
+  .modalcard{
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:12px;
+    padding:16px; max-width:420px; width:100%; max-height:80vh; overflow-y:auto;
+  }
+  .modalcard h4{margin-top:0; color:var(--bad);}
+  .modalsummary{font-size:12.5px; line-height:1.7; color:var(--ink-dim);}
+  .modalsummary b{color:var(--ink);}
 
   .seasonrow{display:flex; gap:6px;}
   .seasonbtn{
@@ -371,7 +388,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.12</span>
+      <span class="versiontag" id="versionTag">v4.1.13</span>
     </div>
 
     <div id="timePanel">
@@ -558,9 +575,21 @@
         <button class="iconbtn" id="importBackupBtn">导入完整备份(JSON)</button>
       </div>
       <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
-      <p style="margin-top:8px;">完整备份包含所有记录的全部字段(含系统延迟、连拍会话标记等)，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，按记录ID去重，不会覆盖或清空当前已有的记录。</p>
+      <p style="margin-top:8px;">完整备份(backupVersion 2)包含全部原始记录、已封存的数据包、校准切换日志三部分，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，记录按ID、数据包按ID、切换日志按记录ID+时间戳分别去重，不会覆盖或清空当前已有数据。旧版(v1)备份文件仍可正常导入，只是不含数据包和切换日志两部分。</p>
     </div>
 
+  </div>
+
+  <div id="clearAllModal" class="modaloverlay" style="display:none;">
+    <div class="modalcard">
+      <h4>永久清空全部数据</h4>
+      <div class="modalsummary" id="clearAllSummary"></div>
+      <button class="iconbtn" id="clearAllBackupNowBtn" style="width:100%; margin-top:12px;">📦 先导出完整备份</button>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="iconbtn" id="clearAllCancelBtn" style="flex:1;">取消</button>
+        <button class="iconbtn" id="clearAllConfirmBtn" style="flex:1; border-color:var(--bad); color:var(--bad);" disabled>永久清空</button>
+      </div>
+    </div>
   </div>
 
   <div id="screenStats" class="screen" style="display:none;">
@@ -663,13 +692,14 @@
 
       <div class="section">
         <h4>数据管理与备份</h4>
-        <p style="margin-top:0;">记录列表保存在本机 localStorage，可导出为 CSV 或预测JSON。完整备份(JSON)包含所有记录的全部字段(含系统延迟、连拍会话标记等)，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，按记录ID去重，不会覆盖或清空当前已有的记录。</p>
+        <p style="margin-top:0;">记录列表保存在本机 localStorage，可导出为 CSV 或预测JSON。完整备份(backupVersion 2)包含全部原始记录、已封存的数据包、校准切换日志三部分，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，记录按ID、数据包按ID、切换日志按记录ID+时间戳分别去重，不会覆盖或清空当前已有数据。旧版(v1)备份文件仍可正常导入，只是不含数据包和切换日志两部分。</p>
         <p>手动补录：若某次校准/观测发生时忘了打开app，可以事后手动填入准确时刻，年月日时分秒毫秒各占一格，同样能参与统计，常用于把"最近一次人工对表"补成校准点。</p>
         <p>删除保护：记录列表里点一次"×"会先变成红色"确认删除"，3秒内再点一次才真正删除，超时自动取消，避免手滑误删。</p>
+        <p>终极清空：设置页"清空记录"按钮点击后会弹出详细提示，列出即将删除的记录条数、时间跨度、数据包期数、校准点状态，并提供一键导出备份的快捷入口；确认按钮会先禁用3秒防止手滑，倒计时结束才能点击，清空后原始记录、数据包、校准切换日志三者一并清除，无法撤销。</p>
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.12</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.13</div>
   </div>
 
 </div>
@@ -3610,11 +3640,16 @@
   }
 
   function exportFullBackup(){
+    // v4.1.13: backupVersion 2 —— 补上 v1 遗漏的 dataPackages(已封存数据包)和
+    // calibrationSwitchLog(校准切换日志)，否则在Safari标签页/PWA之间搬迁数据时，
+    // 已经打包的期次会在新环境里变回散装记录，包边界信息永久丢失。
     var payload = {
-      backupVersion: 1,
+      backupVersion: 2,
       exportedAt: Date.now(),
       recordCount: records.length,
-      records: records
+      records: records,
+      dataPackages: dataPackages,
+      calibrationSwitchLog: calibrationSwitchLog
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     var url = URL.createObjectURL(blob);
@@ -3655,9 +3690,53 @@
       });
       records.sort(function(a,b){ return a.t - b.t; });
       saveRecords();
+
+      // v4.1.13: v1备份没有这两个字段，Array.isArray检查天然兼容旧文件，跳过即可，
+      // 不当成错误处理。数据包按id去重合并，切换日志没有独立id，用recordId+t组合去重。
+      var pkgAdded = 0, pkgSkipped = 0;
+      if(Array.isArray(data.dataPackages)){
+        var existingPkgIds = {};
+        dataPackages.forEach(function(p){ existingPkgIds[p.id] = true; });
+        data.dataPackages.forEach(function(p){
+          if(p && p.id && Array.isArray(p.recordIds) && !existingPkgIds[p.id]){
+            dataPackages.push(p);
+            existingPkgIds[p.id] = true;
+            pkgAdded++;
+          } else {
+            pkgSkipped++;
+          }
+        });
+        savePackages();
+      }
+
+      var logAdded = 0;
+      if(Array.isArray(data.calibrationSwitchLog)){
+        var existingLogKeys = {};
+        calibrationSwitchLog.forEach(function(l){ existingLogKeys[l.recordId + '_' + l.t] = true; });
+        data.calibrationSwitchLog.forEach(function(l){
+          if(l && l.recordId && typeof l.t === 'number'){
+            var key = l.recordId + '_' + l.t;
+            if(!existingLogKeys[key]){
+              calibrationSwitchLog.push(l);
+              existingLogKeys[key] = true;
+              logAdded++;
+            }
+          }
+        });
+        saveCalSwitchLog();
+      }
+
       renderLog();
       renderStats();
-      alert('导入完成：新增 ' + added + ' 条记录，跳过 ' + skipped + ' 条重复/无效记录。设置(季节/延迟补偿/收敛趋势等)不受导入影响，只合并了记录本身。');
+      var msg = '导入完成：新增 ' + added + ' 条记录，跳过 ' + skipped + ' 条重复/无效记录。';
+      if(Array.isArray(data.dataPackages)){
+        msg += ' 数据包新增 ' + pkgAdded + ' 期，跳过 ' + pkgSkipped + ' 期重复。';
+      }
+      if(Array.isArray(data.calibrationSwitchLog)){
+        msg += ' 校准切换日志新增 ' + logAdded + ' 条。';
+      }
+      msg += ' 设置(季节/延迟补偿/收敛趋势等)不受导入影响。';
+      alert(msg);
     };
     reader.readAsText(file);
   }
@@ -3673,14 +3752,72 @@
     }
   }
 
+  // v4.1.13: 终极清空强提示强化。原来clearLog()自己弹native confirm()，只提示条数，
+  // 也只清records一项——但dataPackages/calibrationSwitchLog不会跟着清，留下指向不存在
+  // 记录的孤儿包(renderPackageCard里静默跳过不渲染，不会崩，但localStorage里一直占着)。
+  // 现在拆成两层：clearLog()改成真正执行清空的函数(三者一起清)，前面套一层自定义弹窗
+  // openClearAllModal()，列出完整影响范围+一键备份入口，确认键还做3秒延迟启用防手滑。
   function clearLog(){
+    records = [];
+    dataPackages = [];
+    calibrationSwitchLog = [];
+    saveRecords();
+    savePackages();
+    saveCalSwitchLog();
+    renderLog();
+    renderStats();
+  }
+
+  function fmtFullDT(ms){
+    var d = new Date(ms);
+    return d.getFullYear() + '/' + pad(d.getMonth()+1,2) + '/' + pad(d.getDate(),2) + ' ' + pad(d.getHours(),2) + ':' + pad(d.getMinutes(),2);
+  }
+
+  var CLEAR_ALL_COUNTDOWN_SEC = 3;
+  var clearAllCountdownTimer = null;
+
+  function openClearAllModal(){
     if(!records.length){ return; }
-    if(confirm('确定清空全部 ' + records.length + ' 条记录？此操作不可撤销。')){
-      records = [];
-      saveRecords();
-      renderLog();
-      renderStats();
-    }
+    var sorted = records.slice().sort(function(a,b){ return a.t - b.t; });
+    var span = fmtFullDT(sorted[0].t) + ' ~ ' + fmtFullDT(sorted[sorted.length-1].t);
+    var hasCalib = records.some(function(r){ return r.isCalibration; });
+    var summary = document.getElementById('clearAllSummary');
+    summary.innerHTML =
+      '本次操作将永久删除，物理上无法恢复：<br>' +
+      '· 全部原始记录 <b>' + records.length + '</b> 条<br>' +
+      '· 时间跨度：' + span + '<br>' +
+      '· 已封存数据包 <b>' + dataPackages.length + '</b> 期<br>' +
+      '· 当前校准点：' + (hasCalib ? '<b>有</b>，将一并清除' : '无') + '<br><br>' +
+      '强烈建议先导出完整备份，再确认清空。';
+    document.getElementById('clearAllModal').style.display = 'flex';
+    var btn = document.getElementById('clearAllConfirmBtn');
+    var remain = CLEAR_ALL_COUNTDOWN_SEC;
+    btn.disabled = true;
+    btn.textContent = '永久清空（' + remain + '）';
+    if(clearAllCountdownTimer){ clearInterval(clearAllCountdownTimer); }
+    clearAllCountdownTimer = setInterval(function(){
+      remain--;
+      if(remain <= 0){
+        clearInterval(clearAllCountdownTimer);
+        clearAllCountdownTimer = null;
+        btn.disabled = false;
+        btn.textContent = '永久清空';
+      } else {
+        btn.textContent = '永久清空（' + remain + '）';
+      }
+    }, 1000);
+  }
+
+  function closeClearAllModal(){
+    document.getElementById('clearAllModal').style.display = 'none';
+    if(clearAllCountdownTimer){ clearInterval(clearAllCountdownTimer); clearAllCountdownTimer = null; }
+  }
+
+  function confirmClearAll(){
+    var btn = document.getElementById('clearAllConfirmBtn');
+    if(btn.disabled){ return; }
+    clearLog();
+    closeClearAllModal();
   }
 
   function buildIconDataUrl(){
@@ -3998,7 +4135,10 @@
       e.target.value = '';
     });
     document.getElementById('clearDriftHistoryBtn').addEventListener('click', clearDriftHistory);
-    document.getElementById('clearBtn').addEventListener('click', clearLog);
+    document.getElementById('clearBtn').addEventListener('click', openClearAllModal);
+    document.getElementById('clearAllCancelBtn').addEventListener('click', closeClearAllModal);
+    document.getElementById('clearAllConfirmBtn').addEventListener('click', confirmClearAll);
+    document.getElementById('clearAllBackupNowBtn').addEventListener('click', exportFullBackup);
     document.getElementById('seasonSummerBtn').addEventListener('click', function(){ setSeason('summer'); });
     document.getElementById('seasonWinterBtn').addEventListener('click', function(){ setSeason('winter'); });
     document.getElementById('relayObserveBtn').addEventListener('click', function(){ setRelayInstalled(false); });
