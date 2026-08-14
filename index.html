@@ -371,7 +371,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.10</span>
+      <span class="versiontag" id="versionTag">v4.1.11</span>
     </div>
 
     <div id="timePanel">
@@ -669,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.10</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.11</div>
   </div>
 
 </div>
@@ -821,16 +821,34 @@
   // 包内成员自己单独跑一遍轻量回归，只用来给这个包一个"大概每天变慢多少"的参考数字，
   // 不区分季节(原始列表本来就是混季节的)，也不接入 collapseSessionsForRegression 那套
   // 面向"正式预测"的复杂锚点合并——这里只是历史记录层面的摘要，要求没有那么高。
+  // v4.1.11：补齐跟 renderStats 一致的连拍折叠预处理——之前 computePackageDrift 直接把
+  // 连拍会话里每一张照片当独立点喂进回归，跟实时统计页"先折叠成一个去噪合成点再回归"的
+  // 做法不一致，会导致连拍张数被当成时间跨度覆盖，effectiveN 虚高、星级置信度失真，
+  // 换不同子集时数值也更容易跳(2.23→2.24那种)。现在两阶段跟 renderStats 完全对齐：
+  // 先用原始点粗略回归拿 prelimSlope，用它修正连拍内部的漂移增量后取均值折叠成一个点，
+  // 再用折叠后的数据做正式回归。折叠后不足3条则退回原始点(理由同 renderStats)。
   function computePackageDrift(members){
     if(members.length < 3){ return { ok:false, count: members.length }; }
     var sorted = members.slice().sort(function(a,b){ return a.t - b.t; });
-    var t0 = sorted[0].t;
-    var xs = sorted.map(function(r){ return (r.t - t0) / 86400000; });
-    var ys = computeLagSeries(sorted);
-    var ws = computeWeights(sorted);
+
+    var t0Prelim = sorted[0].t;
+    var xsPrelim = sorted.map(function(r){ return (r.t - t0Prelim) / 86400000; });
+    var ysPrelim = computeLagSeries(sorted);
+    var wsPrelim = computeWeights(sorted);
+    var prelimReg = weightedRegression(xsPrelim, ysPrelim, wsPrelim);
+    var prelimSlope = prelimReg.slope > 0 ? prelimReg.slope : 0;
+
+    var collapsed = collapseSessionsForRegression(sorted, prelimSlope);
+    if(collapsed.length < 3){ collapsed = sorted; }
+    collapsed = collapsed.slice().sort(function(a,b){ return a.t - b.t; });
+
+    var t0 = collapsed[0].t;
+    var xs = collapsed.map(function(r){ return (r.t - t0) / 86400000; });
+    var ys = computeLagSeries(collapsed);
+    var ws = computeWeights(collapsed);
     var reg = weightedRegression(xs, ys, ws);
     if(!reg || !(reg.slope > 0)){ return { ok:false, count: sorted.length, noDrift:true }; }
-    var stars = computeConfidence(sorted, reg);
+    var stars = computeConfidence(collapsed, reg);
     return { ok:true, count: sorted.length, driftSecPerDay: reg.slope / 1000, r2: reg.r2, stars: stars };
   }
 
