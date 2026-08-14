@@ -371,7 +371,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.11</span>
+      <span class="versiontag" id="versionTag">v4.1.12</span>
     </div>
 
     <div id="timePanel">
@@ -600,7 +600,7 @@
         <p style="margin-top:0;">至少3条记录才会计算漂移趋势，建议间隔约1周做一次记录，间隔越长、点数越多，估算的每天漂移速率越准。若中途手动校正过挂钟，请给校正后的第一条记录点"设为校准点"，之前的数据会被排除在统计之外。</p>
         <p>季节模型：室温影响机芯漂移速率，夏冬分开建模，同时最近的记录权重更高(约5周半衰期指数衰减)，模型会自动跟着最近的室温变化微调。校准点是全局的(对表这个物理动作影响两季)，但对表之后各季节仍从各自最近数据重新起算。</p>
         <p>挂钟显示时间：每条记录下方可以填入按下按钮那一刻挂钟实际显示的 HH:MM，填入后app会直接算出"本次漂移了几秒"并显示，参与统计时优先级高于自动估算，且不受60秒周期限制。不填的话仍按跳变瞬间点击的方式自动估算。连拍会话(3次)展开后，3条记录各自都能填，跟单条记录完全一样，互不影响；某一条不填就用自动估算补上，3条最终会一起参与漂移速率补偿平均，抹平摄像头检测本身的毫秒级抖动。</p>
-        <p>置信星级：综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。</p>
+        <p>置信星级：综合数据点数量、时间跨度是否覆盖多周、拟合优度加权换算，仅供参考，数据越少星级越保守。<b>提示：</b>同一天内拍好几次单独记录(不走连拍模式)，对提升星级帮助有限——漂移是按天累积的量，同一天内的多次读数更多是在重复确认"这一天大概什么水平"，不太提供新的趋势信息。想让星级更快提升，优先把测量间隔拉开到不同天、不同周，比在同一天里多拍几次更有效；同一天内确实想多拍几次降噪，用连拍模式(3次)即可，这种情况系统会自动折叠成一个点，不会重复计入。</p>
       </div>
 
       <div class="section">
@@ -669,7 +669,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.11</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.12</div>
   </div>
 
 </div>
@@ -3222,6 +3222,11 @@
     return { slope: slope, intercept: intercept, r2: r2, effectiveN: effectiveN };
   }
 
+  // 待议(v4.1.11 讨论后搁置，未实现)：同一天内分几次单独手动拍摄(不走连拍模式)，
+  // 目前会被 effectiveN 当成好几份独立时间信息，跟真正跨天/跨周的数据同等对待，
+  // 星级可能偏乐观。理想情况下应该按"时间分布稀疏度"再叠一层降权(同天<跨天<跨周<跨月)，
+  // 但这会改动核心回归权重模型、历史星级重新算出来可能整体下修，影响面较大，
+  // 暂不实现，先在帮助页(统计与季节模型一节)加了文字提示引导操作习惯。
   function computeConfidence(active, reg){
     var spanDays = (active[active.length-1].t - active[0].t) / 86400000;
     var countScore = Math.min(1, (reg.effectiveN - 2) / 10);
