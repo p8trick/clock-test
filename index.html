@@ -683,7 +683,7 @@
         <h5>运行期间的行为差异</h5>
         <p>Dev运行期间，快速/连拍模式切换按钮会变暗锁定，防止实验途中参数不一致；每次捕获(或一组连拍)完成后会立即自动重新武装，不需要手动点"开始监测"续接；普通的时钟漂移records、摄像头页下方"最近捕获"迷你列表、退格键撤销，这些统计相关的记录全部暂停，不会被Dev模式的密集捕获污染。</p>
         <h5>四种终止方式</h5>
-        <p>满11分钟自动结束；手动点"停止Dev采样"；20秒内触发超过4次视为高频异常自动熔断(仍会记录进日志供分析，只是同时终止实验)；切到后台或锁屏当场停止，数据到此为止，不会等你回来后接着采——这是为了避免"录一段、断一段、又续一段"的碎片化日志误导AI分析。四种情况都会自动弹出系统原生的分享菜单(底部半屏，v4.1.16起改用这种方式，不再是跳转到独立的文件保存页面——旧方式是一次真实页面导航，会打断摄像头video流的生命周期，返回后画面卡死黑屏，真机确认过换成分享菜单后这个问题不再出现)；如果不小心划掉了菜单，右上角会出现一个"💾导出"按钮(平时不出现)，可以随时重新触发保存，直到你离开摄像头页或开启下一轮实验为止。注意：分享菜单展开到接近全屏并触发实际保存动作后返回，蓝牙数字键盘可能会失焦失效，此时点一下左下角的"⌨"键盘状态徽章即可恢复(v4.1.17起徽章的重新聚焦逻辑已修复，此前版本点徽章可能显示"已就绪"但键盘实际仍无法使用，跟保存方式本身无关，是徽章自身聚焦时机的bug)。</p>
+        <p>满11分钟自动结束；手动点"停止Dev采样"；20秒内触发超过4次视为高频异常自动熔断(仍会记录进日志供分析，只是同时终止实验)；切到后台或锁屏当场停止，数据到此为止，不会等你回来后接着采——这是为了避免"录一段、断一段、又续一段"的碎片化日志误导AI分析。四种情况都会自动弹出系统原生的分享菜单(底部半屏，v4.1.16起改用这种方式，不再是跳转到独立的文件保存页面——旧方式是一次真实页面导航，会打断摄像头video流的生命周期，返回后画面卡死黑屏，真机确认过换成分享菜单后这个问题不再出现)；如果不小心划掉了菜单，右上角会出现一个"💾导出"按钮(平时不出现)，可以随时重新触发保存，直到你离开摄像头页或开启下一轮实验为止。注意：分享菜单展开到接近全屏并触发实际保存动作后返回，蓝牙数字键盘可能会失焦失效，此时点一下左下角的"⌨"键盘状态徽章重新绑定，然后按一下键盘上任意一个键确认——徽章显示"⌨ 已确认可用"才代表真的收到过按键，显示"未验证"只是聚焦动作执行过、不代表键盘真的能用(iOS没有开放API能让网页直接确认物理键盘是否接通，"未验证"到"已确认"这一步必须靠你真按一下键才能验证，无法由App自动完成)。</p>
         <h5>防止无操作自动锁屏</h5>
         <p>开始采样时会尝试请求系统"屏幕常亮"权限(Screen Wake Lock)，避免11分钟内因为手机自动锁屏设置(不是手动锁屏/切走)而被判定为中断。这个请求不保证100%成功(取决于iOS版本、低电量模式等)，如果发现常锁屏，可以去系统设置里把自动锁屏时长调成"永不"作为保底。</p>
         <h5>网格密度选择建议(基于实测日志的经验)</h5>
@@ -3937,6 +3937,11 @@
   var btGhostEl = null;
   var btFocusGuardActive = false;
   var btGhostWatchdogTimer = null;
+  // v4.1.17: DOM 层面"聚焦成功"跟物理键盘 responder 是否真的接通是两件事，JS 拿不到后者的
+  // 真实状态，唯一可信的信号是"确实收到过一次物理按键"。btKeyConfirmed 记录的就是这件事：
+  // 任何一次重新聚焦(不管是看门狗、切屏返回、App回前台，还是手动点徽章)都会把它清成 false，
+  // 只有 ghost input 真的收到 keydown 之后才会变回 true。徽章文案据此如实反映"未验证"还是"已确认"。
+  var btKeyConfirmed = false;
 
   function isBtGhostTarget(target){
     return !!(target && target.id === BT_GHOST_ID);
@@ -3951,23 +3956,28 @@
     return false;
   }
 
-  function focusGhostInput(){
+  function focusGhostInput(force){
     if(!btGhostEl || !btFocusGuardActive){ return; }
     if(shouldSkipGhostRefocus(document.activeElement)){ return; }
-    if(document.activeElement === btGhostEl){
-      updateBtKeyStatus(true);
+    if(document.activeElement === btGhostEl && !force){
+      // DOM 焦点本来就在 ghost input 上，没必要重新走一遍 blur/focus——
+      // 但这不代表物理键盘已确认可用，是否confirmed 维持原状，不在这里瞎改。
+      updateBtKeyStatus();
       return;
     }
     // "先 blur 再 focus" 踢一脚：JS 层面调用 .focus() 有时会"假成功"(activeElement 显示对了，
     // 但没有真正建立物理键盘的 responder)，尤其是没有真实用户手势背书、或刚从系统权限框/后台恢复时。
     // 强制先失焦再聚焦，能让 WKWebView 重新走一遍完整的聚焦流程。
+    // 不管这次重新聚焦最终是否"看起来"成功，之前的"已确认"状态都作废——真的可用与否，
+    // 要等下一次真实按键进来才能重新确认，这里绝不提前声明。
+    btKeyConfirmed = false;
     try{ btGhostEl.blur(); }catch(err){}
     try{ btGhostEl.focus({ preventScroll: true }); }
     catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
-    setTimeout(function(){ updateBtKeyStatus(document.activeElement === btGhostEl); }, 50);
+    setTimeout(updateBtKeyStatus, 50);
   }
 
-  function updateBtKeyStatus(ready){
+  function updateBtKeyStatus(){
     var btn = document.getElementById('btKeyStatusBtn');
     if(!btn){ return; }
     if(!btFocusGuardActive){
@@ -3975,9 +3985,12 @@
       btn.className = 'btKeyStatus notready';
       return;
     }
-    if(ready){
-      btn.textContent = '⌨ 已就绪';
+    if(btKeyConfirmed){
+      btn.textContent = '⌨ 已确认可用';
       btn.className = 'btKeyStatus ready';
+    } else if(document.activeElement === btGhostEl){
+      btn.textContent = '⌨ 未验证，按键确认';
+      btn.className = 'btKeyStatus notready';
     } else {
       btn.textContent = '⌨ 点此重新绑定';
       btn.className = 'btKeyStatus notready';
@@ -3986,12 +3999,14 @@
 
   function enableBtFocusGuard(){
     btFocusGuardActive = true;
+    btKeyConfirmed = false;
     focusGhostInput();
   }
 
   function disableBtFocusGuard(){
     btFocusGuardActive = false;
-    updateBtKeyStatus(false);
+    btKeyConfirmed = false;
+    updateBtKeyStatus();
   }
 
   function setupBtKeypadGhost(){
@@ -4008,6 +4023,12 @@
     el.style.cssText = 'position:fixed;top:-999px;left:-999px;width:1px;height:1px;padding:0;margin:0;border:none;opacity:0;pointer-events:none;';
     // Ghost Input 自身可能会把蓝牙按键当成真实文字输入，这里立刻清空，避免残留内容、避免被误判成"正在打字"
     el.addEventListener('input', function(){ el.value = ''; });
+    // v4.1.17: 唯一可信的"确认可用"信号——ghost input 真的收到了一次物理按键。
+    // 独立于下面摄像头页那段业务 keydown 逻辑，不受 currentScreen 限制，任何屏幕收到按键都算数。
+    el.addEventListener('keydown', function(){
+      btKeyConfirmed = true;
+      updateBtKeyStatus();
+    });
     el.addEventListener('blur', function(){
       if(!btFocusGuardActive){ return; }
       setTimeout(function(){
@@ -4035,28 +4056,32 @@
     window.addEventListener('pageshow', function(){ if(btFocusGuardActive){ setTimeout(focusGhostInput, 100); } });
     window.addEventListener('focus', function(){ if(btFocusGuardActive){ setTimeout(focusGhostInput, 50); } });
 
-    // 兜底看门狗：防止某些场景下焦点被静默夺走而没有触发上面任何事件
+    // 兜底看门狗：防止某些场景下焦点被静默夺走而没有触发上面任何事件。
+    // v4.1.17：这里不再因为 activeElement===btGhostEl 就直接宣布"已就绪"——
+    // DOM焦点对不代表物理键盘真的通，是否confirmed 只看有没有收到过真实按键，这里只负责刷新显示。
     btGhostWatchdogTimer = setInterval(function(){
       if(!btFocusGuardActive){ return; }
-      if(document.activeElement === btGhostEl){ updateBtKeyStatus(true); return; }
+      if(document.activeElement === btGhostEl){ updateBtKeyStatus(); return; }
       if(shouldSkipGhostRefocus(document.activeElement)){ return; }
       focusGhostInput();
     }, 1500);
 
     // 手动兜底：这是一次100%有真实用户手势背书的点击，理论上必定能真正建立焦点。
-    // 固定手机、准备用蓝牙键盘启动监测前，看一眼徽章，不放心就点一下。
+    // 固定手机、准备用蓝牙键盘启动监测前，看一眼徽章，不放心就点一下，然后按一下键盘确认。
     // v4.1.17修复：原来 blur()后用 setTimeout(fn,0) 延迟执行 focus()，即便0毫秒延迟也会让这次
     // focus() 脱离本次点击的用户手势时效窗口，导致 WKWebView 没有真正重新接通物理键盘 responder——
     // 状态显示"已就绪"是假象，键盘其实是坏的。分享菜单展开触发保存后返回相机页这个场景下，
     // 真机测试确认过该bug会稳定复现。现在改成 blur()+focus() 全程同步执行、不经过任何 setTimeout，
-    // 留在同一次点击手势里，真机验证过对同一场景确实生效。
+    // 留在同一次点击手势里，真机验证过对同一场景确实生效；并且强制走 force 分支重新走一遍
+    // blur/focus，即便 activeElement 已经显示是 ghost input 也不提前相信它。
     var statusBtn = document.getElementById('btKeyStatusBtn');
     if(statusBtn){
       statusBtn.addEventListener('click', function(){
         if(!btFocusGuardActive){ return; }
+        btKeyConfirmed = false;
         try{ btGhostEl.blur(); }catch(err){}
         try{ btGhostEl.focus({ preventScroll: true }); }catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
-        updateBtKeyStatus(document.activeElement === btGhostEl);
+        updateBtKeyStatus();
       });
     }
   }
