@@ -366,6 +366,11 @@
   .continuitytag.q-junk{border-color:var(--ink-dim); color:var(--ink-dim);}
   .bundleExpandBtn{background:none; border:none; color:var(--ink-dim); font-size:14px; padding:4px 8px;}
   .bundlebody{margin-top:8px; padding-left:10px; border-left:2px solid var(--panel-edge);}
+  /* v4.3.1：连拍会话展开区(蓝)跟数据包展开区(橙)分别加淡色底色，
+     黑底上单靠缩进不容易一眼分清是哪种展开，颜色能让人扫一眼就分辨类型。
+     橙色跟对比页走势图用的同一色系，强化"数据包=橙色系"的视觉语言。 */
+  .bundlebody.burstbody{background:rgba(61,166,255,.07); border-left-color:rgba(61,166,255,.45);}
+  .bundlebody.pkgbody{background:rgba(255,138,61,.07); border-left-color:rgba(255,138,61,.45);}
 
   /* v4.3.0 多期数据包对比页——数据源直接读全局 dataPackages，不做任何本地缓存/快照，
      删除动作统一走 deletePackageById()，删完立刻反向刷新统计表页的 renderLog()，
@@ -399,7 +404,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.3.1</span>
+      <span class="versiontag" id="versionTag">v4.3.2</span>
     </div>
 
     <div id="timePanel">
@@ -735,7 +740,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.3.1</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.3.2</div>
   </div>
 
 </div>
@@ -2960,7 +2965,7 @@
 
     if(expanded){
       var body = document.createElement('div');
-      body.className = 'bundlebody';
+      body.className = 'bundlebody burstbody';
       members.forEach(function(m, i){
         var item = document.createElement('div');
         var gapMs = i > 0 ? (m.t - members[i-1].t) : null;
@@ -3085,7 +3090,7 @@
 
     if(expanded){
       var body = document.createElement('div');
-      body.className = 'bundlebody';
+      body.className = 'bundlebody pkgbody';
       var renderedInPkg = {};
       // v4.1.9：包内成员原来按 members(升序，最旧在前) 直接 forEach，导致展开后最上面是
       // 最旧的数据，跟主列表"最新在顶部"的惯例反着来，容易造成误操作(比如误以为最下面
