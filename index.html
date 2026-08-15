@@ -399,7 +399,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.3.0</span>
+      <span class="versiontag" id="versionTag">v4.3.1</span>
     </div>
 
     <div id="timePanel">
@@ -735,7 +735,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.3.0</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.3.1</div>
   </div>
 
 </div>
@@ -3128,18 +3128,47 @@
     return row;
   }
 
-  // v4.3.0 数据包真删除——唯一入口，跟旧逻辑"只管往dataPackages里push、从来没有
+  // v4.3.1 数据包真删除——唯一入口，跟旧逻辑"只管往dataPackages里push、从来没有
   // 真正删除路径"彻底不同。删完立刻同步刷新统计表(renderLog)和对比页自己
   // (renderComparePage)，不管调用时当前停留在哪个页面，两边永远读同一份数组，
   // 不会有"这边删了那边还留着旧数据"的窗口期。
+  //
+  // 删除范围连带包内全部原始记录(records)一并清除，不是只摘掉"包"这层壳——
+  // 弹窗文案写的是"永久删除，物理上无法恢复"，行为必须跟文案兑现，不能删完包后
+  // 记录本体还在、退回成"待打包"状态，那样用户看到"包没了"但实际数据都还在，
+  // 是两件事，容易造成误解。
+  //
+  // 保险检查：按 v4.1.7 定下的规矩，当前校准点所在记录理论上不可能被封存进任何
+  // 已完成的包(dissolveMostRecentPackageIfContains 在设新校准点时会保证这一点)，
+  // 但这里还是做一次防御性检查——万一真出现这种异常状态，直接拒绝整体删除，
+  // 避免退化成"没有任何校准点、全部历史一起参与回归"这种 v4.1.7 想彻底消灭的危险状态。
   function deletePackageById(pkgId){
     var idx = -1;
     for(var i=0;i<dataPackages.length;i++){ if(dataPackages[i].id === pkgId){ idx = i; break; } }
     if(idx === -1){ return; }
+    var pkg = dataPackages[idx];
+
+    var hasCalibration = pkg.recordIds.some(function(id){
+      for(var i=0;i<records.length;i++){ if(records[i].id === id && records[i].isCalibration){ return true; } }
+      return false;
+    });
+    if(hasCalibration){
+      alert('这个数据包里包含当前校准点，理论上不应该发生，已阻止删除以避免数据异常。');
+      return;
+    }
+
     dataPackages.splice(idx, 1);
+    var deletedIds = pkg.recordIds.slice();
+    records = records.filter(function(r){ return deletedIds.indexOf(r.id) === -1; });
+    recomputeAllDeltas();
     savePackages();
+    saveRecords();
     renderLog();
+    renderStats();
     renderComparePage();
+    // 已封存的包按理不该出现在当前相机会话的实时拍摄列表里，这里仍然按
+    // deleteRecord() 的卫生标准做一次防御性清理，避免任何边缘情况下的残留。
+    deletedIds.forEach(function(id){ removeFromCameraSessionCaptures(id); });
   }
 
   var pkgDeleteCountdownTimer = null;
