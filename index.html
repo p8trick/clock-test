@@ -369,6 +369,20 @@
   .continuitytag.q-junk{border-color:var(--ink-dim); color:var(--ink-dim);}
   .bundleExpandBtn{background:none; border:none; color:var(--ink-dim); font-size:14px; padding:4px 8px;}
   .bundlebody{margin-top:8px; padding-left:10px; border-left:2px solid var(--panel-edge);}
+
+  /* v4.3.0 多期数据包对比页——数据源直接读全局 dataPackages，不做任何本地缓存/快照，
+     删除动作统一走 deletePackageById()，删完立刻反向刷新统计表页的 renderLog()，
+     保证两个页面任何时候看到的都是同一份数组，不会出现"这边删了那边还留着"的窗口期。 */
+  .comparechartwrap{background:#0d0f13; border:1px solid var(--panel-edge); border-radius:10px; padding:8px; margin-bottom:4px;}
+  .comparechartempty{color:var(--ink-dim); font-size:12px; text-align:center; padding:24px 10px;}
+  .pkgcomparerow{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; border-bottom:1px solid var(--panel-edge); padding:10px 0;}
+  .pkgcomparerow:last-child{border-bottom:none;}
+  .pkgcomparerow .info{flex:1; min-width:0;}
+  .pkgcomparerow .lt{font-family:var(--mono); color:var(--ink); font-size:13px;}
+  .pkgcomparerow .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:3px; line-height:1.6;}
+  .pkgdelbtn{background:none; border:1px solid var(--panel-edge); color:var(--bad); font-size:11px; padding:5px 10px; border-radius:6px; flex-shrink:0; font-family:inherit;}
+  .pkgdelbtn:active{background:rgba(255,92,92,.12);}
+  .pkgdelwarn{color:var(--bad); font-weight:600;}
   .bundleitem{padding:6px 0; font-size:12px;}
   .bundleitem .lt{font-family:var(--mono); color:var(--ink); font-size:12px;}
   .bundleitem .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:2px;}
@@ -388,7 +402,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.2.0</span>
+      <span class="versiontag" id="versionTag">v4.3.0</span>
     </div>
 
     <div id="timePanel">
@@ -609,6 +623,36 @@
     <div class="section">
       <h4>历史记录</h4>
       <div id="log"><div class="logempty">尚无记录</div></div>
+      <button class="iconbtn" id="openCompareBtn" style="width:100%; margin-top:10px;">📊 多期数据包对比</button>
+    </div>
+  </div>
+
+  <div id="screenCompare" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="compareBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">多期数据包对比</span>
+    </div>
+
+    <div class="section">
+      <h4>漂移走势</h4>
+      <div class="comparechartwrap"><canvas id="compareChart" style="width:100%; display:block;"></canvas></div>
+      <p style="margin:6px 0 0;">走势图只画出能算出漂移率的期次；样本不足的期次不参与连线，只在下方列表里如实标注"样本不足"。</p>
+    </div>
+
+    <div class="section">
+      <h4>数据包列表</h4>
+      <div id="comparePkgList"><div class="logempty">尚无已封存的数据包</div></div>
+    </div>
+  </div>
+
+  <div id="pkgDeleteModal" class="modaloverlay" style="display:none;">
+    <div class="modalcard">
+      <h4>永久删除数据包</h4>
+      <div class="modalsummary" id="pkgDeleteSummary"></div>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="iconbtn" id="pkgDeleteCancelBtn" style="flex:1;">取消</button>
+        <button class="iconbtn" id="pkgDeleteConfirmBtn" style="flex:1; border-color:var(--bad); color:var(--bad);" disabled>永久删除</button>
+      </div>
     </div>
   </div>
 
@@ -700,7 +744,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.2.0</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.3.0</div>
   </div>
 
 </div>
@@ -3133,6 +3177,222 @@
     return row;
   }
 
+  // v4.3.0 数据包真删除——唯一入口，跟旧逻辑"只管往dataPackages里push、从来没有
+  // 真正删除路径"彻底不同。删完立刻同步刷新统计表(renderLog)和对比页自己
+  // (renderComparePage)，不管调用时当前停留在哪个页面，两边永远读同一份数组，
+  // 不会有"这边删了那边还留着旧数据"的窗口期。
+  function deletePackageById(pkgId){
+    var idx = -1;
+    for(var i=0;i<dataPackages.length;i++){ if(dataPackages[i].id === pkgId){ idx = i; break; } }
+    if(idx === -1){ return; }
+    dataPackages.splice(idx, 1);
+    savePackages();
+    renderLog();
+    renderComparePage();
+  }
+
+  var pkgDeleteCountdownTimer = null;
+  var pkgPendingDeleteId = null;
+  var PKG_DELETE_COUNTDOWN_SEC = 3;
+
+  function openPackageDeleteModal(pkgId){
+    var pkg = null;
+    for(var i=0;i<dataPackages.length;i++){ if(dataPackages[i].id === pkgId){ pkg = dataPackages[i]; break; } }
+    if(!pkg){ return; }
+    var members = pkg.recordIds
+      .map(function(id){ for(var j=0;j<records.length;j++){ if(records[j].id === id){ return records[j]; } } return null; })
+      .filter(Boolean)
+      .sort(function(a,b){ return a.t - b.t; });
+    if(!members.length){ return; }
+    var drift = computePackageDrift(members);
+    pkgPendingDeleteId = pkgId;
+
+    var summary = document.getElementById('pkgDeleteSummary');
+    var html =
+      '本次操作将永久删除，物理上无法恢复：<br>' +
+      '· 时间跨度：' + fmtFullDT(members[0].t) + ' ~ ' + fmtFullDT(members[members.length-1].t) + '<br>' +
+      '· 共 <b>' + members.length + '</b> 条记录<br>' +
+      '· 漂移率：' + (drift.ok ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · ' + drift.stars.toFixed(1) + '★') : '样本不足，未计算出漂移率');
+    if(drift.ok && drift.stars >= 3){
+      html += '<br><br><span class="pkgdelwarn">⚠️ 该期次置信度较高(≥3★)，删除前请再次确认确实不再需要这期数据。</span>';
+    }
+    summary.innerHTML = html;
+
+    document.getElementById('pkgDeleteModal').style.display = 'flex';
+    var btn = document.getElementById('pkgDeleteConfirmBtn');
+    var remain = PKG_DELETE_COUNTDOWN_SEC;
+    btn.disabled = true;
+    btn.textContent = '永久删除（' + remain + '）';
+    if(pkgDeleteCountdownTimer){ clearInterval(pkgDeleteCountdownTimer); }
+    pkgDeleteCountdownTimer = setInterval(function(){
+      remain--;
+      if(remain <= 0){
+        clearInterval(pkgDeleteCountdownTimer);
+        pkgDeleteCountdownTimer = null;
+        btn.disabled = false;
+        btn.textContent = '永久删除';
+      } else {
+        btn.textContent = '永久删除（' + remain + '）';
+      }
+    }, 1000);
+  }
+
+  function closePackageDeleteModal(){
+    document.getElementById('pkgDeleteModal').style.display = 'none';
+    if(pkgDeleteCountdownTimer){ clearInterval(pkgDeleteCountdownTimer); pkgDeleteCountdownTimer = null; }
+    pkgPendingDeleteId = null;
+  }
+
+  function confirmPackageDelete(){
+    var btn = document.getElementById('pkgDeleteConfirmBtn');
+    if(btn.disabled || !pkgPendingDeleteId){ return; }
+    var id = pkgPendingDeleteId;
+    closePackageDeleteModal();
+    deletePackageById(id);
+  }
+
+  // v4.3.0 对比页——直接读全局 dataPackages，不维护自己的副本。孤儿包(成员被单条
+  // 删除清空)静默跳过，跟统计表页 renderPackageCard 的处理方式保持一致。
+  function getComparablePackages(){
+    return dataPackages.map(function(pkg){
+      var members = pkg.recordIds
+        .map(function(id){ for(var i=0;i<records.length;i++){ if(records[i].id === id){ return records[i]; } } return null; })
+        .filter(Boolean)
+        .sort(function(a,b){ return a.t - b.t; });
+      if(!members.length){ return null; }
+      return { pkg: pkg, members: members, drift: computePackageDrift(members) };
+    }).filter(Boolean);
+  }
+
+  function renderComparePage(){
+    var entries = getComparablePackages();
+    var listEl = document.getElementById('comparePkgList');
+
+    if(!entries.length){
+      listEl.innerHTML = '<div class="logempty">尚无已封存的数据包</div>';
+      drawCompareChart([]);
+      return;
+    }
+
+    // 列表倒序(最新在上)，跟统计表页数据包卡片的排列习惯保持一致
+    listEl.innerHTML = '';
+    entries.slice().reverse().forEach(function(entry){
+      var members = entry.members, drift = entry.drift, pkg = entry.pkg;
+      var row = document.createElement('div');
+      row.className = 'pkgcomparerow';
+
+      var info = document.createElement('div');
+      info.className = 'info';
+      var lt = document.createElement('div');
+      lt.className = 'lt';
+      lt.textContent = shortDT(members[0].t) + ' ~ ' + shortDT(members[members.length-1].t) + ' · 共' + members.length + '条';
+      var ld = document.createElement('div');
+      ld.className = 'ld';
+      ld.innerHTML = drift.ok
+        ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '% · ' + starHtml(drift.stars))
+        : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
+      info.appendChild(lt); info.appendChild(ld);
+
+      var delBtn = document.createElement('button');
+      delBtn.className = 'pkgdelbtn';
+      delBtn.textContent = '删除';
+      delBtn.addEventListener('click', function(){ openPackageDeleteModal(pkg.id); });
+
+      row.appendChild(info); row.appendChild(delBtn);
+      listEl.appendChild(row);
+    });
+
+    // 走势图只用算得出漂移率的期次，按时间正序连线；样本不足的期次不参与连线，
+    // 已经在上面的列表里如实标注，不需要在图上用另一套符号语言重复表达。
+    var chartPoints = entries
+      .filter(function(e){ return e.drift.ok; })
+      .map(function(e){ return { t: e.members[e.members.length-1].t, drift: e.drift.driftSecPerDay, stars: e.drift.stars }; })
+      .sort(function(a,b){ return a.t - b.t; });
+    drawCompareChart(chartPoints);
+  }
+
+  function drawCompareChart(points){
+    var canvas = document.getElementById('compareChart');
+    var wrap = canvas.parentElement;
+    var cssWidth = wrap.clientWidth - 16; // 减去 .comparechartwrap 的左右padding
+    var cssHeight = 180;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(cssWidth * dpr));
+    canvas.height = Math.max(1, Math.round(cssHeight * dpr));
+    canvas.style.width = cssWidth + 'px';
+    canvas.style.height = cssHeight + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+    if(points.length < 2){
+      ctx.fillStyle = '#7c8593';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(points.length === 0 ? '暂无可绘制的期次' : '至少需要2个期次才能画走势', cssWidth/2, cssHeight/2);
+      return;
+    }
+
+    var padL = 40, padR = 14, padT = 16, padB = 24;
+    var plotW = cssWidth - padL - padR;
+    var plotH = cssHeight - padT - padB;
+
+    var tMin = points[0].t, tMax = points[points.length-1].t;
+    var tSpan = Math.max(1, tMax - tMin);
+    var driftVals = points.map(function(p){ return p.drift; });
+    var vMin = Math.min.apply(null, driftVals);
+    var vMax = Math.max.apply(null, driftVals);
+    if(vMax === vMin){ vMax += 1; vMin -= 1; }
+    var vPad = (vMax - vMin) * 0.15;
+    vMax += vPad; vMin -= vPad;
+
+    function xOf(t){ return padL + (t - tMin) / tSpan * plotW; }
+    function yOf(v){ return padT + plotH - (v - vMin) / (vMax - vMin) * plotH; }
+
+    // 网格 + Y轴刻度(取3条：min/mid/max)
+    ctx.strokeStyle = '#1d2128';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#7c8593';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    [vMin + vPad, (vMin+vMax)/2, vMax - vPad].forEach(function(v){
+      var y = yOf(v);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(padL + plotW, y);
+      ctx.stroke();
+      ctx.fillText(v.toFixed(2), padL - 6, y + 3);
+    });
+
+    // X轴时间刻度：首尾各一个
+    ctx.textAlign = 'center';
+    ctx.fillText(shortDT(tMin), xOf(tMin) + 20, cssHeight - 6);
+    ctx.fillText(shortDT(tMax), xOf(tMax) - 20, cssHeight - 6);
+
+    // 连线
+    ctx.strokeStyle = '#ff8a3d';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    points.forEach(function(p, i){
+      var x = xOf(p.t), y = yOf(p.drift);
+      if(i === 0){ ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
+    });
+    ctx.stroke();
+
+    // 数据点 + 数值标注
+    points.forEach(function(p){
+      var x = xOf(p.t), y = yOf(p.drift);
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI*2);
+      ctx.fillStyle = '#ff8a3d';
+      ctx.fill();
+      ctx.fillStyle = '#e9edf2';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(p.drift.toFixed(2), x, y - 8);
+    });
+  }
+
   function renderLog(){
     refreshSessionCollapseCache();
     var log = document.getElementById('log');
@@ -4092,6 +4352,7 @@
     document.getElementById('screenCapture').style.display = (name === 'capture') ? 'flex' : 'none';
     document.getElementById('screenSettings').style.display = (name === 'settings') ? 'flex' : 'none';
     document.getElementById('screenStats').style.display = (name === 'stats') ? 'flex' : 'none';
+    document.getElementById('screenCompare').style.display = (name === 'compare') ? 'flex' : 'none';
     document.getElementById('screenHelp').style.display = (name === 'help') ? 'flex' : 'none';
     document.getElementById('screenCamera').style.display = (name === 'camera') ? 'flex' : 'none';
     if(name === 'settings'){
@@ -4100,6 +4361,9 @@
     if(name === 'stats'){
       renderLog();
       renderStats();
+    }
+    if(name === 'compare'){
+      renderComparePage();
     }
     if(name === 'camera'){
       startCamera();
@@ -4211,6 +4475,13 @@
     document.getElementById('openStatsBtn').addEventListener('click', function(){ showScreen('stats'); });
     document.getElementById('openHelpBtn').addEventListener('click', function(){ helpReturnScreen = 'capture'; showScreen('help'); });
     document.getElementById('statsBackBtn').addEventListener('click', function(){ showScreen('capture'); });
+    document.getElementById('openCompareBtn').addEventListener('click', function(){ showScreen('compare'); });
+    document.getElementById('compareBackBtn').addEventListener('click', function(){ showScreen('stats'); });
+    document.getElementById('pkgDeleteCancelBtn').addEventListener('click', closePackageDeleteModal);
+    document.getElementById('pkgDeleteConfirmBtn').addEventListener('click', confirmPackageDelete);
+    window.addEventListener('resize', function(){
+      if(currentScreen === 'compare'){ renderComparePage(); }
+    });
     document.getElementById('helpBackBtn').addEventListener('click', function(){ showScreen(helpReturnScreen); });
     document.getElementById('cameraHelpBtn').addEventListener('click', function(){ helpReturnScreen = 'camera'; showScreen('help'); });
     document.getElementById('openCameraBigBtn').addEventListener('click', function(){ showScreen('camera'); });
