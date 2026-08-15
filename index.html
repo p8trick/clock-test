@@ -364,7 +364,15 @@
   .continuitytag.q-poor{border-color:var(--accent); color:var(--accent);}
   .continuitytag.q-bad{border-color:var(--bad); color:var(--bad);}
   .continuitytag.q-junk{border-color:var(--ink-dim); color:var(--ink-dim);}
-  .bundleExpandBtn{background:none; border:none; color:var(--ink); font-size:30px; line-height:1; padding:10px 14px;}
+  .bundleExpandBtn{
+    background:none; border:1.5px solid var(--ink-dim); border-radius:50%;
+    color:var(--ink); font-size:25px; line-height:1;
+    width:27px; height:27px; flex:0 0 27px;
+    display:flex; align-items:center; justify-content:center;
+    padding:0; margin-left:8px;
+  }
+  .bundleExpandBtn span{display:block; transform:translateY(1px);}
+  .bundleExpandBtn:active{background:var(--panel-edge);}
   .bundlebody{margin-top:8px; padding-left:10px; border-left:2px solid var(--panel-edge);}
   /* v4.3.1：连拍会话展开区(蓝)跟数据包展开区(橙)分别加淡色底色，
      黑底上单靠缩进不容易一眼分清是哪种展开，颜色能让人扫一眼就分辨类型。
@@ -404,7 +412,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.3.5</span>
+      <span class="versiontag" id="versionTag">v4.3.10</span>
     </div>
 
     <div id="timePanel">
@@ -740,7 +748,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.3.5</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.3.10</div>
   </div>
 
 </div>
@@ -2954,7 +2962,7 @@
 
     var expandBtn = document.createElement('button');
     expandBtn.className = 'bundleExpandBtn';
-    expandBtn.textContent = expanded ? '▴' : '▾';
+    expandBtn.innerHTML = '<span>' + (expanded ? '▴' : '▾') + '</span>';
     var toggleExpand = function(){
       expandedSessionIds[sessionId] = !expandedSessionIds[sessionId];
       renderLog();
@@ -3080,7 +3088,7 @@
 
     var expandBtn = document.createElement('button');
     expandBtn.className = 'bundleExpandBtn';
-    expandBtn.textContent = expanded ? '▴' : '▾';
+    expandBtn.innerHTML = '<span>' + (expanded ? '▴' : '▾') + '</span>';
     head.addEventListener('click', function(){
       packageExpandedIds[pkg.id] = !expanded;
       renderLog();
