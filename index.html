@@ -109,9 +109,6 @@
   .sourcetogglerow label{flex:1;}
   .diagempty{color:var(--ink-dim); font-size:11px; padding:6px 0;}
   .diagrow{font-size:11px; font-family:var(--mono); padding:4px 0; line-height:1.5;}
-  .periodrow{font-size:11px; font-family:var(--mono); padding:5px 0; line-height:1.5; border-bottom:1px solid var(--panel-edge); color:var(--ink); display:flex; align-items:center; justify-content:space-between; gap:8px;}
-  .periodrow:last-child{border-bottom:none;}
-  .periodDeleteBtn{background:none; border:1px solid var(--panel-edge); color:var(--bad); font-size:12px; width:22px; height:22px; line-height:1; border-radius:5px; flex-shrink:0;}
   .precaldivider, .precalsummary{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink-dim); padding:8px 4px; border-top:1px dashed var(--panel-edge); border-bottom:1px dashed var(--panel-edge); margin:4px 0;}
   .precalToggleBtn{background:none; border:1px solid var(--panel-edge); color:var(--accent); font-size:11px; padding:3px 10px; border-radius:6px; flex-shrink:0;}
   .diag-ok{color:var(--good);}
@@ -543,12 +540,6 @@
     </div>
 
     <div class="section">
-      <h4>历史校准分期</h4>
-      <p style="margin-top:0;">每次设新校准点时自动存档上一段区间的漂移率，方便以后对比全年不同时期(比如温差)测得的差异。仅供参考，不参与当前计算。</p>
-      <div id="periodsList"><div class="diagempty">尚无历史分期(设置新校准点时自动生成)</div></div>
-    </div>
-
-    <div class="section">
       <h4>记录管理</h4>
       <button class="iconbtn" id="manualAddBtn">+ 手动补录一条历史记录(如已过去的校准时刻)</button>
       <div class="manualform" id="manualForm">
@@ -814,49 +805,12 @@
     try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(driftHistory)); }catch(e){}
   }
 
-  var PERIODS_KEY = 'cc_periods_v1';
-  var driftPeriods = [];
-
-  function loadDriftPeriods(){
-    try{
-      var raw = localStorage.getItem(PERIODS_KEY);
-      driftPeriods = raw ? JSON.parse(raw) : [];
-    }catch(e){ driftPeriods = []; }
-  }
-
-  function saveDriftPeriods(){
-    try{ localStorage.setItem(PERIODS_KEY, JSON.stringify(driftPeriods)); }catch(e){}
-  }
-
-  // v4.1.3 每次真正设一个新校准点时(不是取消)，把即将被这个新校准点切掉的那一段
-  // 数据存档成一条独立的"分期"记录——起止时间、这段时期测得的日漂移率、季节、拟合优度。
-  // 必须在改动 isCalibration 之前调用，这样 computeStats() 算出来的还是"旧"的有效区间。
-  var PERIODS_KEEP_MAX = 200;
-
-  // v4.1.4 每条分期记录带上 createdByCalibrationId——记录是哪个校准点的"设为校准点"动作
-  // 产生的这条存档。这样"取消校准点"才能精确撤销掉当初连带产生的那条(最多两条：夏/冬各一)
-  // 分期记录，而不是留一条永久孤儿数据在历史列表里，跟折叠功能一样做到真正可逆。
-  function archiveCurrentPeriods(newCalTimestamp, newCalRecordId){
-    ['summer','winter'].forEach(function(season){
-      var s = computeStats(season);
-      if(!s.ok){ return; }
-      driftPeriods.push({
-        id: 'period_' + Date.now() + '_' + season + '_' + Math.random().toString(36).slice(2,7),
-        season: season,
-        periodStart: s.baselineT,
-        periodEnd: newCalTimestamp,
-        driftSecPerDay: s.driftSecPerDay,
-        r2: s.r2,
-        count: s.count,
-        archivedAt: Date.now(),
-        createdByCalibrationId: newCalRecordId
-      });
-    });
-    if(driftPeriods.length > PERIODS_KEEP_MAX){
-      driftPeriods = driftPeriods.slice(driftPeriods.length - PERIODS_KEEP_MAX);
-    }
-    saveDriftPeriods();
-  }
+  // v4.3.0 删除了 v4.1.3 时期的"历史校准分期"(driftPeriods)旧设计及其对应的
+  // localStorage key(cc_periods_v1，一次性清理逻辑内联在 init() 里，直接 removeItem)。
+  // 早在 v4.1.6 就已经被下面的数据包(dataPackages)系统功能性替代，但代码一直没跟着删，
+  // 导致设置页留着一个不再被维护的旧UI(比如 clearLog() 清空全部数据时都没捎带清它)。
+  // 现在多期数据包对比页(对比走势+删除)已经完整覆盖了原来"历史校准分期"想做的事，
+  // 彻底删掉，不再维护两套并行的历史分期概念。
 
   // v4.1.6 数据包(打包)系统——替代 v4.1.3 那种"校准点之前全部合并成一坨"的旧设计。
   // 每个包是显式记录的成员id列表，边界一旦确定就不会因为以后数据增长而自动变化，
@@ -876,9 +830,10 @@
   }
 
   // 校准切换时间线——每次真正切换校准点都记一笔，不管当时算不算得出漂移率。
-  // "历史校准分期"(driftPeriods)按季节分开算，数据不够时不会留下记录，不可靠，
-  // 所以打包边界必须依赖这份独立、始终完整的记录，否则可能把两次真实切换之间的
-  // 数据混进同一个包，包自己的漂移率就会因为中间那次"相位跳变"算出垃圾数字。
+  // (原先这里对比的是已在v4.3.0删除的"历史校准分期"driftPeriods——那套按季节分开算，
+  // 数据不够时不会留下记录，不可靠。)打包边界必须依赖这份独立、始终完整的记录，
+  // 否则可能把两次真实切换之间的数据混进同一个包，包自己的漂移率就会因为中间那次
+  // "相位跳变"算出垃圾数字。
   var CAL_SWITCH_LOG_KEY = 'cc_calswitchlog_v1';
   var calibrationSwitchLog = [];
 
@@ -2777,14 +2732,12 @@
     for(var i=0;i<records.length;i++){ if(records[i].id === id){ target = records[i]; break; } }
     if(!target || target.isCalibration){ return; }
     if(!dissolveMostRecentPackageIfContains(id)){ return; }
-    archiveCurrentPeriods(target.t, id);
     calibrationSwitchLog.push({ recordId:id, t: target.t });
     saveCalSwitchLog();
     setSingleCalibration(id);
     saveRecords();
     renderLog();
     renderStats();
-    renderPeriodsList();
   }
 
   // v4.1.1 连拍会话设为校准点：标在组内时间最早的一条成员上，
@@ -2807,14 +2760,12 @@
     if(isCurrentlyCal){ return; }
     var earliest = members.slice().sort(function(a,b){ return a.t - b.t; })[0];
     if(!dissolveMostRecentPackageIfContains(earliest.id)){ return; }
-    archiveCurrentPeriods(earliest.t, earliest.id);
     calibrationSwitchLog.push({ recordId: earliest.id, t: earliest.t });
     saveCalSwitchLog();
     setSessionCalibration(sessionId);
     saveRecords();
     renderLog();
     renderStats();
-    renderPeriodsList();
   }
 
 
@@ -3085,7 +3036,7 @@
   }
 
   // v4.1.3 手动折叠校准点之前的历史数据——纯粹为了收起列表长度，不做任何自动触发，
-  // 也不在摘要里放漂移率(那个由"历史校准分期"独立记录，两者是分开的两件事)
+  // 也不在摘要里放漂移率(漂移率的对比分析交给多期数据包对比页，两者是分开的两件事)
   var packageExpandedIds = {};
 
   // v4.1.6 数据包卡片——最新的那个包(isLatest)允许展开后点成员的"设为校准点"来解散重选，
@@ -3795,36 +3746,6 @@
     });
   }
 
-  // v4.1.3 多期漂移记录——每次设新校准点时 archiveCurrentPeriods() 顺手存一条，
-  // 这里只负责列表展示，先不做图表(讨论时明确了列表就够，图表以后再说)
-  // v4.1.5 校准点本身不能原地取消了，但手滑设错校准点、连带产生一条没意义的分期记录
-  // 这种情况还是可能发生——这里留一个"×"，只删这一条历史存档，不碰当前生效的校准点，
-  // 不会触发"回到没有校准点"那种危险状态，纯粹是历史记录层面的清理。
-  function renderPeriodsList(){
-    var el = document.getElementById('periodsList');
-    if(!el){ return; }
-    if(!driftPeriods.length){
-      el.innerHTML = '<div class="diagempty">尚无历史分期(设置新校准点时自动生成)</div>';
-      return;
-    }
-    var sorted = driftPeriods.slice().sort(function(a,b){ return b.periodEnd - a.periodEnd; });
-    el.innerHTML = sorted.map(function(p){
-      var icon = p.season === 'winter' ? '\u2744\ufe0f' : '\u2600\ufe0f';
-      return '<div class="periodrow"><span>' + icon + ' ' + shortDT(p.periodStart) + ' ~ ' + shortDT(p.periodEnd) +
-        ' · 每天变慢 ' + p.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(p.r2*100) + '% · ' + p.count + '条</span>' +
-        '<button class="periodDeleteBtn" data-period-id="' + p.id + '">\u00d7</button></div>';
-    }).join('');
-    el.querySelectorAll('.periodDeleteBtn').forEach(function(btn){
-      btn.addEventListener('click', function(){ deletePeriodEntry(btn.getAttribute('data-period-id')); });
-    });
-  }
-
-  function deletePeriodEntry(periodId){
-    driftPeriods = driftPeriods.filter(function(p){ return p.id !== periodId; });
-    saveDriftPeriods();
-    renderPeriodsList();
-  }
-
   // v4.1.15: 导出方式统一改成Web Share API——iOS上会弹出系统原生的底部半屏"分享"菜单，
   // 菜单里直接有"存储到文件"选项，不再需要"先跳转到文件预览页，再点右上角箭头按钮"这一步。
   // 参考PlantSteward后期加入的同款处理。不支持的环境(navigator.share/canShare缺失，
@@ -4400,7 +4321,10 @@
     loadHistory();
     loadDelay();
     loadRelayInstalled();
-    loadDriftPeriods();
+    // v4.3.0 一次性清理：删掉"历史校准分期"旧功能遗留的 localStorage key，
+    // 避免这份不再被任何代码读写的旧数据永久占着位置。try/catch防止隐私模式等
+    // localStorage不可用场景下报错中断后续初始化。
+    try{ localStorage.removeItem('cc_periods_v1'); }catch(e){}
     loadPackages();
     loadCalSwitchLog();
     loadEnabledSources();
@@ -4411,7 +4335,6 @@
     renderSeasonButtons();
     renderRelayStatusButtons();
     renderStats();
-    renderPeriodsList();
     renderSourceToggleList();
     renderBurstModeButtons();
     renderGridDensityButtons();
