@@ -175,6 +175,12 @@
   .btKeyStatus.ready{ color:#8ee08e; }
   .btKeyStatus.notready{ color:#ff8a3d; }
   .btKeyStatus:active{ background:rgba(255,138,61,.3); }
+  /* TEMP-TEST v4.1.17: 蓝牙键盘失焦隔离实验按钮，不接入正式链路，验证完毕整段移除 */
+  .tempTestBtn{
+    position:absolute; left:10px; background:rgba(90,40,150,.8); color:#fff;
+    font-size:10px; padding:4px 9px; border-radius:6px; font-family:inherit; border:1px solid #b388ff;
+  }
+  .tempTestBtn:active{ background:rgba(90,40,150,.5); }
   .diaglive{font-size:12px; color:var(--ink-dim); font-family:var(--mono); margin-top:10px; text-align:center;}
   .diagToggleBtn{
     display:block; margin:8px auto 0; background:none; border:none; color:var(--ink-dim);
@@ -426,6 +432,9 @@
       <div class="camToast" id="camToast" style="display:none;"></div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
       <button class="btKeyStatus notready" id="btKeyStatusBtn">⌨ 检测中...</button>
+      <!-- TEMP-TEST v4.1.17: 蓝牙键盘失焦隔离实验，不接入正式链路，验证完毕整段移除 -->
+      <button class="tempTestBtn" id="tempSyncFocusBtn" style="bottom:45px;">TEMP① 同步重聚焦</button>
+      <button class="tempTestBtn" id="tempCameraRestartBtn" style="bottom:80px;">TEMP② 重启摄像头流</button>
       <button class="camFloatBtn camFloatBtnRight" id="gridOverlayToggleBtn">网格</button>
     </div>
 
@@ -4059,6 +4068,33 @@
   }
   // ===== Ghost Input 焦点守护 结束 =====
 
+  // ===== TEMP-TEST v4.1.17: 蓝牙键盘失焦隔离实验（不接入正式链路，验证完毕整段移除）=====
+  // 目的：分享菜单展开触发保存、返回相机页后蓝牙键盘失焦且徽章点击无法救回，
+  // 现有假设有两个，用这两个按钮分别单独测试，隔离到底是哪个在起作用：
+  //  TEMP① 同步重聚焦：跟徽章一样 blur()+focus()，但不经过 setTimeout 延迟，
+  //        全程留在这次点击的用户手势里同步执行，测试是不是"手势时效"的问题。
+  //  TEMP② 重启摄像头流：不切屏，只单纯 stopCamera()+startCamera()，
+  //        测试是不是摄像头流重新获取本身在起作用，跟切不切屏无关。
+  function tempTestSyncFocus(){
+    if(!btGhostEl){ return; }
+    try{ btGhostEl.blur(); }catch(err){}
+    try{ btGhostEl.focus({ preventScroll: true }); }catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
+    updateBtKeyStatus(document.activeElement === btGhostEl);
+  }
+
+  function tempTestCameraRestart(){
+    stopCamera();
+    startCamera();
+  }
+
+  function setupTempFocusTestButtons(){
+    var syncBtn = document.getElementById('tempSyncFocusBtn');
+    if(syncBtn){ syncBtn.addEventListener('click', tempTestSyncFocus); }
+    var restartBtn = document.getElementById('tempCameraRestartBtn');
+    if(restartBtn){ restartBtn.addEventListener('click', tempTestCameraRestart); }
+  }
+  // ===== TEMP-TEST 结束 =====
+
   function showScreen(name){
     currentScreen = name;
     document.getElementById('screenCapture').style.display = (name === 'capture') ? 'flex' : 'none';
@@ -4131,6 +4167,7 @@
     requestAnimationFrame(renderClock);
     syncTime();
     setupBtKeypadGhost();
+    setupTempFocusTestButtons(); // TEMP-TEST v4.1.17，验证完毕整段移除
     showScreen('capture');
 
     document.getElementById('resyncBtn').addEventListener('click', syncTime);
