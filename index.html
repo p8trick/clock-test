@@ -411,6 +411,9 @@
       <div style="display:flex; gap:10px; margin-left:auto;">
         <button id="devExportBtn" class="iconbtn" style="display:none;">💾导出</button>
         <button id="devModeBtn" class="iconbtn">🛠️Dev</button>
+        <!-- TEMP-TEST v4.1.15: 分享弹窗对摄像头/Dev模式影响测试，测完整块删除 -->
+        <button id="tempShareTestBtn" class="iconbtn" style="border-color:var(--accent); color:var(--accent);">🧪分享测试</button>
+        <!-- /TEMP-TEST v4.1.15 -->
         <button id="cameraHelpBtn" class="iconbtn">❓帮助</button>
       </div>
     </div>
@@ -2485,6 +2488,17 @@
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
   }
 
+  // TEMP-TEST v4.1.15: 验证navigator.share()弹出的系统级半屏分享菜单在摄像头页
+  // 是否会像alert/confirm一样冻结相机预览、或打断Ghost Input焦点守卫。
+  // 不接入devTriggerDownload正式链路，只是独立验证同一个shareOrDownloadBlob()。
+  // 真机验证通过后再考虑替换devTriggerDownload本体；测完这整段(含按钮HTML、
+  // 这个函数、下面的事件绑定)直接删除，不影响任何正式逻辑。
+  function tempShareTest(){
+    var blob = new Blob(['分享弹窗测试 ' + new Date().toISOString()], {type:'text/plain'});
+    shareOrDownloadBlob(blob, 'share-test-' + Date.now() + '.txt', 'text/plain');
+  }
+  // /TEMP-TEST v4.1.15
+
   var devPendingBackgroundExport = false;
 
   function devStopExperiment(reason){
@@ -4193,6 +4207,9 @@
       showScreen('capture');
     });
     document.getElementById('devModeBtn').addEventListener('click', function(){ devHandleDevBtn(); });
+    // TEMP-TEST v4.1.15: 测完连同按钮HTML、tempShareTest()一起删除
+    document.getElementById('tempShareTestBtn').addEventListener('click', tempShareTest);
+    // /TEMP-TEST v4.1.15
     document.getElementById('cameraStartBtn').addEventListener('click', function(){ toggleCameraArm(); });
     document.getElementById('quickModeBtn').addEventListener('click', function(){
       burstModeEnabled = false;
