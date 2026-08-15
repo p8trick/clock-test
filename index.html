@@ -175,12 +175,6 @@
   .btKeyStatus.ready{ color:#8ee08e; }
   .btKeyStatus.notready{ color:#ff8a3d; }
   .btKeyStatus:active{ background:rgba(255,138,61,.3); }
-  /* TEMP-TEST v4.1.17: 蓝牙键盘失焦隔离实验按钮，不接入正式链路，验证完毕整段移除 */
-  .tempTestBtn{
-    position:absolute; left:10px; background:rgba(90,40,150,.8); color:#fff;
-    font-size:10px; padding:4px 9px; border-radius:6px; font-family:inherit; border:1px solid #b388ff;
-  }
-  .tempTestBtn:active{ background:rgba(90,40,150,.5); }
   .diaglive{font-size:12px; color:var(--ink-dim); font-family:var(--mono); margin-top:10px; text-align:center;}
   .diagToggleBtn{
     display:block; margin:8px auto 0; background:none; border:none; color:var(--ink-dim);
@@ -394,7 +388,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.1.16</span>
+      <span class="versiontag" id="versionTag">v4.1.17</span>
     </div>
 
     <div id="timePanel">
@@ -432,9 +426,6 @@
       <div class="camToast" id="camToast" style="display:none;"></div>
       <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
       <button class="btKeyStatus notready" id="btKeyStatusBtn">⌨ 检测中...</button>
-      <!-- TEMP-TEST v4.1.17: 蓝牙键盘失焦隔离实验，不接入正式链路，验证完毕整段移除 -->
-      <button class="tempTestBtn" id="tempSyncFocusBtn" style="bottom:45px;">TEMP① 同步重聚焦</button>
-      <button class="tempTestBtn" id="tempCameraRestartBtn" style="bottom:80px;">TEMP② 重启摄像头流</button>
       <button class="camFloatBtn camFloatBtnRight" id="gridOverlayToggleBtn">网格</button>
     </div>
 
@@ -692,7 +683,7 @@
         <h5>运行期间的行为差异</h5>
         <p>Dev运行期间，快速/连拍模式切换按钮会变暗锁定，防止实验途中参数不一致；每次捕获(或一组连拍)完成后会立即自动重新武装，不需要手动点"开始监测"续接；普通的时钟漂移records、摄像头页下方"最近捕获"迷你列表、退格键撤销，这些统计相关的记录全部暂停，不会被Dev模式的密集捕获污染。</p>
         <h5>四种终止方式</h5>
-        <p>满11分钟自动结束；手动点"停止Dev采样"；20秒内触发超过4次视为高频异常自动熔断(仍会记录进日志供分析，只是同时终止实验)；切到后台或锁屏当场停止，数据到此为止，不会等你回来后接着采——这是为了避免"录一段、断一段、又续一段"的碎片化日志误导AI分析。四种情况都会自动弹出系统原生的分享菜单(底部半屏，v4.1.16起改用这种方式，不再是跳转到独立的文件保存页面——旧方式是一次真实页面导航，会打断摄像头video流的生命周期，返回后画面卡死黑屏，真机确认过换成分享菜单后这个问题不再出现)；如果不小心划掉了菜单，右上角会出现一个"💾导出"按钮(平时不出现)，可以随时重新触发保存，直到你离开摄像头页或开启下一轮实验为止。注意：分享菜单展开到接近全屏并触发实际保存动作后返回，蓝牙数字键盘目前会失焦失效，需要重新点一下页面上的输入区域才能恢复(该问题正在排查，跟保存方式本身无关)。</p>
+        <p>满11分钟自动结束；手动点"停止Dev采样"；20秒内触发超过4次视为高频异常自动熔断(仍会记录进日志供分析，只是同时终止实验)；切到后台或锁屏当场停止，数据到此为止，不会等你回来后接着采——这是为了避免"录一段、断一段、又续一段"的碎片化日志误导AI分析。四种情况都会自动弹出系统原生的分享菜单(底部半屏，v4.1.16起改用这种方式，不再是跳转到独立的文件保存页面——旧方式是一次真实页面导航，会打断摄像头video流的生命周期，返回后画面卡死黑屏，真机确认过换成分享菜单后这个问题不再出现)；如果不小心划掉了菜单，右上角会出现一个"💾导出"按钮(平时不出现)，可以随时重新触发保存，直到你离开摄像头页或开启下一轮实验为止。注意：分享菜单展开到接近全屏并触发实际保存动作后返回，蓝牙数字键盘可能会失焦失效，此时点一下左下角的"⌨"键盘状态徽章即可恢复(v4.1.17起徽章的重新聚焦逻辑已修复，此前版本点徽章可能显示"已就绪"但键盘实际仍无法使用，跟保存方式本身无关，是徽章自身聚焦时机的bug)。</p>
         <h5>防止无操作自动锁屏</h5>
         <p>开始采样时会尝试请求系统"屏幕常亮"权限(Screen Wake Lock)，避免11分钟内因为手机自动锁屏设置(不是手动锁屏/切走)而被判定为中断。这个请求不保证100%成功(取决于iOS版本、低电量模式等)，如果发现常锁屏，可以去系统设置里把自动锁屏时长调成"永不"作为保底。</p>
         <h5>网格密度选择建议(基于实测日志的经验)</h5>
@@ -709,7 +700,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.16</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.1.17</div>
   </div>
 
 </div>
@@ -4054,46 +4045,22 @@
 
     // 手动兜底：这是一次100%有真实用户手势背书的点击，理论上必定能真正建立焦点。
     // 固定手机、准备用蓝牙键盘启动监测前，看一眼徽章，不放心就点一下。
+    // v4.1.17修复：原来 blur()后用 setTimeout(fn,0) 延迟执行 focus()，即便0毫秒延迟也会让这次
+    // focus() 脱离本次点击的用户手势时效窗口，导致 WKWebView 没有真正重新接通物理键盘 responder——
+    // 状态显示"已就绪"是假象，键盘其实是坏的。分享菜单展开触发保存后返回相机页这个场景下，
+    // 真机测试确认过该bug会稳定复现。现在改成 blur()+focus() 全程同步执行、不经过任何 setTimeout，
+    // 留在同一次点击手势里，真机验证过对同一场景确实生效。
     var statusBtn = document.getElementById('btKeyStatusBtn');
     if(statusBtn){
       statusBtn.addEventListener('click', function(){
         if(!btFocusGuardActive){ return; }
         try{ btGhostEl.blur(); }catch(err){}
-        setTimeout(function(){
-          try{ btGhostEl.focus({ preventScroll: true }); }catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
-          setTimeout(function(){ updateBtKeyStatus(document.activeElement === btGhostEl); }, 50);
-        }, 0);
+        try{ btGhostEl.focus({ preventScroll: true }); }catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
+        updateBtKeyStatus(document.activeElement === btGhostEl);
       });
     }
   }
   // ===== Ghost Input 焦点守护 结束 =====
-
-  // ===== TEMP-TEST v4.1.17: 蓝牙键盘失焦隔离实验（不接入正式链路，验证完毕整段移除）=====
-  // 目的：分享菜单展开触发保存、返回相机页后蓝牙键盘失焦且徽章点击无法救回，
-  // 现有假设有两个，用这两个按钮分别单独测试，隔离到底是哪个在起作用：
-  //  TEMP① 同步重聚焦：跟徽章一样 blur()+focus()，但不经过 setTimeout 延迟，
-  //        全程留在这次点击的用户手势里同步执行，测试是不是"手势时效"的问题。
-  //  TEMP② 重启摄像头流：不切屏，只单纯 stopCamera()+startCamera()，
-  //        测试是不是摄像头流重新获取本身在起作用，跟切不切屏无关。
-  function tempTestSyncFocus(){
-    if(!btGhostEl){ return; }
-    try{ btGhostEl.blur(); }catch(err){}
-    try{ btGhostEl.focus({ preventScroll: true }); }catch(err){ try{ btGhostEl.focus(); }catch(err2){} }
-    updateBtKeyStatus(document.activeElement === btGhostEl);
-  }
-
-  function tempTestCameraRestart(){
-    stopCamera();
-    startCamera();
-  }
-
-  function setupTempFocusTestButtons(){
-    var syncBtn = document.getElementById('tempSyncFocusBtn');
-    if(syncBtn){ syncBtn.addEventListener('click', tempTestSyncFocus); }
-    var restartBtn = document.getElementById('tempCameraRestartBtn');
-    if(restartBtn){ restartBtn.addEventListener('click', tempTestCameraRestart); }
-  }
-  // ===== TEMP-TEST 结束 =====
 
   function showScreen(name){
     currentScreen = name;
@@ -4167,7 +4134,6 @@
     requestAnimationFrame(renderClock);
     syncTime();
     setupBtKeypadGhost();
-    setupTempFocusTestButtons(); // TEMP-TEST v4.1.17，验证完毕整段移除
     showScreen('capture');
 
     document.getElementById('resyncBtn').addEventListener('click', syncTime);
