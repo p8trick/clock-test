@@ -239,13 +239,13 @@
   #timePanel{
     flex:0 0 20vh; min-height:96px; margin-top:2px;
     background:var(--panel); border:1px solid var(--panel-edge); border-radius:20px;
-    display:flex; flex-direction:row; justify-content:center; align-items:baseline;
-    flex-wrap:wrap; gap:.5em; padding:8px 10px;
+    display:flex; flex-direction:column; justify-content:center; align-items:center;
+    gap:.4em; padding:8px 10px;
   }
-  .datestr{font-size:13px; color:var(--ink-dim); letter-spacing:.04em; font-family:var(--mono);}
+  .datestr{font-size:16px; color:var(--ink-dim); letter-spacing:.04em; font-family:var(--mono);}
   .timestr{
     font-family:var(--mono); font-weight:600; letter-spacing:.01em;
-    font-size:clamp(26px, 9vw, 46px); line-height:1; color:var(--ink);
+    font-size:clamp(32px, 12vw, 58px); line-height:1; color:var(--ink);
     font-variant-numeric:tabular-nums; -webkit-font-feature-settings:"tnum";
     display:inline-flex; align-items:baseline;
   }
@@ -411,7 +411,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.5.0</span>
+      <span class="versiontag" id="versionTag">v4.5.1</span>
     </div>
 
     <div id="timePanel">
@@ -747,7 +747,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.5.0</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.5.1</div>
   </div>
 
 </div>
