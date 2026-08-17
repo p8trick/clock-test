@@ -411,7 +411,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.5.1</span>
+      <span class="versiontag" id="versionTag">v4.5.3</span>
     </div>
 
     <div id="timePanel">
@@ -621,12 +621,40 @@
       <h4>漂移统计</h4>
       <div id="statsPanel"></div>
       <button class="iconbtn" id="clearDriftHistoryBtn" style="width:100%; margin-top:10px;">清空收敛趋势记录</button>
+      <button class="iconbtn" id="openProjectionBtn" style="width:100%; margin-top:8px;">🔍 推算任意时间点</button>
       <button class="iconbtn" id="openCompareBtn" style="width:100%; margin-top:8px;">📊 多期数据包对比</button>
     </div>
 
     <div class="section">
       <h4>历史记录</h4>
       <div id="log"><div class="logempty">尚无记录</div></div>
+    </div>
+  </div>
+
+  <div id="screenProjection" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="projectionBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">推算任意时间点</span>
+    </div>
+
+    <div class="section">
+      <h4>🔍 推算任意时间点</h4>
+      <div style="font-size:11px; color:var(--ink-dim); margin-bottom:8px;">基于当前生效模型(季节切换按钮选的那个)的回归线，纯计算不留档，算完自己记，到点了拍照人工比对</div>
+      <div class="segrow">
+        <input type="text" inputmode="numeric" maxlength="4" class="seg seg-y" id="projSegY" placeholder="YYYY">
+        <span class="segsep">-</span>
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegMo" placeholder="MM">
+        <span class="segsep">-</span>
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegD" placeholder="DD">
+      </div>
+      <div class="segrow" style="margin-top:8px;">
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegH" placeholder="HH">
+        <span class="segsep">:</span>
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegMi" placeholder="MM">
+      </div>
+      <button class="iconbtn" id="projFillNowBtn" style="width:100%; margin-top:8px;">填入当前</button>
+      <button class="iconbtn" id="projCalcBtn" style="width:100%; margin-top:8px;">计算该时刻推算漂移量</button>
+      <div id="projResult" class="statsline" style="margin-top:10px;"></div>
     </div>
   </div>
 
@@ -747,7 +775,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.5.1</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.5.3</div>
   </div>
 
 </div>
@@ -1347,6 +1375,94 @@
     if(isNaN(y) || isNaN(mo) || isNaN(d) || isNaN(h) || isNaN(mi) || isNaN(s)){ return NaN; }
     if(mo<1 || mo>12 || d<1 || d>31 || h<0 || h>23 || mi<0 || mi>59 || s<0 || s>59){ return NaN; }
     return new Date(y, mo-1, d, h, mi, s, ms).getTime();
+  }
+
+  // v4.5.2 "推算任意时间点"计算器——复用手动补录表单的分段输入交互模式(自动跳格/退格合并)，
+  // 但用独立的一套 ID(projSeg*)，避免跟 manualForm 的 segY/segMo 等共用同一份状态。
+  // 只到分钟精度(不需要秒/毫秒)，因为这本来就是给"人到点了随手抓拍验证"用的，不追求逐秒对表。
+  var PROJ_SEG_IDS = ['projSegY','projSegMo','projSegD','projSegH','projSegMi'];
+  var PROJ_SEG_MAXLEN = { projSegY:4, projSegMo:2, projSegD:2, projSegH:2, projSegMi:2 };
+
+  function setupProjSegInputs(){
+    PROJ_SEG_IDS.forEach(function(id, idx){
+      var el = document.getElementById(id);
+      if(!el){ return; }
+      el.addEventListener('input', function(){
+        el.value = el.value.replace(/[^0-9]/g, '').slice(0, PROJ_SEG_MAXLEN[id]);
+        if(el.value.length >= PROJ_SEG_MAXLEN[id] && idx < PROJ_SEG_IDS.length - 1){
+          document.getElementById(PROJ_SEG_IDS[idx+1]).focus();
+        }
+      });
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Backspace' && el.value.length === 0 && idx > 0){
+          e.preventDefault();
+          var prev = document.getElementById(PROJ_SEG_IDS[idx-1]);
+          prev.value = prev.value.slice(0, -1);
+          prev.focus();
+        }
+      });
+    });
+  }
+
+  function fillProjSegmentsFromTime(t){
+    var d = new Date(t);
+    document.getElementById('projSegY').value = String(d.getFullYear());
+    document.getElementById('projSegMo').value = pad(d.getMonth()+1, 2);
+    document.getElementById('projSegD').value = pad(d.getDate(), 2);
+    document.getElementById('projSegH').value = pad(d.getHours(), 2);
+    document.getElementById('projSegMi').value = pad(d.getMinutes(), 2);
+  }
+
+  function parseProjSegmentsToTimestamp(){
+    var y = parseInt(document.getElementById('projSegY').value, 10);
+    var mo = parseInt(document.getElementById('projSegMo').value, 10);
+    var d = parseInt(document.getElementById('projSegD').value, 10);
+    var h = parseInt(document.getElementById('projSegH').value, 10);
+    var mi = parseInt(document.getElementById('projSegMi').value, 10);
+    if(isNaN(y) || isNaN(mo) || isNaN(d) || isNaN(h) || isNaN(mi)){ return NaN; }
+    if(mo<1 || mo>12 || d<1 || d>31 || h<0 || h>23 || mi<0 || mi>59){ return NaN; }
+    return new Date(y, mo-1, d, h, mi, 0, 0).getTime();
+  }
+
+  // 复用 computeStats() 已经算好的回归线(intercept/driftSecPerDay/baselineT)，代入任意目标时刻，
+  // 跟 computeStats 内部算 basePredicted/projectedNowY 用的是完全同一条公式，只是 x 换成任意时间，
+  // 不重新拟合、不改变任何现有预测逻辑——纯只读的"如果套用当前这条线，这一刻该是多少"。
+  function computeProjectionAt(season, targetMs){
+    var s = computeStats(season);
+    if(!s.ok){ return { ok:false, reason: s.noDrift ? 'noDrift' : 'notEnough' }; }
+    var xT = (targetMs - s.baselineT) / 86400000;
+    var slopeMsPerDay = s.driftSecPerDay * 1000;
+    var projectedYms = s.intercept + slopeMsPerDay * xT;
+    return { ok:true, s:s, projectedYms: projectedYms };
+  }
+
+  function runProjectionCalc(){
+    var resultEl = document.getElementById('projResult');
+    var t = parseProjSegmentsToTimestamp();
+    if(isNaN(t)){
+      resultEl.innerHTML = '<span style="color:var(--bad);">时间格式不完整或不合法，请检查</span>';
+      return;
+    }
+    var r = computeProjectionAt(seasonMode, t);
+    if(!r.ok){
+      resultEl.innerHTML = r.reason === 'noDrift' ? '暂无变慢趋势，无法推算' : '样本不足，无法推算';
+      return;
+    }
+    var yms = r.projectedYms;
+    var tier = Math.floor(yms / 60000);
+    var remainderMs = yms - tier * 60000;
+    var remainderSec = remainderMs / 1000;
+    var toNextMinuteSec = (60000 - remainderMs) / 1000;
+    var deltaDays = (t - Date.now()) / 86400000;
+    var absHrs = Math.abs(deltaDays) * 24;
+    var whenLabel = (deltaDays >= 0 ? '距现在还有 ' : '已过去 ') +
+      (Math.abs(deltaDays) < 1 ? (Math.round(absHrs*10)/10 + ' 小时') : (Math.round(Math.abs(deltaDays)*10)/10 + ' 天'));
+
+    resultEl.innerHTML =
+      '<div>' + whenLabel + '</div>' +
+      '<div style="margin-top:4px;">预计累计漂移总量：<b>' + (yms/1000).toFixed(3) + ' 秒</b></div>' +
+      '<div>第 ' + (tier+1) + ' 圈 · 圈内已过 ' + remainderSec.toFixed(3) + ' 秒 · 距下次整分钟还差 ' + toNextMinuteSec.toFixed(3) + ' 秒</div>' +
+      '<div style="font-size:11px; color:var(--ink-dim); margin-top:6px;">依据：' + (seasonMode==='summer'?'夏季':'冬季') + '模型 · 样本' + r.s.count + '条 · 拟合优度' + Math.round(r.s.r2*100) + '% · ' + r.s.stars.toFixed(1) + '★ —— 这条线本身会随新数据变化，此结果仅反映计算这一刻的拟合状态</div>';
   }
 
   function recomputeAllDeltas(){
@@ -3077,7 +3193,7 @@
     var ld = document.createElement('div');
     ld.className = 'ld';
     ld.innerHTML = drift.ok
-      ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '% · ' + starHtml(drift.stars))
+      ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(3) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '% · ' + starHtml(drift.stars))
       : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
     var lockTag = document.createElement('span');
     lockTag.className = 'continuitytag';
@@ -3204,7 +3320,7 @@
       '本次操作将永久删除，物理上无法恢复：<br>' +
       '· 时间跨度：' + fmtFullDT(members[0].t) + ' ~ ' + fmtFullDT(members[members.length-1].t) + '<br>' +
       '· 共 <b>' + members.length + '</b> 条记录<br>' +
-      '· 漂移率：' + (drift.ok ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · ' + drift.stars.toFixed(1) + '★') : '样本不足，未计算出漂移率');
+      '· 漂移率：' + (drift.ok ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(3) + '秒 · ' + drift.stars.toFixed(1) + '★') : '样本不足，未计算出漂移率');
     if(drift.ok && drift.stars >= 3){
       html += '<br><br><span class="pkgdelwarn">⚠️ 该期次置信度较高(≥3★)，删除前请再次确认确实不再需要这期数据。</span>';
     }
@@ -3281,7 +3397,7 @@
       var ld = document.createElement('div');
       ld.className = 'ld';
       ld.innerHTML = drift.ok
-        ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(2) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '% · ' + starHtml(drift.stars))
+        ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(3) + '秒 · 拟合优度' + Math.round(drift.r2*100) + '% · ' + starHtml(drift.stars))
         : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
       info.appendChild(lt); info.appendChild(ld);
 
@@ -3666,6 +3782,7 @@
       count: collapsed.length,
       effectiveN: reg.effectiveN,
       baselineT: t0,
+      intercept: reg.intercept,
       driftSecPerDay: reg.slope / 1000,
       r2: reg.r2,
       cycleDays: cycleDays,
@@ -3713,7 +3830,7 @@
       return html;
     }
     html += '<div class="statsline">' + starHtml(s.stars) + '</div>';
-    html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(2) + ' 秒 · 拟合优度 ' + Math.round(s.r2*100) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
+    html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + Math.round(s.r2*100) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
     html += '<div class="progresswrap"><div class="progresslabel">本周期已漂移进度 ' + Math.round(s.progressPct) + '%</div>';
@@ -3749,7 +3866,7 @@
     var hist = driftHistory[season];
     if(hist && hist.length >= 2){
       var recent = hist.slice(-4);
-      html += '<div class="trendline">收敛趋势(近' + recent.length + '次测量): ' + recent.map(function(h){ return h.driftSecPerDay.toFixed(2); }).join(' \u2192 ') + ' 秒/天</div>';
+      html += '<div class="trendline">收敛趋势(近' + recent.length + '次测量): ' + recent.map(function(h){ return h.driftSecPerDay.toFixed(3); }).join(' \u2192 ') + ' 秒/天</div>';
     }
     html += '</div>';
     return html;
@@ -4315,6 +4432,7 @@
     document.getElementById('screenSettings').style.display = (name === 'settings') ? 'flex' : 'none';
     document.getElementById('screenStats').style.display = (name === 'stats') ? 'flex' : 'none';
     document.getElementById('screenCompare').style.display = (name === 'compare') ? 'flex' : 'none';
+    document.getElementById('screenProjection').style.display = (name === 'projection') ? 'flex' : 'none';
     document.getElementById('screenHelp').style.display = (name === 'help') ? 'flex' : 'none';
     document.getElementById('screenCamera').style.display = (name === 'camera') ? 'flex' : 'none';
     if(name === 'settings'){
@@ -4412,6 +4530,11 @@
     document.getElementById('relayInstalledBtn').addEventListener('click', function(){ setRelayInstalled(true); });
 
     setupSegmentedInputs();
+    setupProjSegInputs();
+    document.getElementById('projFillNowBtn').addEventListener('click', function(){
+      fillProjSegmentsFromTime(nowCorrected());
+    });
+    document.getElementById('projCalcBtn').addEventListener('click', runProjectionCalc);
 
     document.getElementById('manualAddBtn').addEventListener('click', function(){
       var form = document.getElementById('manualForm');
@@ -4441,6 +4564,8 @@
     document.getElementById('statsBackBtn').addEventListener('click', function(){ showScreen('capture'); });
     document.getElementById('openCompareBtn').addEventListener('click', function(){ showScreen('compare'); });
     document.getElementById('compareBackBtn').addEventListener('click', function(){ showScreen('stats'); });
+    document.getElementById('openProjectionBtn').addEventListener('click', function(){ showScreen('projection'); });
+    document.getElementById('projectionBackBtn').addEventListener('click', function(){ showScreen('stats'); });
     document.getElementById('pkgDeleteCancelBtn').addEventListener('click', closePackageDeleteModal);
     document.getElementById('pkgDeleteConfirmBtn').addEventListener('click', confirmPackageDelete);
     window.addEventListener('resize', function(){
