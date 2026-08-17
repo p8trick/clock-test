@@ -343,7 +343,10 @@
   .calbtn.calactive{border-color:var(--accent); color:var(--accent);}
   .calbtn.calmarked-locked{cursor:default;}
   .calbtn.calbtn-locked{color:var(--ink-dim); opacity:.6; cursor:default;}
+  .calbtn.tempheldoutbtn-active{border-color:#e8c547; color:#e8c547;}
   .lx.lx-locked{color:var(--ink-dim); opacity:.4; cursor:default;}
+  .logrow.tempheldout, .bundlecard.tempheldout{opacity:.55;}
+  .tempheldouttag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid #e8c547; color:#e8c547;}
 
   .bundlecard{border-bottom:1px solid var(--panel-edge); padding:10px 0;}
   .bundlecard:last-child{border-bottom:none;}
@@ -411,7 +414,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.5.3</span>
+      <span class="versiontag" id="versionTag">v4.6.1</span>
     </div>
 
     <div id="timePanel">
@@ -775,7 +778,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.5.3</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.6.1</div>
   </div>
 
 </div>
@@ -886,6 +889,54 @@
 
   function saveCalSwitchLog(){
     try{ localStorage.setItem(CAL_SWITCH_LOG_KEY, JSON.stringify(calibrationSwitchLog)); }catch(e){}
+  }
+
+  // v4.5.4 "最新一条临时排除统计"——用单个指针而不是给每条record加字段：
+  // 天然保证"永远只有一条能被标记"，不需要额外代码去检查/清理旧标记；
+  // 新数据一旦写入(insertRecordSorted是唯一入口)就顺手清空，自动并回统计，
+  // 不存在"忘记取消标记"这种状态。type='record'对应快捷模式单条，
+  // type='session'对应连拍整组(按sessionId一起摘除，不拆散会话)。
+  var TEMP_HELDOUT_KEY = 'cc_tempheldout_v1';
+  var tempHeldOut = null;
+
+  function loadTempHeldOut(){
+    try{
+      var raw = localStorage.getItem(TEMP_HELDOUT_KEY);
+      tempHeldOut = raw ? JSON.parse(raw) : null;
+    }catch(e){ tempHeldOut = null; }
+  }
+
+  function saveTempHeldOut(){
+    try{
+      if(tempHeldOut){ localStorage.setItem(TEMP_HELDOUT_KEY, JSON.stringify(tempHeldOut)); }
+      else{ localStorage.removeItem(TEMP_HELDOUT_KEY); }
+    }catch(e){}
+  }
+
+  // 全局唯一的"当前最新一条记录/会话"判定，供渲染时决定谁能显示临时排除按钮，
+  // 也供toggle函数判定点击的是不是真的最新——避免出现"标记了一条，又手动补录了
+  // 一条更早时间的记录，导致误判谁是最新"的边界情况。
+  function getLatestEntryKey(){
+    if(!records.length){ return null; }
+    var latest = records[0];
+    for(var i=1;i<records.length;i++){
+      if(records[i].t > latest.t){ latest = records[i]; }
+    }
+    return latest.sessionId ? { type:'session', sessionId: latest.sessionId } : { type:'record', id: latest.id };
+  }
+
+  function isTempHeldOut(key){
+    if(!tempHeldOut || !key){ return false; }
+    if(tempHeldOut.type !== key.type){ return false; }
+    return tempHeldOut.type === 'session' ? tempHeldOut.sessionId === key.sessionId : tempHeldOut.id === key.id;
+  }
+
+  function toggleTempHeldOut(key){
+    if(isTempHeldOut(key)){ tempHeldOut = null; }
+    else { tempHeldOut = key; }
+    saveTempHeldOut();
+    renderLog();
+    renderStats();
   }
 
   // 包内成员自己单独跑一遍轻量回归，只用来给这个包一个"大概每天变慢多少"的参考数字，
@@ -1481,6 +1532,10 @@
     records.push(rec);
     if(isFirstRecordEver){
       rec.isCalibration = true;
+    }
+    if(tempHeldOut){
+      tempHeldOut = null;
+      saveTempHeldOut();
     }
     recomputeAllDeltas();
   }
@@ -2860,6 +2915,14 @@
     for(var i=0;i<records.length;i++){ if(records[i].id === id){ target = records[i]; break; } }
     if(!target || target.isCalibration){ return; }
     if(!dissolveMostRecentPackageIfContains(id)){ return; }
+    // v4.6.0 防护：这条即将成为校准点的记录，如果正好是当前被"临时排除统计"标记的那条
+    // (单条按id匹配，连拍按sessionId匹配)，必须先解除标记再设校准点——否则 getActiveRecords()
+    // 会把校准点自己也一起过滤掉，lastCalIdx 找不到校准点会退化成"全部历史都算活跃区间"，
+    // 校准边界形同虚设。校准点的权重天然高于临时观察，这里直接顺手解除，不需要用户自己先取消。
+    if(tempHeldOut && (tempHeldOut.type === 'record' ? tempHeldOut.id === id : tempHeldOut.sessionId === target.sessionId)){
+      tempHeldOut = null;
+      saveTempHeldOut();
+    }
     calibrationSwitchLog.push({ recordId:id, t: target.t });
     saveCalSwitchLog();
     setSingleCalibration(id);
@@ -2888,6 +2951,11 @@
     if(isCurrentlyCal){ return; }
     var earliest = members.slice().sort(function(a,b){ return a.t - b.t; })[0];
     if(!dissolveMostRecentPackageIfContains(earliest.id)){ return; }
+    // v4.6.0 防护：同 toggleCalibration，整组设为校准点前先解除可能存在的临时排除标记
+    if(tempHeldOut && tempHeldOut.type === 'session' && tempHeldOut.sessionId === sessionId){
+      tempHeldOut = null;
+      saveTempHeldOut();
+    }
     calibrationSwitchLog.push({ recordId: earliest.id, t: earliest.t });
     saveCalSwitchLog();
     setSessionCalibration(sessionId);
@@ -2897,9 +2965,10 @@
   }
 
 
-  function renderSingleLogRow(r, locked){
+  function renderSingleLogRow(r, locked, isLatestRecord){
+    var held = isLatestRecord && isTempHeldOut({ type:'record', id: r.id });
     var row = document.createElement('div');
-    row.className = 'logrow' + (r.isCalibration ? ' calmarked' : '');
+    row.className = 'logrow' + (r.isCalibration ? ' calmarked' : '') + (held ? ' tempheldout' : '');
     var left = document.createElement('div');
     left.style.flex = '1';
     var lt = document.createElement('div');
@@ -2920,6 +2989,12 @@
     stag.className = 'seasontag';
     stag.textContent = (r.season === 'winter') ? '❄️冬' : '☀️夏';
     ld.appendChild(stag);
+    if(held){
+      var heldTag = document.createElement('span');
+      heldTag.className = 'tempheldouttag';
+      heldTag.textContent = '⏸ 临时排除·不计入统计';
+      ld.appendChild(heldTag);
+    }
 
     var clockRow = document.createElement('div');
     clockRow.className = 'clockrow';
@@ -2966,6 +3041,13 @@
       calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
     }
     btnrow.appendChild(calBtn);
+    if(isLatestRecord && !locked && !r.isCalibration){
+      var tempBtn = document.createElement('button');
+      tempBtn.className = 'calbtn' + (held ? ' tempheldoutbtn-active' : '');
+      tempBtn.textContent = held ? '↩ 已排除·点击并入统计' : '⏸ 临时排除(不计入统计)';
+      tempBtn.addEventListener('click', function(){ toggleTempHeldOut({ type:'record', id: r.id }); });
+      btnrow.appendChild(tempBtn);
+    }
     left.appendChild(lt); left.appendChild(ld); left.appendChild(clockRow); left.appendChild(note); left.appendChild(btnrow);
     var del = document.createElement('button');
     if(locked){
@@ -2987,6 +3069,9 @@
   // v4.1.1 折叠头"参与统计"状态行——直接读 computeStats() 顺手缓存的结果，
   // 保证展示的数值和真正参与回归拟合的是同一次计算产物
   function formatSessionStatsLine(sessionId, memberCount){
+    if(isTempHeldOut({ type:'session', sessionId: sessionId })){
+      return { cls:'st-excluded', text:'参与统计: 已临时排除，不计入拟合/星级/图表' };
+    }
     var st = lastCollapsedBySession[sessionId];
     if(!st){ return { cls:'st-pending', text:'参与统计: 尚未计算' }; }
     if(st.status === 'anchor'){
@@ -3005,12 +3090,13 @@
     return { cls:'st-pending', text:'参与统计: 尚未计算' };
   }
 
-  function renderBundleCard(sessionId, members, locked){
+  function renderBundleCard(sessionId, members, locked, isLatestSession){
     var meta = sessionMeta[sessionId];
     var expanded = !!expandedSessionIds[sessionId];
     var sessionIsCal = members.some(function(r){ return r.isCalibration; });
+    var held = isLatestSession && isTempHeldOut({ type:'session', sessionId: sessionId });
     var card = document.createElement('div');
-    card.className = 'bundlecard' + (sessionIsCal ? ' calmarked' : '');
+    card.className = 'bundlecard' + (sessionIsCal ? ' calmarked' : '') + (held ? ' tempheldout' : '');
 
     var head = document.createElement('div');
     head.className = 'bundlehead';
@@ -3045,6 +3131,12 @@
       tag.textContent = '连续';
     }
     ld.appendChild(tag);
+    if(held){
+      var heldTagB = document.createElement('span');
+      heldTagB.className = 'tempheldouttag';
+      heldTagB.textContent = '⏸ 临时排除·不计入统计';
+      ld.appendChild(heldTagB);
+    }
 
     var statLine = document.createElement('div');
     var statInfo = formatSessionStatsLine(sessionId, members.length);
@@ -3072,6 +3164,13 @@
       calBtn.addEventListener('click', function(e){ e.stopPropagation(); toggleSessionCalibration(sessionId); });
     }
     calRow.appendChild(calBtn);
+    if(isLatestSession && !locked && !sessionIsCal){
+      var tempBtnS = document.createElement('button');
+      tempBtnS.className = 'calbtn' + (held ? ' tempheldoutbtn-active' : '');
+      tempBtnS.textContent = held ? '↩ 已排除·点击并入统计' : '⏸ 临时排除整组(不计入统计)';
+      tempBtnS.addEventListener('click', function(e){ e.stopPropagation(); toggleTempHeldOut({ type:'session', sessionId: sessionId }); });
+      calRow.appendChild(tempBtnS);
+    }
 
     left.appendChild(lt); left.appendChild(ld); left.appendChild(statLine); left.appendChild(note); left.appendChild(calRow);
 
@@ -3517,6 +3616,7 @@
     var liveBoundary = calRecord ? calRecord.t : null;
 
     // 1. 活跃区间(校准点当天起)，跟以前一样倒序展示
+    var latestKey = getLatestEntryKey();
     var renderedSessions = {};
     for(var i = records.length - 1; i >= 0; i--){
       var r = records[i];
@@ -3525,9 +3625,11 @@
         if(renderedSessions[r.sessionId]){ continue; }
         renderedSessions[r.sessionId] = true;
         var members = records.filter(function(x){ return x.sessionId === r.sessionId; }).sort(function(a,b){ return a.t - b.t; });
-        log.appendChild(renderBundleCard(r.sessionId, members));
+        var isLatestSession = !!(latestKey && latestKey.type === 'session' && latestKey.sessionId === r.sessionId);
+        log.appendChild(renderBundleCard(r.sessionId, members, false, isLatestSession));
       } else {
-        log.appendChild(renderSingleLogRow(r));
+        var isLatestRecord = !!(latestKey && latestKey.type === 'record' && latestKey.id === r.id);
+        log.appendChild(renderSingleLogRow(r, false, isLatestRecord));
       }
     }
 
@@ -3547,6 +3649,21 @@
 
   function getActiveRecords(season){
     var sorted = records.slice().sort(function(a,b){ return a.t - b.t; });
+    if(tempHeldOut){
+      // 结构性兜底：无论上层是否已经处理了"设为校准点时顺手解除临时排除"这个防护，
+      // 这里永远不允许把 isCalibration===true 的记录/所在会话过滤掉——校准边界的完整性
+      // 优先级高于临时排除功能，避免 lastCalIdx 找不到校准点而退化成"全部历史都算活跃区间"。
+      sorted = sorted.filter(function(r){
+        if(r.isCalibration){ return true; }
+        if(tempHeldOut.type === 'session'){
+          if(r.sessionId !== tempHeldOut.sessionId){ return true; }
+          // 若该会话内任一成员恰好是校准点，整组保留、不拆散——不能只护住那一条成员
+          var sessionHasCal = records.some(function(x){ return x.sessionId === tempHeldOut.sessionId && x.isCalibration; });
+          return sessionHasCal;
+        }
+        return r.id !== tempHeldOut.id;
+      });
+    }
     var lastCalIdx = -1;
     for(var i=0;i<sorted.length;i++){
       if(sorted[i].isCalibration){ lastCalIdx = i; }
@@ -4486,6 +4603,7 @@
     try{ localStorage.removeItem('cc_periods_v1'); }catch(e){}
     loadPackages();
     loadCalSwitchLog();
+    loadTempHeldOut();
     loadEnabledSources();
     loadBurstMode();
     loadGridOverlay();
