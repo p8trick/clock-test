@@ -414,7 +414,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.6.2</span>
+      <span class="versiontag" id="versionTag">v4.6.5</span>
     </div>
 
     <div id="timePanel">
@@ -778,7 +778,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.6.2</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.6.5</div>
   </div>
 
 </div>
@@ -3748,13 +3748,20 @@
     var spanScore = Math.min(1, spanDays / 21);
     var r2Clamped = Math.max(0, Math.min(1, reg.r2));
     var combined = countScore*0.35 + spanScore*0.35 + r2Clamped*0.30;
-    var stars = Math.round(combined*5*2) / 2;
-    if(stars < 0.5){ stars = 0.5; }
+    // v4.6.3 从0.5步进四舍五入改成0.1步进向下取整——底层combined本来就是连续分数，
+    // 只是最后这一步显示取整太粗，看不出4.6/4.7/4.8这种细微差别。改floor而不是round，
+    // 是延续星级"宁可低估不高估"的既有设计哲学，避免临界值被凑整抬高一档。
+    var stars = Math.floor(combined*5*10) / 10;
+    if(stars < 0.1){ stars = 0.1; }
     return stars;
   }
 
   function starHtml(stars){
-    var pct = (stars/5)*100;
+    // 图标渲染受限于星形字符的整字宽度裁切，实测只能稳定显示到半颗星精度，
+    // 所以图标另算一个就近取整到0.5的展示值，跟旁边如实显示0.1精度的数字分开——
+    // 数字才是准确值，图标只是给个大致直观感受，两者不需要完全一致(参考亚马逊评分的表现形式)。
+    var iconStars = Math.round(stars*2) / 2;
+    var pct = (iconStars/5)*100;
     return '<span class="starwrap"><span class="star-bg">\u2605\u2605\u2605\u2605\u2605</span>' +
       '<span class="star-fg" style="width:' + pct + '%">\u2605\u2605\u2605\u2605\u2605</span></span>' +
       ' <span style="font-size:11px;color:var(--ink-dim)">' + stars.toFixed(1) + '</span>';
@@ -3946,7 +3953,7 @@
       html += '</div>';
       return html;
     }
-    html += '<div class="statsline">' + starHtml(s.stars) + '</div>';
+    html += '<div class="statsline" style="margin-bottom:6px;">' + starHtml(s.stars) + ' <span style="font-size:11px;color:var(--ink-dim);">· 参与计算' + s.count + '条</span></div>';
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + (s.r2*100).toFixed(2) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
