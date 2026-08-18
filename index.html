@@ -414,7 +414,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.6.5</span>
+      <span class="versiontag" id="versionTag">v4.6.6</span>
     </div>
 
     <div id="timePanel">
@@ -778,7 +778,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.6.5</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.6.6</div>
   </div>
 
 </div>
@@ -3041,6 +3041,7 @@
       calBtn.addEventListener('click', function(){ toggleCalibration(r.id); });
     }
     btnrow.appendChild(calBtn);
+    calBtn.style.display = held ? 'none' : '';
     if(isLatestRecord && !locked && !r.isCalibration){
       var tempBtn = document.createElement('button');
       tempBtn.className = 'calbtn' + (held ? ' tempheldoutbtn-active' : '');
@@ -3164,6 +3165,7 @@
       calBtn.addEventListener('click', function(e){ e.stopPropagation(); toggleSessionCalibration(sessionId); });
     }
     calRow.appendChild(calBtn);
+    calBtn.style.display = held ? 'none' : '';
     if(isLatestSession && !locked && !sessionIsCal){
       var tempBtnS = document.createElement('button');
       tempBtnS.className = 'calbtn' + (held ? ' tempheldoutbtn-active' : '');
