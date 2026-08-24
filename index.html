@@ -103,6 +103,9 @@
   .progressfill{height:100%; background:var(--good); border-radius:4px; transition:width .3s;}
   .progressfill.over1{background:#ffd93d;}
   .progressfill.over2{background:var(--bad);}
+  .stalewarn{color:var(--bad) !important; font-weight:600;}
+  .stalewarn-lvl2{color:#fff !important; background:var(--bad); font-weight:700; padding:3px 8px; border-radius:6px; display:inline-block;}
+  .stalewarn-lvl3{color:#fff !important; background:#7a0d0d; font-weight:700; padding:3px 8px; border-radius:6px; display:inline-block; border:1px solid #ff5c5c;}
   .delayrow{display:flex; align-items:center; gap:8px; margin-top:8px;}
   .sourcetogglerow{display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--panel-edge); font-size:12px; color:var(--ink-dim);}
   .sourcetogglerow:last-child{border-bottom:none;}
@@ -414,7 +417,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.6.6</span>
+      <span class="versiontag" id="versionTag">v4.7.0</span>
     </div>
 
     <div id="timePanel">
@@ -551,6 +554,13 @@
       <div class="seasonrow">
         <button class="seasonbtn" id="relayObserveBtn">🔧 观察模式(未安装)</button>
         <button class="seasonbtn" id="relayInstalledBtn">⚡ 已安装(自动运行)</button>
+      </div>
+      <label class="mtitle" style="margin-top:12px;">未维护提醒阈值</label>
+      <p style="margin-top:0;">观察模式下，本周期累计漂移超过这个分钟数还没有新校准点介入，统计页会用红色警示提醒——大概率是忘了回来维护。</p>
+      <div class="delayrow">
+        <input type="text" inputmode="decimal" id="staleThresholdInput" class="seg" style="flex:0 0 70px;">
+        <span style="font-size:12px;color:var(--ink-dim);">分钟</span>
+        <button class="iconbtn" id="staleThresholdSaveBtn" style="margin-left:auto;">保存</button>
       </div>
     </div>
 
@@ -778,7 +788,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.6.6</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.7.0</div>
   </div>
 
 </div>
@@ -802,6 +812,35 @@
   // 只影响建议时刻的文案措辞，以及导出JSON里附带的数据来源背景。默认观察模式，
   // 因为现在外置继电器确实还没装好，也不打算手动纠正时钟。
   var relayInstalled = false;
+  // v4.7.0 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
+  // 且期间没有新校准点介入，说明大概率已经忘记回来维护PWA了，统计页需要
+  // 用醒目的警示样式提示，而不是让漂移进度和累计时长安静地无限爬升。
+  var STALE_THRESHOLD_KEY = 'cc_stale_threshold_v1';
+  var staleThresholdMin = 3;
+
+  function loadStaleThreshold(){
+    try{
+      var v = parseFloat(localStorage.getItem(STALE_THRESHOLD_KEY));
+      staleThresholdMin = (isNaN(v) || v <= 0) ? 3 : v;
+    }catch(e){ staleThresholdMin = 3; }
+  }
+
+  function saveStaleThreshold(){
+    try{ localStorage.setItem(STALE_THRESHOLD_KEY, String(staleThresholdMin)); }catch(e){}
+  }
+
+  // 把毫秒级累计漂移量格式化成"xx分xx秒"，超过60分钟自动进位成"xx时xx分xx秒"，
+  // 不封顶。只用于人读的大致展示，故意舍弃毫秒位。
+  function formatDriftDuration(ms){
+    var totalSec = Math.floor(Math.max(0, ms) / 1000);
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    if(h > 0){
+      return h + '时' + m + '分' + s + '秒';
+    }
+    return m + '分' + s + '秒';
+  }
 
   function loadRelayInstalled(){
     try{
@@ -3916,6 +3955,7 @@
       progressPct: rawProgressPct,
       progressDisplayPct: progressDisplayPct,
       progressTier: progressTier,
+      projectedNowMs: projectedNowY,
       predictedTimes: predictedTimes,
       daysFromNow: (predictedTimes[0] - Date.now()) / 86400000
     };
@@ -3959,8 +3999,29 @@
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + (s.r2*100).toFixed(2) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
-    html += '<div class="progresswrap"><div class="progresslabel">本周期已漂移进度 ' + Math.round(s.progressPct) + '%</div>';
-    html += '<div class="progressbar"><div class="progressfill' + tierClass + '" style="width:' + s.progressDisplayPct.toFixed(1) + '%"></div></div></div>';
+    // v4.7.0 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
+    // 说明这一期已经持续很久没有新校准点介入，大概率是忘了回来维护。
+    // 只对"当前生效模型"这一块判断——另一个季节模型本来就长期不采集数据，
+    // 不是"忘了维护"，如果两块都判断会常年误报非当前季节那块。
+    // 严重程度按超过阈值的倍数分三档递增，跟progressTier(按圈数分档、200%以上
+    // 永远同一个红)是两条独立的轴——这里是"多久没人管"，那边是"漂移了几圈"，
+    // 意义不同，不合并成一套颜色，各自按自己的节奏继续升级。
+    var staleMs = staleThresholdMin * 60000;
+    var staleRatio = isCurrent ? (s.projectedNowMs / staleMs) : 0;
+    var staleLevel = staleRatio >= 4 ? 3 : (staleRatio >= 2 ? 2 : (staleRatio >= 1 ? 1 : 0));
+    var isStale = staleLevel > 0;
+    var durationText = formatDriftDuration(s.projectedNowMs);
+    var progressLabelHtml = '本周期已漂移进度 ' + Math.round(s.progressPct) + '%（累计漂移 ' + durationText + '）';
+    html += '<div class="progresswrap"><div class="progresslabel' + (isStale ? ' stalewarn' : '') + '">' + progressLabelHtml + '</div>';
+    html += '<div class="progressbar"><div class="progressfill' + tierClass + '" style="width:' + s.progressDisplayPct.toFixed(1) + '%"></div></div>';
+    if(staleLevel === 1){
+      html += '<div class="statsline stalewarn" style="margin-top:4px;">⚠ 已超过' + staleThresholdMin + '分钟未维护，请回来查看/校准</div>';
+    } else if(staleLevel === 2){
+      html += '<div class="statsline stalewarn-lvl2" style="margin-top:4px;">⚠⚠ 已严重超期（超阈值' + staleRatio.toFixed(1) + '倍），建议尽快校准</div>';
+    } else if(staleLevel === 3){
+      html += '<div class="statsline stalewarn-lvl3" style="margin-top:4px;">🛑 已长期失联（超阈值' + staleRatio.toFixed(1) + '倍），数据可能已严重偏离实际，请尽快校准</div>';
+    }
+    html += '</div>';
 
     // v4.1.2 预测列表：已装继电器时显示"扣除执行延迟后的实际触发时刻"，
     // 观察模式下继电器不会真的动作，扣延迟没有意义，改显示未扣延迟的理论完成时刻，
@@ -4563,6 +4624,7 @@
     document.getElementById('screenCamera').style.display = (name === 'camera') ? 'flex' : 'none';
     if(name === 'settings'){
       document.getElementById('delaySecInput').value = String(delaySec);
+      document.getElementById('staleThresholdInput').value = String(staleThresholdMin);
     }
     if(name === 'stats'){
       renderLog();
@@ -4606,6 +4668,7 @@
     loadHistory();
     loadDelay();
     loadRelayInstalled();
+    loadStaleThreshold();
     // v4.3.0 一次性清理：删掉"历史校准分期"旧功能遗留的 localStorage key，
     // 避免这份不再被任何代码读写的旧数据永久占着位置。try/catch防止隐私模式等
     // localStorage不可用场景下报错中断后续初始化。
@@ -4827,6 +4890,16 @@
       renderStats();
       document.getElementById('delaySaveBtn').textContent = '已保存';
       setTimeout(function(){ document.getElementById('delaySaveBtn').textContent = '保存'; }, 1500);
+    });
+
+    document.getElementById('staleThresholdSaveBtn').addEventListener('click', function(){
+      var v = parseFloat(document.getElementById('staleThresholdInput').value);
+      if(isNaN(v) || v <= 0){ alert('请输入大于0的正数(分钟)'); return; }
+      staleThresholdMin = v;
+      saveStaleThreshold();
+      renderStats();
+      document.getElementById('staleThresholdSaveBtn').textContent = '已保存';
+      setTimeout(function(){ document.getElementById('staleThresholdSaveBtn').textContent = '保存'; }, 1500);
     });
 
     var sensHoldTimer = null;
