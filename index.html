@@ -417,7 +417,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.8.0</span>
+      <span class="versiontag" id="versionTag">v4.9.0</span>
     </div>
 
     <div id="timePanel">
@@ -788,7 +788,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.8.0</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.9.0</div>
   </div>
 
 </div>
@@ -812,7 +812,7 @@
   // 只影响建议时刻的文案措辞，以及导出JSON里附带的数据来源背景。默认观察模式，
   // 因为现在外置继电器确实还没装好，也不打算手动纠正时钟。
   var relayInstalled = false;
-  // v4.8.0 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
+  // v4.9.0 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
   // 且期间没有新校准点介入，说明大概率已经忘记回来维护PWA了，统计页需要
   // 用醒目的警示样式提示，而不是让漂移进度和累计时长安静地无限爬升。
   var STALE_THRESHOLD_KEY = 'cc_stale_threshold_v1';
@@ -3741,7 +3741,7 @@
   }
 
   var HALF_LIFE_DAYS = 35;
-  // v4.8.0：不再用固定条数，改成"按实际周期长度凑够覆盖满365天以上"——
+  // v4.9.0：不再用固定条数，改成"按实际周期长度凑够覆盖满365天以上"——
   // 固定12条在实测周期(如26.7天)下只能覆盖约320天，年末会有40+天的自动化空档。
   // COVERAGE_DAYS_MIN 是下限：只要列表跨度(首尾时间差)还没达到这个天数，就继续
   // 往后加一条，宁可多排1-2条，也不留全年裸奔期——Tuya那边是"每年某月某日"重复
@@ -3929,14 +3929,14 @@
     // v4.1.2 建议触发时刻改成"永远盯着未来"的滚动列表：不再固定输出模型算出的头3个理论时刻，
     // 而是从 basePredicted 起按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
     // 按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
-    // 凑够覆盖满 COVERAGE_DAYS_MIN 天为止（v4.8.0，见下方动态条数逻辑）。系统时间前跳测试、
+    // 凑够覆盖满 COVERAGE_DAYS_MIN 天为止（v4.9.0，见下方动态条数逻辑）。系统时间前跳测试、
     // 或者长期没有新记录时，列表也会自动往后滚，
     // 不会停留在一个早已过去的日期上。
     var cycleMs = cycleDays * 86400000;
     var elapsedSinceBase = Date.now() - basePredicted;
     var startIdx = elapsedSinceBase > 0 ? Math.ceil(elapsedSinceBase / cycleMs) : 0;
     var predictedTimes = [];
-    // v4.8.0：条数不再固定，按"首尾跨度是否已达到 COVERAGE_DAYS_MIN 天"动态决定，
+    // v4.9.0：条数不再固定，按"首尾跨度是否已达到 COVERAGE_DAYS_MIN 天"动态决定，
     // 宁可多排一条也不留年末空档。cycleMs 异常(<=0，理论上不会发生，防御性判断)时
     // 退化成固定12条，避免除零/死循环。
     if(cycleMs > 0){
@@ -4019,7 +4019,7 @@
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + (s.r2*100).toFixed(2) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
-    // v4.8.0 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
+    // v4.9.0 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
     // 说明这一期已经持续很久没有新校准点介入，大概率是忘了回来维护。
     // 只对"当前生效模型"这一块判断——另一个季节模型本来就长期不采集数据，
     // 不是"忘了维护"，如果两块都判断会常年误报非当前季节那块。
@@ -4051,7 +4051,11 @@
     var predTimes = s.predictedTimes.map(function(t){ return relayInstalled ? (t - delayMs) : t; });
     var expanded = !!predListExpanded[season];
     var visibleCount = expanded ? predTimes.length : Math.min(3, predTimes.length);
-    var circled = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫'];
+    // v4.9.0：动态条数上来后，原本硬编码到⑫的数组在第13条起就退化成"13."样式，
+    // 跟前面①②③风格不统一——扩到⑳(Unicode标准圆圈数字最多到20，够覆盖
+    // 实际会出现的13~15条左右)，超过20的极端情况(MAX_PREDICTION_COUNT=40防御上限
+    // 触发时)才回退到"N."样式，这种情况理论上不会在正常数据下发生。
+    var circled = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
     html += '<div class="predlist">';
     html += '<div style="font-size:10px;color:var(--ink-dim);margin-bottom:2px;">' +
       (relayInstalled
@@ -4155,7 +4159,7 @@
         confidenceStars: s.stars,
         cycleDays: s.cycleDays,
         correctionAction: '+1 minute',
-        // v4.8.0 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
+        // v4.9.0 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
         // 不再固定12个，永远是"此刻起未来N个，直到首尾跨度覆盖满一年"，
         // 方便一次性抄进Tuya等平台按月配置自动化场景(全年参考模板)
         theoreticalCorrectionTimes: {
@@ -4634,6 +4638,55 @@
   }
   // ===== Ghost Input 焦点守护 结束 =====
 
+  // v4.9.0：除相机页外，其余页面支持右滑手势快速返回导航主页(capture页)。
+  // 排除相机页的原因：相机页本身有ROI拖动等横向手势交互，混进全局滑动返回容易误触。
+  // capture页本身已经是导航主页，滑动检测放行(target判断)但showScreen('capture')在已是
+  // capture时属于无副作用的重复赋值，不需要额外判断跳过。
+  function setupSwipeBackGesture(){
+    var touchStartX = 0, touchStartY = 0, touchStartTime = 0, tracking = false;
+    var SWIPE_MIN_DX = 60;      // 最小水平位移(px)，太短容易跟普通点击/误触混淆
+    var SWIPE_MAX_DY = 50;      // 最大垂直位移(px)，超过这个说明是在纵向滚动，不算滑动返回
+    var SWIPE_MAX_MS = 600;     // 最长耗时(ms)，太慢的拖动不算"滑动"手势
+    var SWIPE_EDGE_ZONE = 40;   // 只在屏幕最左侧这个宽度(px)内起手的滑动才触发，
+                                 // 避免页面中间的正常横向滚动/拖动被误判成返回手势
+
+    function shouldSkipSwipeTarget(target){
+      if(!target){ return false; }
+      var tag = target.tagName;
+      if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'){ return true; }
+      // range滑块(灵敏度/缩放等)理论上只存在于相机页(已被整体排除)，这里再加一层
+      // 保险，避免以后有人在其他页面加了新的range控件时被这个手势误触发。
+      if(target.closest && target.closest('input[type="range"]')){ return true; }
+      return false;
+    }
+
+    document.addEventListener('touchstart', function(e){
+      if(currentScreen === 'camera' || currentScreen === 'capture'){ tracking = false; return; }
+      if(e.touches.length !== 1){ tracking = false; return; }
+      var t = e.touches[0];
+      if(t.clientX > SWIPE_EDGE_ZONE){ tracking = false; return; }
+      if(shouldSkipSwipeTarget(e.target)){ tracking = false; return; }
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+      touchStartTime = Date.now();
+      tracking = true;
+    }, { passive: true });
+
+    document.addEventListener('touchend', function(e){
+      if(!tracking){ return; }
+      tracking = false;
+      var dt = Date.now() - touchStartTime;
+      if(dt > SWIPE_MAX_MS){ return; }
+      var t = e.changedTouches && e.changedTouches[0];
+      if(!t){ return; }
+      var dx = t.clientX - touchStartX;
+      var dy = Math.abs(t.clientY - touchStartY);
+      if(dx >= SWIPE_MIN_DX && dy <= SWIPE_MAX_DY){
+        showScreen('capture');
+      }
+    }, { passive: true });
+  }
+
   function showScreen(name){
     currentScreen = name;
     document.getElementById('screenCapture').style.display = (name === 'capture') ? 'flex' : 'none';
@@ -4716,6 +4769,7 @@
     requestAnimationFrame(renderClock);
     syncTime();
     setupBtKeypadGhost();
+    setupSwipeBackGesture();
     showScreen('capture');
 
     document.getElementById('resyncBtn').addEventListener('click', syncTime);
