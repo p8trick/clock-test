@@ -417,7 +417,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.7.0</span>
+      <span class="versiontag" id="versionTag">v4.8.0</span>
     </div>
 
     <div id="timePanel">
@@ -788,7 +788,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.7.0</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.8.0</div>
   </div>
 
 </div>
@@ -812,7 +812,7 @@
   // 只影响建议时刻的文案措辞，以及导出JSON里附带的数据来源背景。默认观察模式，
   // 因为现在外置继电器确实还没装好，也不打算手动纠正时钟。
   var relayInstalled = false;
-  // v4.7.0 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
+  // v4.8.0 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
   // 且期间没有新校准点介入，说明大概率已经忘记回来维护PWA了，统计页需要
   // 用醒目的警示样式提示，而不是让漂移进度和累计时长安静地无限爬升。
   var STALE_THRESHOLD_KEY = 'cc_stale_threshold_v1';
@@ -3741,9 +3741,13 @@
   }
 
   var HALF_LIFE_DAYS = 35;
-  // v4.1.2 建议触发时刻列表长度——12个大致对应实测漂移率下一整年的周期数，
-  // 方便一次性抄进Tuya等平台按月配置自动化场景（这类App通常不支持超长天数倒计时）
-  var PREDICTION_COUNT = 12;
+  // v4.8.0：不再用固定条数，改成"按实际周期长度凑够覆盖满365天以上"——
+  // 固定12条在实测周期(如26.7天)下只能覆盖约320天，年末会有40+天的自动化空档。
+  // COVERAGE_DAYS_MIN 是下限：只要列表跨度(首尾时间差)还没达到这个天数，就继续
+  // 往后加一条，宁可多排1-2条，也不留全年裸奔期——Tuya那边是"每年某月某日"重复
+  // 执行，条数多几条不构成额外负担，但少算容易在年末留出没人管的空窗期。
+  var COVERAGE_DAYS_MIN = 365;
+  var MAX_PREDICTION_COUNT = 40; // 防御性上限，避免异常数据(周期极短)导致死循环/列表爆炸
   var predListExpanded = { summer:false, winter:false };
 
   function computeWeights(active){
@@ -3924,14 +3928,30 @@
     var basePredicted = t0 + xTarget1*86400000;
     // v4.1.2 建议触发时刻改成"永远盯着未来"的滚动列表：不再固定输出模型算出的头3个理论时刻，
     // 而是从 basePredicted 起按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
-    // 取接下来 PREDICTION_COUNT 个。系统时间前跳测试、或者长期没有新记录时，列表也会自动往后滚，
+    // 按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
+    // 凑够覆盖满 COVERAGE_DAYS_MIN 天为止（v4.8.0，见下方动态条数逻辑）。系统时间前跳测试、
+    // 或者长期没有新记录时，列表也会自动往后滚，
     // 不会停留在一个早已过去的日期上。
     var cycleMs = cycleDays * 86400000;
     var elapsedSinceBase = Date.now() - basePredicted;
     var startIdx = elapsedSinceBase > 0 ? Math.ceil(elapsedSinceBase / cycleMs) : 0;
     var predictedTimes = [];
-    for(var pi=0; pi<PREDICTION_COUNT; pi++){
-      predictedTimes.push(basePredicted + (startIdx + pi) * cycleMs);
+    // v4.8.0：条数不再固定，按"首尾跨度是否已达到 COVERAGE_DAYS_MIN 天"动态决定，
+    // 宁可多排一条也不留年末空档。cycleMs 异常(<=0，理论上不会发生，防御性判断)时
+    // 退化成固定12条，避免除零/死循环。
+    if(cycleMs > 0){
+      var coverageMs = COVERAGE_DAYS_MIN * 86400000;
+      var pi = 0;
+      while(pi < MAX_PREDICTION_COUNT){
+        predictedTimes.push(basePredicted + (startIdx + pi) * cycleMs);
+        pi++;
+        var spanMs = predictedTimes[predictedTimes.length-1] - predictedTimes[0];
+        if(spanMs >= coverageMs){ break; }
+      }
+    } else {
+      for(var piFallback=0; piFallback<12; piFallback++){
+        predictedTimes.push(basePredicted + (startIdx + piFallback) * cycleMs);
+      }
     }
     var stars = computeConfidence(collapsed, reg);
     var xNow = (Date.now() - t0) / 86400000;
@@ -3999,7 +4019,7 @@
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + (s.r2*100).toFixed(2) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
-    // v4.7.0 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
+    // v4.8.0 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
     // 说明这一期已经持续很久没有新校准点介入，大概率是忘了回来维护。
     // 只对"当前生效模型"这一块判断——另一个季节模型本来就长期不采集数据，
     // 不是"忘了维护"，如果两块都判断会常年误报非当前季节那块。
@@ -4135,7 +4155,8 @@
         confidenceStars: s.stars,
         cycleDays: s.cycleDays,
         correctionAction: '+1 minute',
-        // v4.1.2 从固定3个改成滚动的 PREDICTION_COUNT 个，永远是"此刻起未来N个"，
+        // v4.8.0 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
+        // 不再固定12个，永远是"此刻起未来N个，直到首尾跨度覆盖满一年"，
         // 方便一次性抄进Tuya等平台按月配置自动化场景(全年参考模板)
         theoreticalCorrectionTimes: {
           note: '模型算出的漂移满60秒的理论时刻,未扣除继电器执行延迟,列表长度' + s.predictedTimes.length + '个,永远是从当前时刻起最近的未来N个',
