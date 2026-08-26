@@ -417,7 +417,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.9.2</span>
+      <span class="versiontag" id="versionTag">v4.9.3</span>
     </div>
 
     <div id="timePanel">
@@ -788,7 +788,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.9.2</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.9.3</div>
   </div>
 
 </div>
@@ -812,7 +812,7 @@
   // 只影响建议时刻的文案措辞，以及导出JSON里附带的数据来源背景。默认观察模式，
   // 因为现在外置继电器确实还没装好，也不打算手动纠正时钟。
   var relayInstalled = false;
-  // v4.9.2 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
+  // v4.9.3 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
   // 且期间没有新校准点介入，说明大概率已经忘记回来维护PWA了，统计页需要
   // 用醒目的警示样式提示，而不是让漂移进度和累计时长安静地无限爬升。
   var STALE_THRESHOLD_KEY = 'cc_stale_threshold_v1';
@@ -3741,7 +3741,7 @@
   }
 
   var HALF_LIFE_DAYS = 35;
-  // v4.9.2：不再用固定条数，改成"按实际周期长度凑够覆盖满365天以上"——
+  // v4.9.3：不再用固定条数，改成"按实际周期长度凑够覆盖满365天以上"——
   // 固定12条在实测周期(如26.7天)下只能覆盖约320天，年末会有40+天的自动化空档。
   // COVERAGE_DAYS_MIN 是下限：只要列表跨度(首尾时间差)还没达到这个天数，就继续
   // 往后加一条，宁可多排1-2条，也不留全年裸奔期——Tuya那边是"每年某月某日"重复
@@ -3929,14 +3929,14 @@
     // v4.1.2 建议触发时刻改成"永远盯着未来"的滚动列表：不再固定输出模型算出的头3个理论时刻，
     // 而是从 basePredicted 起按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
     // 按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
-    // 凑够覆盖满 COVERAGE_DAYS_MIN 天为止（v4.9.2，见下方动态条数逻辑）。系统时间前跳测试、
+    // 凑够覆盖满 COVERAGE_DAYS_MIN 天为止（v4.9.3，见下方动态条数逻辑）。系统时间前跳测试、
     // 或者长期没有新记录时，列表也会自动往后滚，
     // 不会停留在一个早已过去的日期上。
     var cycleMs = cycleDays * 86400000;
     var elapsedSinceBase = Date.now() - basePredicted;
     var startIdx = elapsedSinceBase > 0 ? Math.ceil(elapsedSinceBase / cycleMs) : 0;
     var predictedTimes = [];
-    // v4.9.2：条数不再固定，按"首尾跨度是否已达到 COVERAGE_DAYS_MIN 天"动态决定，
+    // v4.9.3：条数不再固定，按"首尾跨度是否已达到 COVERAGE_DAYS_MIN 天"动态决定，
     // 宁可多排一条也不留年末空档。cycleMs 异常(<=0，理论上不会发生，防御性判断)时
     // 退化成固定12条，避免除零/死循环。
     if(cycleMs > 0){
@@ -4019,7 +4019,7 @@
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + (s.r2*100).toFixed(2) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
-    // v4.9.2 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
+    // v4.9.3 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
     // 说明这一期已经持续很久没有新校准点介入，大概率是忘了回来维护。
     // 只对"当前生效模型"这一块判断——另一个季节模型本来就长期不采集数据，
     // 不是"忘了维护"，如果两块都判断会常年误报非当前季节那块。
@@ -4051,7 +4051,7 @@
     var predTimes = s.predictedTimes.map(function(t){ return relayInstalled ? (t - delayMs) : t; });
     var expanded = !!predListExpanded[season];
     var visibleCount = expanded ? predTimes.length : Math.min(3, predTimes.length);
-    // v4.9.2：动态条数上来后，原本硬编码到⑫的数组在第13条起就退化成"13."样式，
+    // v4.9.3：动态条数上来后，原本硬编码到⑫的数组在第13条起就退化成"13."样式，
     // 跟前面①②③风格不统一——扩到⑳(Unicode标准圆圈数字最多到20，够覆盖
     // 实际会出现的13~15条左右)，超过20的极端情况(MAX_PREDICTION_COUNT=40防御上限
     // 触发时)才回退到"N."样式，这种情况理论上不会在正常数据下发生。
@@ -4159,7 +4159,7 @@
         confidenceStars: s.stars,
         cycleDays: s.cycleDays,
         correctionAction: '+1 minute',
-        // v4.9.2 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
+        // v4.9.3 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
         // 不再固定12个，永远是"此刻起未来N个，直到首尾跨度覆盖满一年"，
         // 方便一次性抄进Tuya等平台按月配置自动化场景(全年参考模板)
         theoreticalCorrectionTimes: {
@@ -4638,7 +4638,7 @@
   }
   // ===== Ghost Input 焦点守护 结束 =====
 
-  // v4.9.2：除相机页外，其余页面支持右滑手势快速返回——不再写死回主页，
+  // v4.9.3：除相机页外，其余页面支持右滑手势快速返回——不再写死回主页，
   // 改成"模拟点击当前页面自己的返回按钮"，复用每个页面已有的返回逻辑
   // (compare/projection实际回的是stats、help页有动态helpReturnScreen判断)，
   // 避免另写一套判断跟按钮行为对不上、以后按钮逻辑改了滑动却忘记同步。
@@ -4693,7 +4693,7 @@
     }, { passive: true });
   }
 
-  // v4.9.2：页面切换淡入过渡用的id映射表，跟 showScreen 里现有的7行显示切换
+  // v4.9.3：页面切换淡入过渡用的id映射表，跟 showScreen 里现有的7行显示切换
   // 对应同一份页面清单，只是这里额外拿来查"这次要显示的是哪个DOM节点"，
   // 不改动原有的7行开关逻辑本身，降低出错风险。
   var SCREEN_ID_MAP = { capture:'screenCapture', settings:'screenSettings', stats:'screenStats',
@@ -4708,21 +4708,22 @@
     document.getElementById('screenProjection').style.display = (name === 'projection') ? 'flex' : 'none';
     document.getElementById('screenHelp').style.display = (name === 'help') ? 'flex' : 'none';
     document.getElementById('screenCamera').style.display = (name === 'camera') ? 'flex' : 'none';
-    // v4.9.2 修正：单层 requestAnimationFrame 有时会被浏览器把"归零"和"开始过渡"
-    // 这两步合并进同一次绘制，导致过渡被跳过、直接跳到最终状态(看不出效果)。
-    // 改成双层 rAF：先等一帧确保"透明度0"这个状态真正被画出来一次，再在下一帧
-    // 开始过渡，这是消除这种时序竞争的常见写法。
+    // v4.9.3 修正：双层 rAF 依然没有在实机上显现效果，说明这套WebView环境下
+    // requestAnimationFrame 的调度时机跟常规浏览器不一致（standalone PWA的
+    // WKWebView偶发这类问题）。换成更笨但更可靠的写法：不依赖rAF，改用
+    // getComputedStyle 强制样式计算生效（比只读offsetHeight更明确针对opacity
+    // 这个属性），再配合一个16ms(约一帧)的setTimeout延迟启动过渡。
     var activeScreenEl = document.getElementById(SCREEN_ID_MAP[name]);
     if(activeScreenEl){
       activeScreenEl.style.transition = 'none';
       activeScreenEl.style.opacity = '0';
-      void activeScreenEl.offsetHeight; // 强制重排，确保归零先生效
-      requestAnimationFrame(function(){
-        requestAnimationFrame(function(){
-          activeScreenEl.style.transition = 'opacity 140ms ease';
-          activeScreenEl.style.opacity = '1';
-        });
-      });
+      // 强制读取computed opacity，确保"transition:none + opacity:0"这个状态
+      // 被浏览器真正应用一次，而不是跟后面的赋值合并处理
+      getComputedStyle(activeScreenEl).opacity;
+      setTimeout(function(){
+        activeScreenEl.style.transition = 'opacity 180ms ease';
+        activeScreenEl.style.opacity = '1';
+      }, 16);
     }
     if(name === 'settings'){
       document.getElementById('delaySecInput').value = String(delaySec);
