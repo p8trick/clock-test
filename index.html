@@ -222,6 +222,7 @@
   .zoomlabel{flex:0 0 auto; white-space:nowrap;}
   .zoomval{flex:0 0 auto; width:34px; text-align:right; font-family:var(--mono);}
   .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
+  .trendsep{color:var(--accent); font-family:inherit;}
 
   .sessionListTitle{font-size:11px; color:var(--ink-dim); letter-spacing:.03em; margin:10px 2px 6px;}
   .sessionCard{
@@ -417,7 +418,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.9.4</span>
+      <span class="versiontag" id="versionTag">v4.10.2</span>
     </div>
 
     <div id="timePanel">
@@ -788,7 +789,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.9.4</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.10.2</div>
   </div>
 
 </div>
@@ -812,7 +813,7 @@
   // 只影响建议时刻的文案措辞，以及导出JSON里附带的数据来源背景。默认观察模式，
   // 因为现在外置继电器确实还没装好，也不打算手动纠正时钟。
   var relayInstalled = false;
-  // v4.9.4 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
+  // v4.10.2 观察模式下的"未维护提醒"阈值——本周期累计漂移超过这个分钟数，
   // 且期间没有新校准点介入，说明大概率已经忘记回来维护PWA了，统计页需要
   // 用醒目的警示样式提示，而不是让漂移进度和累计时长安静地无限爬升。
   var STALE_THRESHOLD_KEY = 'cc_stale_threshold_v1';
@@ -1383,6 +1384,33 @@
     return candidate;
   }
 
+  // v4.10.2：手动填入/修改挂钟显示时间后，这条记录的漂移量从"自动估算(可能因超过
+  // 60秒周期而失真)"变成"手动指定，精确可靠"——它当初插入时在收敛记录里留下的那条
+  // 快照，是用修正前的错误数值算出来的，需要同步更新成修正后的正确值，而不是留着
+  // 一条已知错误的死数字。只更新这条记录自己触发的那一条快照，不去级联重算它之后
+  // 插入的其它记录对应的快照——如果修正的是很久以前的一条记录、期间又有新记录插入，
+  // 中间那些快照理论上也会因为这次修正而略有变化，但这里不做级联重算，属于已知的
+  // 简化处理（实际使用中，修正动作通常紧跟在拍摄之后，中间很少会插入别的新记录）。
+  function updateDriftHistoryForRecord(id){
+    var rec = null;
+    for(var i=0;i<records.length;i++){ if(records[i].id === id){ rec = records[i]; break; } }
+    if(!rec){ return; }
+    var s = computeStats(rec.season);
+    if(!s.ok){ return; }
+    var arr = driftHistory[rec.season];
+    if(!arr || !arr.length){ return; }
+    var changed = false;
+    arr.forEach(function(h){
+      if(h.triggerRecordId === id){
+        h.driftSecPerDay = s.driftSecPerDay;
+        h.stars = s.stars;
+        h.count = s.count;
+        changed = true;
+      }
+    });
+    if(changed){ saveHistory(); }
+  }
+
   function setClockDisplay(id, hhmm){
     var rec = null;
     for(var i=0;i<records.length;i++){
@@ -1417,6 +1445,7 @@
       }
     }
     renderStats();
+    updateDriftHistoryForRecord(id);
   }
 
   var SEG_IDS = ['segY','segMo','segD','segH','segMi','segS','segMs'];
@@ -1623,7 +1652,7 @@
     saveRecords();
     renderLog();
     renderStats();
-    trackHistory();
+    trackHistory(rec.id);
     return rec;
   }
 
@@ -2435,6 +2464,19 @@
   // getActiveRecords() 的 lastCalIdx 退回 -1，直接退化成"全部历史参与回归"，正是 v4.1.5 想
   // 彻底消灭的危险状态。修法：在这两个真正的删除入口上加保护，所有删除路径(日志页、摄像头最近
   // 捕获列表)都走这两个函数，改一处即可全覆盖。清空全部数据仍走独立的 clearLog()，不受影响。
+  // v4.9.5：记录被删除时，同步清掉它当初写入时留下的那条收敛趋势快照——
+  // 两个季节桶都过一遍，按 triggerRecordId 精确匹配，不影响其余没关系的快照。
+  function pruneDriftHistoryForRecordIds(idSet){
+    var changed = false;
+    ['summer','winter'].forEach(function(ssn){
+      var arr = driftHistory[ssn];
+      if(!arr || !arr.length){ return; }
+      var filtered = arr.filter(function(h){ return !(h.triggerRecordId && idSet[h.triggerRecordId]); });
+      if(filtered.length !== arr.length){ driftHistory[ssn] = filtered; changed = true; }
+    });
+    if(changed){ saveHistory(); }
+  }
+
   function deleteRecord(id){
     var target = null;
     for(var i=0;i<records.length;i++){ if(records[i].id === id){ target = records[i]; break; } }
@@ -2448,6 +2490,7 @@
     renderLog();
     renderStats();
     removeFromCameraSessionCaptures(id);
+    pruneDriftHistoryForRecordIds({ [id]: true });
   }
 
   function deleteSessionGroup(sessionId){
@@ -2456,6 +2499,8 @@
       alert('这组包含当前校准点，不能整组删除。请先在另一条记录(或另一组)上设为校准点完成转移，再回来删除这组。');
       return;
     }
+    var memberIds = {};
+    records.forEach(function(r){ if(r.sessionId === sessionId){ memberIds[r.id] = true; } });
     records = records.filter(function(r){ return r.sessionId !== sessionId; });
     recomputeAllDeltas();
     delete sessionMeta[sessionId];
@@ -2465,6 +2510,7 @@
     renderLog();
     renderStats();
     removeSessionGroupFromCameraSessionCaptures(sessionId);
+    pruneDriftHistoryForRecordIds(memberIds);
   }
 
   // ==== v3.9.8 摄像头页"本次监测最近捕获"临时列表 ====
@@ -3741,7 +3787,7 @@
   }
 
   var HALF_LIFE_DAYS = 35;
-  // v4.9.4：不再用固定条数，改成"按实际周期长度凑够覆盖满365天以上"——
+  // v4.10.2：不再用固定条数，改成"按实际周期长度凑够覆盖满365天以上"——
   // 固定12条在实测周期(如26.7天)下只能覆盖约320天，年末会有40+天的自动化空档。
   // COVERAGE_DAYS_MIN 是下限：只要列表跨度(首尾时间差)还没达到这个天数，就继续
   // 往后加一条，宁可多排1-2条，也不留全年裸奔期——Tuya那边是"每年某月某日"重复
@@ -3749,6 +3795,7 @@
   var COVERAGE_DAYS_MIN = 365;
   var MAX_PREDICTION_COUNT = 40; // 防御性上限，避免异常数据(周期极短)导致死循环/列表爆炸
   var predListExpanded = { summer:false, winter:false };
+  var trendExpanded = { summer:false, winter:false };
 
   function computeWeights(active){
     var lastT = active[active.length-1].t;
@@ -3929,14 +3976,14 @@
     // v4.1.2 建议触发时刻改成"永远盯着未来"的滚动列表：不再固定输出模型算出的头3个理论时刻，
     // 而是从 basePredicted 起按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
     // 按 cycleDays 的节奏往后数，只要已经落在 Date.now() 之前就跳过，
-    // 凑够覆盖满 COVERAGE_DAYS_MIN 天为止（v4.9.4，见下方动态条数逻辑）。系统时间前跳测试、
+    // 凑够覆盖满 COVERAGE_DAYS_MIN 天为止（v4.10.2，见下方动态条数逻辑）。系统时间前跳测试、
     // 或者长期没有新记录时，列表也会自动往后滚，
     // 不会停留在一个早已过去的日期上。
     var cycleMs = cycleDays * 86400000;
     var elapsedSinceBase = Date.now() - basePredicted;
     var startIdx = elapsedSinceBase > 0 ? Math.ceil(elapsedSinceBase / cycleMs) : 0;
     var predictedTimes = [];
-    // v4.9.4：条数不再固定，按"首尾跨度是否已达到 COVERAGE_DAYS_MIN 天"动态决定，
+    // v4.10.2：条数不再固定，按"首尾跨度是否已达到 COVERAGE_DAYS_MIN 天"动态决定，
     // 宁可多排一条也不留年末空档。cycleMs 异常(<=0，理论上不会发生，防御性判断)时
     // 退化成固定12条，避免除零/死循环。
     if(cycleMs > 0){
@@ -3981,11 +4028,26 @@
     };
   }
 
-  function trackHistory(){
+  // v4.10.2：找到当前全局校准点的记录id——用于给每条收敛快照打上"当时是哪个
+  // 校准边界"的标记，而不是在设新校准点那一刻就把历史快照整个清空。
+  function getCurrentCalibrationRecordId(){
+    for(var i=0;i<records.length;i++){ if(records[i].isCalibration){ return records[i].id; } }
+    return null;
+  }
+
+  function trackHistory(triggerRecordId){
     var s = computeStats(seasonMode);
     if(!s.ok){ return; }
     var arr = driftHistory[seasonMode];
-    arr.push({ at: Date.now(), driftSecPerDay: s.driftSecPerDay, stars: s.stars, count: s.count });
+    // v4.9.5：记下是哪条记录的写入触发了这次快照(triggerRecordId)，
+    // 这样这条记录以后被删除时，能精确找到并同步删掉这条快照，而不是留着
+    // 一条基于"已经不存在的错误数据"算出来的死数字混在收敛趋势里。
+    // v4.10.2：同时记下当时的全局校准点id(calBoundaryId)——不在设新校准点那一刻
+    // 就清空历史，而是让每条快照自己带着"当时属于哪个校准边界"这个标记，展示时
+    // 按这个标记分组、组间插入分割线。这样"设了校准点又马上切回去"这种测试性质
+    // 的探索操作，只要期间没有新捕获发生，就完全不会在这里留下任何痕迹——
+    // 因为这个函数只在真正插入新记录时才会被调用，纯粹的校准点切换本身不会触发它。
+    arr.push({ at: Date.now(), driftSecPerDay: s.driftSecPerDay, stars: s.stars, count: s.count, triggerRecordId: triggerRecordId || null, calBoundaryId: getCurrentCalibrationRecordId() });
     if(arr.length > 10){ arr = arr.slice(arr.length - 10); driftHistory[seasonMode] = arr; }
     saveHistory();
   }
@@ -4019,7 +4081,7 @@
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + (s.r2*100).toFixed(2) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
-    // v4.9.4 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
+    // v4.10.2 未维护提醒：本周期累计漂移(projectedNowMs)超过设置里的分钟阈值，
     // 说明这一期已经持续很久没有新校准点介入，大概率是忘了回来维护。
     // 只对"当前生效模型"这一块判断——另一个季节模型本来就长期不采集数据，
     // 不是"忘了维护"，如果两块都判断会常年误报非当前季节那块。
@@ -4051,7 +4113,7 @@
     var predTimes = s.predictedTimes.map(function(t){ return relayInstalled ? (t - delayMs) : t; });
     var expanded = !!predListExpanded[season];
     var visibleCount = expanded ? predTimes.length : Math.min(3, predTimes.length);
-    // v4.9.4：动态条数上来后，原本硬编码到⑫的数组在第13条起就退化成"13."样式，
+    // v4.10.2：动态条数上来后，原本硬编码到⑫的数组在第13条起就退化成"13."样式，
     // 跟前面①②③风格不统一——扩到⑳(Unicode标准圆圈数字最多到20，够覆盖
     // 实际会出现的13~15条左右)，超过20的极端情况(MAX_PREDICTION_COUNT=40防御上限
     // 触发时)才回退到"N."样式，这种情况理论上不会在正常数据下发生。
@@ -4076,8 +4138,32 @@
 
     var hist = driftHistory[season];
     if(hist && hist.length >= 2){
-      var recent = hist.slice(-4);
-      html += '<div class="trendline">收敛趋势(近' + recent.length + '次测量): ' + recent.map(function(h){ return h.driftSecPerDay.toFixed(3); }).join(' \u2192 ') + ' 秒/天</div>';
+      // v4.9.5：默认只显示最近4次(原有行为)，超过4条时给一个展开按钮看完整最多10条，
+      // 复用跟Tuya预测列表完全相同的折叠/展开交互模式(同款按钮样式、同款状态管理方式)。
+      var trendIsExpanded = !!trendExpanded[season];
+      var recent = trendIsExpanded ? hist.slice(-10) : hist.slice(-4);
+      // v4.10.2：不再靠清空数据来区分"校准点切换前后"，改成按每条快照自带的
+      // calBoundaryId分组渲染，组间插入一道分割线(⋯校准点切换⋯)，两侧数据都
+      // 完整保留、都能看到，只是视觉上标出"这里发生过一次校准点变更"，不代表
+      // 数据被抹掉。旧数据(没有calBoundaryId字段，v4.10.2之前写入的)按undefined
+      // 处理，只要连续几条的calBoundaryId相同就不插分割线，缺字段时天然归成一组。
+      var segments = [];
+      recent.forEach(function(h){
+        var last = segments.length ? segments[segments.length-1] : null;
+        if(last && last.boundaryId === h.calBoundaryId){
+          last.items.push(h);
+        } else {
+          segments.push({ boundaryId: h.calBoundaryId, items: [h] });
+        }
+      });
+      var trendHtml = segments.map(function(seg){
+        return seg.items.map(function(h){ return h.driftSecPerDay.toFixed(3); }).join(' \u2192 ');
+      }).join(' <span class="trendsep">⋯校准点切换⋯</span> ');
+      html += '<div class="trendline">收敛趋势(近' + recent.length + '次测量): ' + trendHtml + ' 秒/天</div>';
+      if(hist.length > 4){
+        html += '<button class="predExpandBtn" id="trendExpandBtn-' + season + '">' +
+          (trendIsExpanded ? '收起' : ('展开全部' + hist.length + '次(最多10次)')) + '</button>';
+      }
     }
     html += '</div>';
     return html;
@@ -4102,6 +4188,11 @@
     renderStats();
   }
 
+  function toggleTrendExpanded(season){
+    trendExpanded[season] = !trendExpanded[season];
+    renderStats();
+  }
+
   function renderStats(){
     var el = document.getElementById('statsPanel');
     var html = renderModelBlock(seasonMode, true);
@@ -4112,6 +4203,8 @@
     ['summer','winter'].forEach(function(ssn){
       var btn = document.getElementById('predExpandBtn-' + ssn);
       if(btn){ btn.addEventListener('click', function(){ togglePredList(ssn); }); }
+      var trendBtn = document.getElementById('trendExpandBtn-' + ssn);
+      if(trendBtn){ trendBtn.addEventListener('click', function(){ toggleTrendExpanded(ssn); }); }
     });
   }
 
@@ -4159,7 +4252,7 @@
         confidenceStars: s.stars,
         cycleDays: s.cycleDays,
         correctionAction: '+1 minute',
-        // v4.9.4 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
+        // v4.10.2 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
         // 不再固定12个，永远是"此刻起未来N个，直到首尾跨度覆盖满一年"，
         // 方便一次性抄进Tuya等平台按月配置自动化场景(全年参考模板)
         theoreticalCorrectionTimes: {
@@ -4638,7 +4731,7 @@
   }
   // ===== Ghost Input 焦点守护 结束 =====
 
-  // v4.9.4：除相机页外，其余页面支持右滑手势快速返回——不再写死回主页，
+  // v4.10.2：除相机页外，其余页面支持右滑手势快速返回——不再写死回主页，
   // 改成"模拟点击当前页面自己的返回按钮"，复用每个页面已有的返回逻辑
   // (compare/projection实际回的是stats、help页有动态helpReturnScreen判断)，
   // 避免另写一套判断跟按钮行为对不上、以后按钮逻辑改了滑动却忘记同步。
