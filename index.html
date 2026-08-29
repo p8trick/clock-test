@@ -293,7 +293,6 @@
   .section h4{margin:0 0 10px; color:var(--ink); font-size:12px; letter-spacing:.03em;}
   .section p{margin:4px 0; line-height:1.6; font-size:12px; color:var(--ink-dim);}
   .section code{color:var(--accent); font-family:var(--mono);}
-  .versionfooter{text-align:center; font-size:11px; color:var(--ink-dim); padding:18px 0 6px; font-family:var(--mono);}
 
   .toolrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
   .toolrow .iconbtn{flex:1 1 40%; padding:9px 4px; font-size:11.5px;}
@@ -418,7 +417,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.10.5</span>
+      <span class="versiontag" id="versionTag">v4.11.0</span>
     </div>
 
     <div id="timePanel">
@@ -789,7 +788,6 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.10.5</div>
   </div>
 
 </div>
@@ -4045,7 +4043,11 @@
       progressTier: progressTier,
       projectedNowMs: projectedNowY,
       predictedTimes: predictedTimes,
-      daysFromNow: (predictedTimes[0] - Date.now()) / 86400000
+      daysFromNow: (predictedTimes[0] - Date.now()) / 86400000,
+      // v4.11.0：用active(未经会话捏合)的首尾真实时间戳算跨度，
+      // 而不是collapsed后的t0——collapsed会把一组连拍捏合成一个点，
+      // 用它算跨度会让"这批数据实际覆盖了多久"失真变小。
+      spanDays: (active[active.length-1].t - active[0].t) / 86400000
     };
   }
 
@@ -4107,7 +4109,8 @@
       html += '</div>';
       return html;
     }
-    html += '<div class="statsline" style="margin-bottom:6px;">' + starHtml(s.stars) + ' <span style="font-size:11px;color:var(--ink-dim);">· 参与计算' + s.count + '条</span></div>';
+    var spanLabel = s.spanDays < 1 ? '不足1天' : s.spanDays.toFixed(1) + '天';
+    html += '<div class="statsline" style="margin-bottom:6px;">' + starHtml(s.stars) + ' <span style="font-size:11px;color:var(--ink-dim);">· 参与计算' + s.count + '条 · 跨度' + spanLabel + '</span></div>';
     html += '<div class="statsline">每天变慢 ' + s.driftSecPerDay.toFixed(3) + ' 秒 · 拟合优度 ' + (s.r2*100).toFixed(2) + '% · 周期约 ' + s.cycleDays.toFixed(1) + ' 天</div>';
 
     var tierClass = s.progressTier <= 0 ? '' : (s.progressTier === 1 ? ' over1' : ' over2');
