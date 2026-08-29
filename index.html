@@ -417,7 +417,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.11.0</span>
+      <span class="versiontag" id="versionTag">v4.11.1</span>
     </div>
 
     <div id="timePanel">
@@ -4170,7 +4170,12 @@
     html += '</div>';
 
     var hist = driftHistory[season];
-    if(hist && hist.length >= 2){
+    // v4.11.1：hist.length===1(常见于刚清空收敛趋势记录后的第一次新测量)时，
+    // 原来整个区块完全不显示，跟"清空后没生效"看起来一模一样，容易引起误会。
+    // 补一条提示，呼应上面主模型区块"还需N条记录"的提示风格。
+    if(hist && hist.length === 1){
+      html += '<div class="trendline" style="color:var(--ink-dim);">收敛趋势：已记录1次，再打1次才会开始显示趋势</div>';
+    } else if(hist && hist.length >= 2){
       // v4.9.5：默认只显示最近4次(原有行为)，超过4条时给一个展开按钮看完整最多10条，
       // 复用跟Tuya预测列表完全相同的折叠/展开交互模式(同款按钮样式、同款状态管理方式)。
       var trendIsExpanded = !!trendExpanded[season];
