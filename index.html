@@ -418,7 +418,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.10.4</span>
+      <span class="versiontag" id="versionTag">v4.10.5</span>
     </div>
 
     <div id="timePanel">
@@ -789,7 +789,7 @@
       </div>
     </div>
 
-    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.10.4</div>
+    <div class="versionfooter" id="helpVersionFooter">校准计时器 Clock Calibrator · v4.10.5</div>
   </div>
 
 </div>
@@ -4777,13 +4777,24 @@
   var SWIPE_BACK_BUTTON_MAP = { settings:'backBtn', stats:'statsBackBtn',
     compare:'compareBackBtn', projection:'projectionBackBtn', help:'helpBackBtn' };
 
+  // 滑动返回目标页面元素id映射——跟手拖拽阶段要直接改这个元素的transform/opacity，
+  // 需要知道当前页面对应的是哪个DOM节点(showScreen里是写死的一串if，这里单独提一份映射表)。
+  var SCREEN_ELEMENT_ID_MAP = { settings:'screenSettings', stats:'screenStats',
+    compare:'screenCompare', projection:'screenProjection', help:'screenHelp' };
+
+  // v4.10.5：给边缘滑动返回补上跟手实时视觉反馈(transform+opacity)和松手后的
+  // 滑出/弹回过渡动画——此前(v4.10.4及更早)滑动到位是直接模拟点击返回按钮，
+  // 中间没有touchmove阶段的实时反馈，视觉上是"瞬间跳转"。
   function setupSwipeBackGesture(){
     var touchStartX = 0, touchStartY = 0, touchStartTime = 0, tracking = false;
+    var draggingEl = null, dragX = 0;
     var SWIPE_MIN_DX = 60;      // 最小水平位移(px)，太短容易跟普通点击/误触混淆
     var SWIPE_MAX_DY = 50;      // 最大垂直位移(px)，超过这个说明是在纵向滚动，不算滑动返回
     var SWIPE_MAX_MS = 600;     // 最长耗时(ms)，太慢的拖动不算"滑动"手势
     var SWIPE_EDGE_ZONE = 40;   // 只在屏幕最左侧这个宽度(px)内起手的滑动才触发，
                                  // 避免页面中间的正常横向滚动/拖动被误判成返回手势
+    var DRAG_CAP = 160;         // 跟手拖拽的最大位移(px)，超过这个距离transform不再继续增加
+    var SETTLE_MS = 220;        // 松手后"确认返回/弹回原位"动画时长，需跟下面transition写的时长一致
 
     function shouldSkipSwipeTarget(target){
       if(!target){ return false; }
@@ -4795,32 +4806,87 @@
       return false;
     }
 
+    function resetDragStyle(el){
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.opacity = '';
+    }
+
     document.addEventListener('touchstart', function(e){
       if(currentScreen === 'camera' || currentScreen === 'capture'){ tracking = false; return; }
       if(e.touches.length !== 1){ tracking = false; return; }
       var t = e.touches[0];
       if(t.clientX > SWIPE_EDGE_ZONE){ tracking = false; return; }
       if(shouldSkipSwipeTarget(e.target)){ tracking = false; return; }
+      var elId = SCREEN_ELEMENT_ID_MAP[currentScreen];
+      draggingEl = elId ? document.getElementById(elId) : null;
+      if(!draggingEl){ tracking = false; return; }
       touchStartX = t.clientX;
       touchStartY = t.clientY;
       touchStartTime = Date.now();
+      dragX = 0;
       tracking = true;
+      draggingEl.style.transition = 'none'; // 跟手阶段必须关掉过渡，否则每帧更新会有卡顿延迟感
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e){
+      if(!tracking || !draggingEl){ return; }
+      var t = e.touches[0];
+      var dx = t.clientX - touchStartX;
+      var dy = Math.abs(t.clientY - touchStartY);
+      if(dy > SWIPE_MAX_DY){
+        // 纵向位移过多，判定为误触(比如在滚动列表)，直接取消并复位，不留半透明状态
+        tracking = false;
+        resetDragStyle(draggingEl);
+        draggingEl = null;
+        return;
+      }
+      if(dx < 0){ return; } // 只响应向右滑（返回手势方向）
+      dragX = Math.min(dx, DRAG_CAP);
+      draggingEl.style.transform = 'translateX(' + dragX + 'px)';
+      draggingEl.style.opacity = String(1 - dragX / (DRAG_CAP * 2));
     }, { passive: true });
 
     document.addEventListener('touchend', function(e){
-      if(!tracking){ return; }
+      if(!tracking || !draggingEl){ return; }
       tracking = false;
       var dt = Date.now() - touchStartTime;
-      if(dt > SWIPE_MAX_MS){ return; }
-      var t = e.changedTouches && e.changedTouches[0];
-      if(!t){ return; }
-      var dx = t.clientX - touchStartX;
-      var dy = Math.abs(t.clientY - touchStartY);
-      if(dx >= SWIPE_MIN_DX && dy <= SWIPE_MAX_DY){
+      var el = draggingEl;
+      draggingEl = null;
+      var transitionCss = 'transform ' + SETTLE_MS + 'ms ease, opacity ' + SETTLE_MS + 'ms ease';
+      if(dt > SWIPE_MAX_MS || dragX < SWIPE_MIN_DX){
+        // 未达到阈值（或太慢）：弹回原位
+        el.style.transition = transitionCss;
+        void el.offsetHeight; // 强制重排，避免和上面transition的写入被合并成一次重绘导致动画被跳过
+        el.style.transform = '';
+        el.style.opacity = '';
+        setTimeout(function(){ resetDragStyle(el); }, SETTLE_MS);
+        return;
+      }
+      // 达到阈值：先播放"滑出"动画，动画播完后再真正调用原有的返回按钮逻辑切页，
+      // 不能在这里立刻切页，否则新页面会瞬间顶替、滑出动画根本来不及播放。
+      el.style.transition = transitionCss;
+      void el.offsetHeight; // 同上，强制重排保证过渡确实生效(WKWebView下这一步不能省)
+      el.style.transform = 'translateX(100%)';
+      el.style.opacity = '0';
+      setTimeout(function(){
+        resetDragStyle(el);
         var backBtnId = SWIPE_BACK_BUTTON_MAP[currentScreen];
         var backBtnEl = backBtnId ? document.getElementById(backBtnId) : null;
         if(backBtnEl){ backBtnEl.click(); }
-      }
+      }, SETTLE_MS);
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', function(){
+      if(!tracking || !draggingEl){ return; }
+      tracking = false;
+      var el = draggingEl;
+      draggingEl = null;
+      el.style.transition = 'transform ' + SETTLE_MS + 'ms ease, opacity ' + SETTLE_MS + 'ms ease';
+      void el.offsetHeight;
+      el.style.transform = '';
+      el.style.opacity = '';
+      setTimeout(function(){ resetDragStyle(el); }, SETTLE_MS);
     }, { passive: true });
   }
 
