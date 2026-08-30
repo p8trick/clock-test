@@ -366,10 +366,7 @@
   .continuitytag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
   .continuitytag.warn{border-color:var(--bad); color:var(--bad);}
   .continuitytag.q-excellent{border-color:var(--good); color:var(--good);}
-  .continuitytag.q-ok{border-color:#e8c547; color:#e8c547;}
-  .continuitytag.q-poor{border-color:var(--accent); color:var(--accent);}
-  .continuitytag.q-bad{border-color:var(--bad); color:var(--bad);}
-  .continuitytag.q-junk{border-color:var(--ink-dim); color:var(--ink-dim);}
+  .continuitytag.q-fail{border-color:var(--bad); color:var(--bad);}
   .bundleExpandBtn{
     background:none; border:1.5px solid var(--ink-dim); border-radius:50%;
     color:var(--ink); font-size:14px; line-height:1;
@@ -417,7 +414,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.11.1</span>
+      <span class="versiontag" id="versionTag">v4.12.0</span>
     </div>
 
     <div id="timePanel">
@@ -736,7 +733,7 @@
       <div class="section">
         <h4>连拍模式</h4>
         <p style="margin-top:0;">切到"连拍模式(3次)"后，每次监测会自动连续抓3个跳变瞬间，这3条记录会打包成一个"会话"，统计时用当前粗略的每日漂移速率修正掉这3次之间本身产生的微小漂移，再取平均，得到一个噪声更低的锚点参与主回归。原始的3条记录本身不会被覆盖，永远可以在历史记录里看到。</p>
-        <p>连拍完成后会自动打一个质量标签：<span class="continuitytag q-excellent" style="margin-left:0;">优秀</span>两次间隔都精准落在59-61秒；<span class="continuitytag q-ok" style="margin-left:0;">一般</span>没漏拍但不够精准，或只漏了1分钟；<span class="continuitytag q-poor" style="margin-left:0;">差劲</span>两次间隔各漏了1分钟(隔次漏)；<span class="continuitytag q-bad" style="margin-left:0;">糟糕</span>某个间隔连续漏了2分钟以上；<span class="continuitytag q-junk" style="margin-left:0;">异常</span>间隔明显短于1分钟，基本不是真实跳变，建议直接删除整组。这个标签在摄像头页"本次监测最近捕获"和统计页历史记录的连拍卡片上都能看到。</p>
+        <p>连拍完成后会自动打一个质量标签：<span class="continuitytag q-excellent" style="margin-left:0;">优秀</span>两次间隔都精准落在59-61秒；<span class="continuitytag q-fail" style="margin-left:0;">不合格</span>只要漏拍过1分钟、或者间隔明显异常(疑似误触发)，一律算不合格，标签上会带具体原因(漏拍了几点几分，或提示疑似误触发建议删除整组)。这个标签在摄像头页"本次监测最近捕获"和统计页历史记录的连拍卡片上都能看到。</p>
       </div>
 
       <div class="section">
@@ -1086,21 +1083,19 @@
   var QUALITY_TIGHT_MAX_MS = 61000;
   var QUALITY_JUNK_GAP_MS = 50000; // 间隔明显短于1分钟，基本不可能是真实分钟跳变，判定为疑似误触发
 
+  // v4.12.0：捕获率已接近100%，隔次漏拍/连续漏拍这些细分档位不再有实际参考意义，
+  // 简化成二元制——只有两次间隔都精准落在59-61秒才算"优秀"，其余(漏拍≥1分钟、
+  // 间隔异常疑似误触发等)一律归为"不合格"。间隔异常的情况额外带一句reason提示
+  // 建议删除整组，其余不合格情况用漏拍分钟数说明原因。
   function classifySessionQuality(gaps){
-    if(gaps.some(function(dt){ return dt < QUALITY_JUNK_GAP_MS; })){
-      return { tier:'junk', label:'⚠️ 数据异常，疑似误触发，建议删除整组' };
-    }
     var allTight = gaps.every(function(dt){ return dt >= QUALITY_TIGHT_MIN_MS && dt <= QUALITY_TIGHT_MAX_MS; });
     if(allTight){
       return { tier:'excellent', label:'优秀' };
     }
-    var misses = gaps.map(function(dt){ return Math.max(0, Math.round(dt / SESSION_BASELINE_CYCLE_MS) - 1); });
-    var maxMiss = Math.max.apply(null, misses);
-    var minMiss = Math.min.apply(null, misses);
-    if(maxMiss === 0){ return { tier:'ok', label:'一般' }; }
-    if(maxMiss === 1 && minMiss === 0){ return { tier:'ok', label:'一般' }; }
-    if(maxMiss === 1 && minMiss === 1){ return { tier:'poor', label:'差劲' }; }
-    return { tier:'bad', label:'糟糕' };
+    if(gaps.some(function(dt){ return dt < QUALITY_JUNK_GAP_MS; })){
+      return { tier:'fail', label:'不合格', reason:'间隔异常，疑似误触发，建议删除整组' };
+    }
+    return { tier:'fail', label:'不合格' };
   }
 
   function computeSessionContinuity(sessionId){
@@ -1144,6 +1139,7 @@
       compensatedAvgCycleMs: compensatedAvgCycleMs,
       quality: quality.tier,
       qualityLabel: quality.label,
+      qualityReason: quality.reason || null,
       completedAt: Date.now(),
       note: existingNote
     };
@@ -2378,6 +2374,7 @@
           kind:'burst', sessionId: sessionIdForThisCapture, ids: burstMemberIds, t: t,
           quality: metaDone ? metaDone.quality : null,
           qualityLabel: metaDone ? metaDone.qualityLabel : null,
+          qualityReason: metaDone ? metaDone.qualityReason : null,
           missedMinutes: metaDone ? metaDone.missedMinutes : []
         });
         renderCameraSessionList();
@@ -2901,10 +2898,10 @@
       if(item.kind === 'burst'){
         label = '连拍×' + item.ids.length + ' · 最后一次 ' + timeStr;
         if(item.quality){
-          var missNote = (item.quality !== 'junk' && item.missedMinutes && item.missedMinutes.length)
-            ? (' · 漏拍 ' + item.missedMinutes.join('、')) : '';
+          var extraNote = item.qualityReason ? (' · ' + item.qualityReason)
+            : ((item.missedMinutes && item.missedMinutes.length) ? (' · 漏拍 ' + item.missedMinutes.join('、')) : '');
           label += '<br><span class="continuitytag q-' + item.quality + '" style="margin-left:0;">' +
-            item.qualityLabel + missNote + '</span>';
+            item.qualityLabel + extraNote + '</span>';
         }
       } else {
         label = timeStr;
@@ -3222,8 +3219,8 @@
     var tag = document.createElement('span');
     if(meta && meta.quality){
       tag.className = 'continuitytag q-' + meta.quality;
-      if(meta.quality === 'junk'){
-        tag.textContent = meta.qualityLabel;
+      if(meta.qualityReason){
+        tag.textContent = meta.qualityLabel + ' · ' + meta.qualityReason;
       } else {
         var missNote = (meta.missedMinutes && meta.missedMinutes.length) ? (' · 漏拍 ' + meta.missedMinutes.join('、')) : '';
         tag.textContent = meta.qualityLabel + missNote;
