@@ -354,7 +354,7 @@
   .bundlecard{border-bottom:1px solid var(--panel-edge); padding:10px 0;}
   .bundlecard:last-child{border-bottom:none;}
   .bundlecard.calmarked{background:rgba(255,138,61,.06);}
-  .bundlehead{display:flex; justify-content:space-between; align-items:flex-start; cursor:pointer;}
+  .bundlehead{display:flex; justify-content:space-between; align-items:flex-start;}
   .bundlehead .lt{font-family:var(--mono); color:var(--ink); font-size:13px;}
   .bundlehead .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:3px; line-height:1.6;}
   .bundlehead .statline{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--ink-dim);}
@@ -368,11 +368,18 @@
   .continuitytag.q-excellent{border-color:var(--good); color:var(--good);}
   .continuitytag.q-fail{border-color:var(--bad); color:var(--bad);}
   .bundleExpandBtn{
+    position:relative; cursor:pointer; /* 配合下面::before扩展点击热区，不影响实际圆圈视觉大小 */
     background:none; border:1.5px solid var(--ink-dim); border-radius:50%;
     color:var(--ink); font-size:14px; line-height:1;
     width:26px; height:26px; flex:0 0 26px;
     display:flex; align-items:center; justify-content:center;
     padding:0; margin-left:8px;
+  }
+  /* v4.12.4：圆圈本身26px直径，实际点按太容易点空/点偏。用一个不可见的
+     ::before伪元素把可点击范围往四周各扩13px(直径约52px，接近视觉圆圈的2倍)，
+     不改变按钮看起来的大小，只是让手指更容易点中。 */
+  .bundleExpandBtn::before{
+    content:''; position:absolute; top:-13px; right:-13px; bottom:-13px; left:-13px;
   }
   .bundleExpandBtn:active{background:var(--panel-edge);}
   .bundlebody{margin-top:8px; padding-left:10px; border-left:2px solid var(--panel-edge);}
@@ -414,7 +421,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.12.3</span>
+      <span class="versiontag" id="versionTag">v4.12.4</span>
     </div>
 
     <div id="timePanel">
@@ -3307,7 +3314,10 @@
       expandedSessionIds[sessionId] = !expandedSessionIds[sessionId];
       renderLog();
     };
-    head.addEventListener('click', toggleExpand);
+    // v4.12.4：改为只有圆圈按钮本身响应展开/折叠，不再是整行都能点——
+    // 整行可点时太容易在点其他按钮/输入框(校准点/临时排除/删除等)时误触发，
+    // 之前得靠那些按钮各自stopPropagation来补救，现在从根上只留一个点击入口。
+    expandBtn.addEventListener('click', toggleExpand);
     head.appendChild(left); head.appendChild(expandBtn);
     card.appendChild(head);
 
@@ -3429,7 +3439,7 @@
     var expandBtn = document.createElement('button');
     expandBtn.className = 'bundleExpandBtn';
     expandBtn.innerHTML = '<span>' + (expanded ? '▲' : '▼') + '</span>';
-    head.addEventListener('click', function(){
+    expandBtn.addEventListener('click', function(){
       packageExpandedIds[pkg.id] = !expanded;
       renderLog();
     });
