@@ -414,7 +414,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.12.0</span>
+      <span class="versiontag" id="versionTag">v4.12.2</span>
     </div>
 
     <div id="timePanel">
@@ -458,9 +458,9 @@
     <button class="diagToggleBtn" id="cameraParamsToggleBtn">拍摄参数 ▾</button>
     <div class="section" id="cameraParamsDetail" style="display:none;">
       <div class="tuneRow">
-        <span class="zoomlabel">灵敏度</span>
-        <input type="range" id="sensitivitySlider" min="0" max="50" step="1" value="43" style="flex:1;">
-        <span id="sensitivityVal" class="zoomval">8.5</span>
+        <span class="zoomlabel">触发阈值</span>
+        <input type="range" id="sensitivitySlider" min="0" max="50" step="1" value="10" style="flex:1;">
+        <span id="sensitivityVal" class="zoomval">10.0</span>
       </div>
       <div class="tuneRow">
         <span class="zoomlabel">防抖容差</span>
@@ -722,8 +722,8 @@
         <p style="margin-top:0;">把电子钟的分钟数字对准取景框，尽量把手机靠稳(哪怕是斜靠在杯子、书堆上)，等镜头自动对焦稳定后再点"开始监测"。取景框(橙色框)可拖动移动、右下角手柄可拉伸大小，建议缩小到只框住分钟这一两位数字，范围越小越不容易被无关背景干扰；调整会自动记住，也可点"重置ROI"恢复默认。</p>
         <h5>网格局部检测原理</h5>
         <p>检测算法把取景框划分成若干小格，逐格比较相邻两帧的红色分量(LED数字发光色)变化，而不是整个取景框算一个平均值——这样能把"数字跳变"(只影响少数几个格子)和"环境光/自动曝光整体波动"(往往同时影响一大半格子)区分开，后者会被自动判定为全局噪声并整帧忽略。"网格:粗/中/细"三档可调整分格密度：画面较暗或噪声明显时选"粗"更稳，需要抓小面积数字变化(比如"1")时选"细"更灵敏。点右上角"网格"按钮可在取景框上叠加显示当前网格线，橙色高亮的格子就是本帧被判定为变化的格子，方便现场对照调参。</p>
-        <h5>灵敏度与确认机制</h5>
-        <p>下方电平表白线是当前阈值位置，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调"灵敏度"和"防抖容差"两个滑条。连续两帧都超过阈值才真正判定为跳变(记录的时间戳取自首次超标那一帧，避免系统性晚记)，减少单帧手抖误触发。</p>
+        <h5>触发阈值与确认机制</h5>
+        <p>下方电平表白线是当前阈值位置，静止画面时应稳定停在白线以左，跳变瞬间应明显冲过白线——照这个去回调"触发阈值"和"防抖容差"两个滑条。数字越小越灵敏(白线越靠左，越容易被触发)，数字越大越迟钝，跟电平表上白线的位置方向完全一致。连续两帧都超过阈值才真正判定为跳变(记录的时间戳取自首次超标那一帧，避免系统性晚记)，减少单帧手抖误触发。</p>
         <h5>状态与撤销</h5>
         <p>左上角状态徽章：白色小字＝未开始监测；红色小字"监测中..."＝正在实时监测；橙底大字闪烁＝刚捕获到跳变瞬间。误触发时，可以在下方"本次监测最近捕获"列表里点对应记录的删除按钮(3秒二次确认)；连拍产生的3条一起打包成一行，删除是整组删；蓝牙键盘退格键同样能撤销最近一条(连按两次确认，确认提示会临时显示在状态徽章文字上)。想继续监测，再点一次"开始监测"即可；"系统估算延迟"会在统计时自动扣除，原始时间戳本身不受影响；离开此界面会自动关闭摄像头。</p>
         <h5>本次监测最近捕获</h5>
@@ -743,7 +743,7 @@
           <tr><th>按键</th><th>功能</th></tr>
           <tr><td>回车</td><td class="desc">开始/停止监测(同一键切换)</td></tr>
           <tr><td>退格</td><td class="desc">撤销上条记录(3秒二次确认)</td></tr>
-          <tr><td>+ / -</td><td class="desc">灵敏度 ±1，长按连续快调</td></tr>
+          <tr><td>+ / -</td><td class="desc">触发阈值 ±1(数字越大越迟钝)，长按连续快调</td></tr>
           <tr><td>* / /</td><td class="desc">防抖容差 ±1px</td></tr>
           <tr><td>数字 0</td><td class="desc">手动立即截取</td></tr>
           <tr><td>数字 1</td><td class="desc">取景框宽度 ±1%</td></tr>
@@ -813,6 +813,26 @@
   // 用醒目的警示样式提示，而不是让漂移进度和累计时长安静地无限爬升。
   var STALE_THRESHOLD_KEY = 'cc_stale_threshold_v1';
   var staleThresholdMin = 3;
+  // v4.12.1 加上持久化(此前从未保存，每次都回到硬编码的8.5)。
+  // v4.12.2 方向性修正：此前滑条数字是"灵敏度"，跟实际阈值是反着的(数字越大阈值越小)，
+  // 导致这个数字和电平表上白线的实际位置方向相反，看着容易搞反。现在改成滑条数字
+  // 直接就是sensitivityThreshold本身——数字越小，白线越靠左，越容易被触发，越灵敏；
+  // 数字越大，白线越靠右，越迟钝——跟电平表的方向完全一致。默认值也从(旧刻度)40
+  // 换算成(新刻度)10，实际触发松紧程度不变。
+  var SENSITIVITY_KEY = 'cc_sensitivity_v1';
+  var sensitivitySliderVal = 10;
+
+  function loadSensitivity(){
+    try{
+      var v = parseFloat(localStorage.getItem(SENSITIVITY_KEY));
+      sensitivitySliderVal = (isNaN(v) || v < 0 || v > SENSITIVITY_MAX) ? 10 : v;
+    }catch(e){ sensitivitySliderVal = 10; }
+    sensitivityThreshold = sensitivitySliderVal;
+  }
+
+  function saveSensitivity(){
+    try{ localStorage.setItem(SENSITIVITY_KEY, String(sensitivitySliderVal)); }catch(e){}
+  }
 
   function loadStaleThreshold(){
     try{
@@ -1756,7 +1776,7 @@
   var cameraLoopActive = false;
   var shakeToleranceRadius = 2;
   var SENSITIVITY_MAX = 50;
-  var sensitivityThreshold = SENSITIVITY_MAX - 8.5;
+  var sensitivityThreshold = 10; // 会在init()里被loadSensitivity()覆盖，这里只是兜底默认
   var DIFF_METER_MAX = 200; // v4.0.6: 100时细网格常规读数(170-220)长期顶格，看不出相对大小；实测细网格最高220+，200仍不能完全覆盖，但比100好得多
   var DIFF_METER_DANGER = 250; // v4.0.7: 超过DIFF_METER_MAX后电平条满格显示，200~250黄色，>250红色，不再需要靠不断上调MAX来追峰值
   var cameraRafId = null;
@@ -2152,7 +2172,7 @@
     var sensText = sensSlider ? parseFloat(sensSlider.value).toFixed(1) : '--';
     var shakeText = shakeSlider ? shakeSlider.value + 'px' : '--';
     var modeText = burstModeEnabled ? '连拍模式' : '快捷模式';
-    el.textContent = '灵敏度' + sensText + ' · 防抖' + shakeText + ' · ' + modeText;
+    el.textContent = '触发阈值' + sensText + ' · 防抖' + shakeText + ' · ' + modeText;
   }
 
   function getVisibleVideoRect(video){
@@ -4951,6 +4971,17 @@
     loadDelay();
     loadRelayInstalled();
     loadStaleThreshold();
+    loadSensitivity();
+    // 同步滑条控件的视觉位置和数字显示——此前只有JS内部的sensitivityThreshold
+    // 变量是"权威值"，滑条HTML本身的value属性是写死的静态默认，从不读取实际值，
+    // 会出现"数字显示对但滑块位置对不上"的情况，这里统一以loadSensitivity()的
+    // 结果为准，把DOM也同步过去。
+    (function(){
+      var sSlider = document.getElementById('sensitivitySlider');
+      var sVal = document.getElementById('sensitivityVal');
+      if(sSlider){ sSlider.value = sensitivitySliderVal; }
+      if(sVal){ sVal.textContent = sensitivitySliderVal.toFixed(1); }
+    })();
     // v4.3.0 一次性清理：删掉"历史校准分期"旧功能遗留的 localStorage key，
     // 避免这份不再被任何代码读写的旧数据永久占着位置。try/catch防止隐私模式等
     // localStorage不可用场景下报错中断后续初始化。
@@ -5112,8 +5143,10 @@
     });
     document.getElementById('sensitivitySlider').addEventListener('input', function(e){
       var sliderVal = parseFloat(e.target.value);
-      sensitivityThreshold = SENSITIVITY_MAX - sliderVal;
+      sensitivitySliderVal = sliderVal;
+      sensitivityThreshold = sliderVal;
       document.getElementById('sensitivityVal').textContent = sliderVal.toFixed(1);
+      saveSensitivity();
       resetDiffMeter();
       updateCameraParamsSummary();
     });
