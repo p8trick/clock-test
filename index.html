@@ -421,7 +421,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.12.6</span>
+      <span class="versiontag" id="versionTag">v4.13.0</span>
     </div>
 
     <div id="timePanel">
@@ -608,8 +608,13 @@
         <button class="iconbtn" id="exportBackupBtn">导出完整备份(JSON)</button>
         <button class="iconbtn" id="importBackupBtn">导入完整备份(JSON)</button>
       </div>
+      <div class="toolrow">
+        <button class="iconbtn" id="exportAnalysisJSONBtn">导出AI分析(JSON)</button>
+        <button class="iconbtn" id="exportAnalysisMDBtn">导出AI分析(Markdown)</button>
+      </div>
       <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
       <p style="margin-top:8px;">完整备份(backupVersion 2)包含全部原始记录、已封存的数据包、校准切换日志三部分，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，记录按ID、数据包按ID、切换日志按记录ID+时间戳分别去重，不会覆盖或清空当前已有数据。旧版(v1)备份文件仍可正常导入，只是不含数据包和切换日志两部分。</p>
+      <p style="margin-top:8px;">AI分析导出：把每个历史数据包(重新按当前算法计算出的漂移速率/拟合优度/星级)和当前活跃统计段(同样含星级)一次性打包，专门用来丢给AI做趋势分析、跨包对比、论证年度算法这类用途；跟"完整备份"的区别是它含现成算好的汇总结论，不是只有原始记录。JSON适合程序化处理，Markdown把汇总结论整理成人也能顺手看一眼的条目，文末仍附完整JSON方便AI深挖细节。</p>
     </div>
 
   </div>
@@ -4385,6 +4390,138 @@
     shareOrDownloadBlob(blob, 'clock-calibration-' + Date.now() + '.csv', 'text/csv');
   }
 
+  // v4.13.0：AI分析导出——把"多期数据包的汇总参数+当前活跃统计表(含星级)"一次性
+  // 打包，供丢给AI做趋势分析/论证年度算法用。汇总参数用现有的computePackageDrift/
+  // computeStats重新算(数据包本身只存recordIds，不存算好的结果，这里跟界面显示
+  // 用的是同一套计算逻辑，保证给AI看的数字和你自己在app里看到的完全一致)。
+  function buildAnalysisReport(){
+    var seasons = ['summer', 'winter'];
+    var activeSeasonStats = {};
+    seasons.forEach(function(season){
+      var s = computeStats(season);
+      var activeMembers = getActiveRecords(season).map(function(r){
+        return {
+          id: r.id, t: r.t, season: r.season || null,
+          explicitDriftMs: (r.explicitDriftMs===null||r.explicitDriftMs===undefined) ? null : r.explicitDriftMs,
+          detectionLatencyMs: (typeof r.detectionLatencyMs === 'number') ? r.detectionLatencyMs : null,
+          sessionId: r.sessionId || null, isCalibration: !!r.isCalibration
+        };
+      });
+      if(s.ok){
+        activeSeasonStats[season] = {
+          ok: true, count: s.count, effectiveN: s.effectiveN, spanDays: s.spanDays,
+          driftSecPerDay: s.driftSecPerDay, r2: s.r2, stars: s.stars, starsPrecise: s.starsPrecise,
+          cycleDays: s.cycleDays, baselineTime: s.baselineT, rawRecords: activeMembers
+        };
+      } else {
+        activeSeasonStats[season] = {
+          ok:false, count: s.count||0,
+          reason: s.noDrift ? '未测得正向漂移' : '样本不足(需至少3条同季节记录)',
+          rawRecords: activeMembers
+        };
+      }
+    });
+
+    var sealedPackages = dataPackages.map(function(pkg){
+      var members = records.filter(function(r){ return pkg.recordIds.indexOf(r.id) !== -1; })
+        .sort(function(a,b){ return a.t - b.t; });
+      var drift = computePackageDrift(members);
+      var seasonsInPkg = {};
+      members.forEach(function(r){ seasonsInPkg[r.season || 'summer'] = true; });
+      return {
+        id: pkg.id,
+        packagedAt: pkg.packagedAt,
+        startTime: members.length ? members[0].t : null,
+        endTime: members.length ? members[members.length-1].t : null,
+        spanDays: members.length>1 ? (members[members.length-1].t - members[0].t)/86400000 : 0,
+        seasons: Object.keys(seasonsInPkg),
+        memberCount: members.length,
+        drift: drift.ok
+          ? { ok:true, driftSecPerDay: drift.driftSecPerDay, r2: drift.r2, stars: drift.stars, starsPrecise: drift.starsPrecise }
+          : { ok:false, reason: drift.noDrift ? '未测得正向漂移' : '样本不足(不足3条)' },
+        rawRecords: members.map(function(r){
+          return {
+            id: r.id, t: r.t, season: r.season || null,
+            explicitDriftMs: (r.explicitDriftMs===null||r.explicitDriftMs===undefined) ? null : r.explicitDriftMs,
+            detectionLatencyMs: (typeof r.detectionLatencyMs === 'number') ? r.detectionLatencyMs : null,
+            sessionId: r.sessionId || null, isCalibration: !!r.isCalibration
+          };
+        })
+      };
+    });
+
+    return {
+      generatedAt: Date.now(),
+      activeSeasonMode: seasonMode,
+      executionDelaySec: delaySec,
+      relayInstalled: relayInstalled,
+      activeSeasonStats: activeSeasonStats,
+      sealedPackages: sealedPackages,
+      calibrationSwitchLog: calibrationSwitchLog
+    };
+  }
+
+  function exportAnalysisJSON(){
+    var report = buildAnalysisReport();
+    var blob = new Blob([JSON.stringify(report, null, 2)], {type:'application/json'});
+    shareOrDownloadBlob(blob, 'clock-analysis-' + Date.now() + '.json', 'application/json');
+  }
+
+  function exportAnalysisMarkdown(){
+    var report = buildAnalysisReport();
+    var lines = [];
+    lines.push('# 校准计时器 · AI分析数据导出');
+    lines.push('');
+    lines.push('生成时间：' + new Date(report.generatedAt).toLocaleString('zh-CN'));
+    lines.push('当前使用季节模型：' + (report.activeSeasonMode === 'summer' ? '夏季' : '冬季'));
+    lines.push('继电器执行延迟补偿：' + report.executionDelaySec + '秒，继电器已安装：' + (report.relayInstalled ? '是' : '否'));
+    lines.push('');
+    lines.push('## 当前活跃统计段(尚未封包)');
+    ['summer','winter'].forEach(function(season){
+      var s = report.activeSeasonStats[season];
+      lines.push('');
+      lines.push('### ' + (season === 'summer' ? '夏季' : '冬季') + '模型');
+      if(!s.ok){
+        lines.push('- 状态：' + s.reason + '(现有' + s.count + '条)');
+      } else {
+        lines.push('- 参与计算：' + s.count + '条(有效样本' + s.effectiveN.toFixed(2) + ') · 跨度' + s.spanDays.toFixed(1) + '天');
+        lines.push('- 漂移速率：每天变慢' + s.driftSecPerDay.toFixed(3) + '秒 · 拟合优度r²=' + (s.r2*100).toFixed(2) + '%');
+        lines.push('- **置信星级：' + s.stars.toFixed(1) + '★(精确值' + s.starsPrecise.toFixed(3) + ')**');
+        lines.push('- 周期约' + s.cycleDays.toFixed(1) + '天 · 起算时间' + new Date(s.baselineTime).toLocaleString('zh-CN'));
+      }
+      lines.push('- 该段原始记录' + s.rawRecords.length + '条(逐条明细见文末JSON区)');
+    });
+    lines.push('');
+    lines.push('## 历史已封存数据包(共' + report.sealedPackages.length + '个，按时间顺序)');
+    report.sealedPackages.forEach(function(pkg, idx){
+      lines.push('');
+      lines.push('### 数据包 #' + (idx+1) + '(' + pkg.id + ')');
+      lines.push('- 时间范围：' + (pkg.startTime ? new Date(pkg.startTime).toLocaleString('zh-CN') : '--') +
+        ' ~ ' + (pkg.endTime ? new Date(pkg.endTime).toLocaleString('zh-CN') : '--') +
+        ' · 跨度' + pkg.spanDays.toFixed(1) + '天 · 涉及季节：' + pkg.seasons.join('/'));
+      lines.push('- 成员条数：' + pkg.memberCount + ' · 封包时间：' + new Date(pkg.packagedAt).toLocaleString('zh-CN'));
+      if(pkg.drift.ok){
+        lines.push('- 漂移速率：每天变慢' + pkg.drift.driftSecPerDay.toFixed(3) + '秒 · 拟合优度r²=' + (pkg.drift.r2*100).toFixed(2) + '%');
+        lines.push('- **置信星级：' + pkg.drift.stars.toFixed(1) + '★(精确值' + pkg.drift.starsPrecise.toFixed(3) + ')**');
+      } else {
+        lines.push('- 漂移速率：' + pkg.drift.reason);
+      }
+    });
+    lines.push('');
+    lines.push('## 校准切换日志(共' + report.calibrationSwitchLog.length + '条)');
+    report.calibrationSwitchLog.forEach(function(log){
+      lines.push('- ' + new Date(log.t || log.at || 0).toLocaleString('zh-CN') + '：' + JSON.stringify(log));
+    });
+    lines.push('');
+    lines.push('## 完整结构化数据(逐条原始记录，供需要时深挖细节)');
+    lines.push('```json');
+    lines.push(JSON.stringify(report, null, 2));
+    lines.push('```');
+    var md = lines.join('\n');
+    var blob = new Blob([md], {type:'text/markdown'});
+    shareOrDownloadBlob(blob, 'clock-analysis-' + Date.now() + '.md', 'text/markdown');
+  }
+
   function exportFullBackup(){
     // v4.1.13: backupVersion 2 —— 补上 v1 遗漏的 dataPackages(已封存数据包)和
     // calibrationSwitchLog(校准切换日志)，否则在Safari标签页/PWA之间搬迁数据时，
@@ -5046,6 +5183,8 @@
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('exportPredBtn').addEventListener('click', exportPrediction);
     document.getElementById('exportBackupBtn').addEventListener('click', exportFullBackup);
+    document.getElementById('exportAnalysisJSONBtn').addEventListener('click', exportAnalysisJSON);
+    document.getElementById('exportAnalysisMDBtn').addEventListener('click', exportAnalysisMarkdown);
     document.getElementById('importBackupBtn').addEventListener('click', function(){
       document.getElementById('importFileInput').click();
     });
