@@ -421,7 +421,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.13.0</span>
+      <span class="versiontag" id="versionTag">v4.13.1</span>
     </div>
 
     <div id="timePanel">
@@ -547,7 +547,7 @@
 
     <div class="section">
       <h4>继电器执行延迟补偿</h4>
-      <p style="margin-top:0;">Tuya继电器从收到指令到真正按下按键完成+1分钟动作，本身有延迟。导出预测JSON时会自动提前扣除这段时间，让继电器实际执行完成的那一刻正好补满60秒，避免每个周期都残留几秒误差。</p>
+      <p style="margin-top:0;">Tuya继电器从收到指令到真正按下按键完成+1分钟动作，本身有延迟。统计页"继电器建议触发时刻"列表会自动提前扣除这段时间，让继电器实际执行完成的那一刻正好补满60秒，避免每个周期都残留几秒误差。</p>
       <div class="delayrow">
         <input type="text" inputmode="decimal" id="delaySecInput" class="seg" style="flex:0 0 70px;">
         <span style="font-size:12px;color:var(--ink-dim);">秒</span>
@@ -601,7 +601,6 @@
       </div>
       <div class="toolrow">
         <button class="iconbtn" id="exportBtn">导出CSV</button>
-        <button class="iconbtn" id="exportPredBtn">导出预测JSON</button>
         <button class="iconbtn" id="clearBtn">清空记录</button>
       </div>
       <div class="toolrow">
@@ -790,11 +789,11 @@
 
       <div class="section">
         <h4>数据管理与备份</h4>
-        <p style="margin-top:0;">记录存本机localStorage，可导出CSV/预测JSON。完整备份(v2)含原始记录+数据包+切换日志，用于Safari标签页版和PWA版之间搬迁数据(两者存储完全隔离)。导入按ID去重合并，不覆盖现有数据；旧版(v1)备份仍可导入(不含数据包/切换日志)。</p>
+        <p style="margin-top:0;">记录存本机localStorage，可导出CSV。完整备份(v2)含原始记录+数据包+切换日志，用于Safari标签页版和PWA版之间搬迁数据(两者存储完全隔离)。导入按ID去重合并，不覆盖现有数据；旧版(v1)备份仍可导入(不含数据包/切换日志)。</p>
         <p>忘了开app时可事后手动填入准确时刻(年月日时分秒毫秒)参与统计，常用于把人工对表补成校准点。</p>
         <p>记录列表点"×"先变红色"确认删除"，3秒内再点才真删，超时自动取消。</p>
         <p>"清空记录"会弹出详细提示(条数/跨度/数据包/校准点状态)并附一键导出备份入口；确认按钮禁用3秒防手滑，清空后三部分数据一并清除，无法撤销。</p>
-        <p>导出CSV/预测JSON/完整备份都直接弹出系统分享菜单，"存储到文件"就在里面；不支持的环境自动退回原下载方式。</p>
+        <p>导出CSV/完整备份/AI分析(JSON或Markdown)都直接弹出系统分享菜单，"存储到文件"就在里面；不支持的环境自动退回原下载方式。</p>
       </div>
     </div>
 
@@ -4327,51 +4326,6 @@
     setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
   }
 
-  function exportPrediction(){
-    var summer = computeStats('summer');
-    var winter = computeStats('winter');
-    var delayMs = delaySec * 1000;
-    function pack(s){
-      if(!s.ok){ return { ok:false, count: s.count||0 }; }
-      return {
-        ok:true,
-        count: s.count,
-        baselineTime: s.baselineT,
-        driftSecPerDay: s.driftSecPerDay,
-        fitR2: s.r2,
-        confidenceStars: s.stars,
-        cycleDays: s.cycleDays,
-        correctionAction: '+1 minute',
-        // v4.10.4 改成动态条数——按实际周期长度凑够覆盖满365天以上（COVERAGE_DAYS_MIN），
-        // 不再固定12个，永远是"此刻起未来N个，直到首尾跨度覆盖满一年"，
-        // 方便一次性抄进Tuya等平台按月配置自动化场景(全年参考模板)
-        theoreticalCorrectionTimes: {
-          note: '模型算出的漂移满60秒的理论时刻,未扣除继电器执行延迟,列表长度' + s.predictedTimes.length + '个,永远是从当前时刻起最近的未来N个',
-          times: s.predictedTimes
-        },
-        relayFireTimes: {
-          note: '已扣除executionDelaySec,继电器可直接在这个时刻发指令,执行完成时理论上正好补满60秒',
-          times: s.predictedTimes.map(function(t){ return t - delayMs; })
-        }
-      };
-    }
-    var summerPacked = pack(summer);
-    var winterPacked = pack(winter);
-    if(!summerPacked.ok && !winterPacked.ok){
-      alert('两个季节模型数据都不足，暂时无法生成预测(每个模型至少需要3条同季节记录)');
-      return;
-    }
-    var payload = {
-      generatedAt: Date.now(),
-      activeSeason: seasonMode,
-      executionDelaySec: delaySec,
-      relayInstalled: relayInstalled,
-      models: { summer: summerPacked, winter: winterPacked }
-    };
-    var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-    shareOrDownloadBlob(blob, 'clock-prediction-' + Date.now() + '.json', 'application/json');
-  }
-
   function exportData(){
     if(!records.length){ return; }
     var lines = ['id,timestamp_ms,display,delta_ms,sync_source,season,clock_display,explicit_drift_ms,detection_latency_ms,session_id,is_calibration,note'];
@@ -5181,7 +5135,6 @@
     document.getElementById('resyncBtn').addEventListener('click', syncTime);
     document.getElementById('syncStatusBtn').addEventListener('click', syncTime);
     document.getElementById('exportBtn').addEventListener('click', exportData);
-    document.getElementById('exportPredBtn').addEventListener('click', exportPrediction);
     document.getElementById('exportBackupBtn').addEventListener('click', exportFullBackup);
     document.getElementById('exportAnalysisJSONBtn').addEventListener('click', exportAnalysisJSON);
     document.getElementById('exportAnalysisMDBtn').addEventListener('click', exportAnalysisMarkdown);
