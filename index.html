@@ -421,7 +421,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.13.1</span>
+      <span class="versiontag" id="versionTag">v4.13.3</span>
     </div>
 
     <div id="timePanel">
@@ -608,12 +608,11 @@
         <button class="iconbtn" id="importBackupBtn">导入完整备份(JSON)</button>
       </div>
       <div class="toolrow">
-        <button class="iconbtn" id="exportAnalysisJSONBtn">导出AI分析(JSON)</button>
         <button class="iconbtn" id="exportAnalysisMDBtn">导出AI分析(Markdown)</button>
       </div>
       <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
       <p style="margin-top:8px;">完整备份(backupVersion 2)包含全部原始记录、已封存的数据包、校准切换日志三部分，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，记录按ID、数据包按ID、切换日志按记录ID+时间戳分别去重，不会覆盖或清空当前已有数据。旧版(v1)备份文件仍可正常导入，只是不含数据包和切换日志两部分。</p>
-      <p style="margin-top:8px;">AI分析导出：把每个历史数据包(重新按当前算法计算出的漂移速率/拟合优度/星级)和当前活跃统计段(同样含星级)一次性打包，专门用来丢给AI做趋势分析、跨包对比、论证年度算法这类用途；跟"完整备份"的区别是它含现成算好的汇总结论，不是只有原始记录。JSON适合程序化处理，Markdown把汇总结论整理成人也能顺手看一眼的条目，文末仍附完整JSON方便AI深挖细节。</p>
+      <p style="margin-top:8px;">AI分析导出：把每个历史数据包(重新按当前算法计算出的漂移速率/拟合优度/星级)和当前活跃统计段(同样含星级)一次性打包，专门用来丢给AI做趋势分析、跨包对比、论证年度算法这类用途；跟"完整备份"的区别是它含现成算好的汇总结论，不是只有原始记录。汇总结论整理成人也能顺手看一眼的条目，文末仍附完整JSON方便AI深挖细节。</p>
     </div>
 
   </div>
@@ -793,7 +792,7 @@
         <p>忘了开app时可事后手动填入准确时刻(年月日时分秒毫秒)参与统计，常用于把人工对表补成校准点。</p>
         <p>记录列表点"×"先变红色"确认删除"，3秒内再点才真删，超时自动取消。</p>
         <p>"清空记录"会弹出详细提示(条数/跨度/数据包/校准点状态)并附一键导出备份入口；确认按钮禁用3秒防手滑，清空后三部分数据一并清除，无法撤销。</p>
-        <p>导出CSV/完整备份/AI分析(JSON或Markdown)都直接弹出系统分享菜单，"存储到文件"就在里面；不支持的环境自动退回原下载方式。</p>
+        <p>导出CSV/完整备份/AI分析(Markdown)都直接弹出系统分享菜单，"存储到文件"就在里面；不支持的环境自动退回原下载方式。</p>
       </div>
     </div>
 
@@ -3403,6 +3402,25 @@
     computeStats('winter');
   }
 
+  // v4.13.3：从4个不同函数里各自重复实现的"按recordIds找出对应records并排序"
+  // 逻辑里提炼出来的共享helper——之前renderPackageCard/openPackageDeleteModal/
+  // getComparablePackages/buildAnalysisReport各写了一遍(写法还不完全一样)，
+  // 统一成这一个之后，以后想调整成员筛选规则或优化查找效率只需要改一处。
+  function getPackageMembers(pkg){
+    return pkg.recordIds
+      .map(function(id){ for(var i=0;i<records.length;i++){ if(records[i].id === id){ return records[i]; } } return null; })
+      .filter(Boolean)
+      .sort(function(a,b){ return a.t - b.t; });
+  }
+
+  // 同上，"每天变慢X秒 · 拟合优度Y% · 星级"这行摘要文字，renderPackageCard和
+  // 多期对比页的行渲染里逐字重复了一遍，一并提出来共用。
+  function packageDriftSummaryHtml(drift){
+    return drift.ok
+      ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(3) + '秒 · 拟合优度' + (drift.r2*100).toFixed(2) + '% · ' + starHtml(drift.stars, drift.starsPrecise))
+      : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
+  }
+
   // v4.1.3 手动折叠校准点之前的历史数据——纯粹为了收起列表长度，不做任何自动触发，
   // 也不在摘要里放漂移率(漂移率的对比分析交给多期数据包对比页，两者是分开的两件事)
   var packageExpandedIds = {};
@@ -3410,10 +3428,7 @@
   // v4.1.6 数据包卡片——最新的那个包(isLatest)允许展开后点成员的"设为校准点"来解散重选，
   // 更早的包展开只是纯浏览，calBtn/备注/挂钟输入/删除按钮全部禁用，做到真正锁定。
   function renderPackageCard(pkg, isLatest){
-    var members = pkg.recordIds
-      .map(function(id){ for(var i=0;i<records.length;i++){ if(records[i].id === id){ return records[i]; } } return null; })
-      .filter(Boolean)
-      .sort(function(a,b){ return a.t - b.t; });
+    var members = getPackageMembers(pkg);
     if(!members.length){
       // 包里的成员全被删除了，这个包本身也没有意义了，静默跳过不渲染
       return document.createDocumentFragment();
@@ -3432,9 +3447,7 @@
     lt.textContent = '📦 数据包 · ' + shortDT(members[0].t) + ' ~ ' + shortDT(members[members.length-1].t) + ' · 共' + members.length + '条';
     var ld = document.createElement('div');
     ld.className = 'ld';
-    ld.innerHTML = drift.ok
-      ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(3) + '秒 · 拟合优度' + (drift.r2*100).toFixed(2) + '% · ' + starHtml(drift.stars, drift.starsPrecise))
-      : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
+    ld.innerHTML = packageDriftSummaryHtml(drift);
     var lockTag = document.createElement('span');
     lockTag.className = 'continuitytag';
     lockTag.textContent = isLatest ? '可重新选择校准点' : '\u{1F512}已锁定';
@@ -3547,10 +3560,7 @@
     var pkg = null;
     for(var i=0;i<dataPackages.length;i++){ if(dataPackages[i].id === pkgId){ pkg = dataPackages[i]; break; } }
     if(!pkg){ return; }
-    var members = pkg.recordIds
-      .map(function(id){ for(var j=0;j<records.length;j++){ if(records[j].id === id){ return records[j]; } } return null; })
-      .filter(Boolean)
-      .sort(function(a,b){ return a.t - b.t; });
+    var members = getPackageMembers(pkg);
     if(!members.length){ return; }
     var drift = computePackageDrift(members);
     pkgPendingDeleteId = pkgId;
@@ -3603,10 +3613,7 @@
   // 删除清空)静默跳过，跟统计表页 renderPackageCard 的处理方式保持一致。
   function getComparablePackages(){
     return dataPackages.map(function(pkg){
-      var members = pkg.recordIds
-        .map(function(id){ for(var i=0;i<records.length;i++){ if(records[i].id === id){ return records[i]; } } return null; })
-        .filter(Boolean)
-        .sort(function(a,b){ return a.t - b.t; });
+      var members = getPackageMembers(pkg);
       if(!members.length){ return null; }
       return { pkg: pkg, members: members, drift: computePackageDrift(members) };
     }).filter(Boolean);
@@ -3636,9 +3643,7 @@
       lt.textContent = shortDT(members[0].t) + ' ~ ' + shortDT(members[members.length-1].t) + ' · 共' + members.length + '条';
       var ld = document.createElement('div');
       ld.className = 'ld';
-      ld.innerHTML = drift.ok
-        ? ('每天变慢 ' + drift.driftSecPerDay.toFixed(3) + '秒 · 拟合优度' + (drift.r2*100).toFixed(2) + '% · ' + starHtml(drift.stars, drift.starsPrecise))
-        : (drift.noDrift ? '未测得正向漂移' : '样本不足，无法计算漂移率');
+      ld.innerHTML = packageDriftSummaryHtml(drift);
       info.appendChild(lt); info.appendChild(ld);
 
       var delBtn = document.createElement('button');
@@ -4377,8 +4382,7 @@
     });
 
     var sealedPackages = dataPackages.map(function(pkg){
-      var members = records.filter(function(r){ return pkg.recordIds.indexOf(r.id) !== -1; })
-        .sort(function(a,b){ return a.t - b.t; });
+      var members = getPackageMembers(pkg);
       var drift = computePackageDrift(members);
       var seasonsInPkg = {};
       members.forEach(function(r){ seasonsInPkg[r.season || 'summer'] = true; });
@@ -4413,12 +4417,6 @@
       sealedPackages: sealedPackages,
       calibrationSwitchLog: calibrationSwitchLog
     };
-  }
-
-  function exportAnalysisJSON(){
-    var report = buildAnalysisReport();
-    var blob = new Blob([JSON.stringify(report, null, 2)], {type:'application/json'});
-    shareOrDownloadBlob(blob, 'clock-analysis-' + Date.now() + '.json', 'application/json');
   }
 
   function exportAnalysisMarkdown(){
@@ -5136,7 +5134,6 @@
     document.getElementById('syncStatusBtn').addEventListener('click', syncTime);
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('exportBackupBtn').addEventListener('click', exportFullBackup);
-    document.getElementById('exportAnalysisJSONBtn').addEventListener('click', exportAnalysisJSON);
     document.getElementById('exportAnalysisMDBtn').addEventListener('click', exportAnalysisMarkdown);
     document.getElementById('importBackupBtn').addEventListener('click', function(){
       document.getElementById('importFileInput').click();
