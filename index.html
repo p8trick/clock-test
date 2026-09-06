@@ -421,7 +421,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.13.3</span>
+      <span class="versiontag" id="versionTag">v4.13.7</span>
     </div>
 
     <div id="timePanel">
@@ -1469,9 +1469,11 @@
     if(driftEl && rec){
       if(rec.explicitDriftMs !== null && rec.explicitDriftMs !== undefined){
         var dsec = rec.explicitDriftMs / 1000;
+        var latAdj = (typeof rec.detectionLatencyMs === 'number') ? rec.detectionLatencyMs : 0;
+        var correctedSec = ((rec.explicitDriftMs - latAdj) / 1000).toFixed(3);
         driftEl.textContent = dsec >= 0
-          ? ('本次发现挂钟已漂移 ' + dsec.toFixed(1) + ' 秒(落后)')
-          : ('本次发现挂钟领先 ' + Math.abs(dsec).toFixed(1) + ' 秒');
+          ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
+          : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
       } else {
         driftEl.textContent = '';
       }
@@ -3147,9 +3149,11 @@
     driftSpan.id = 'drift-' + r.id;
     if(r.explicitDriftMs !== null && r.explicitDriftMs !== undefined){
       var dsec = r.explicitDriftMs / 1000;
+      var latAdj = (typeof r.detectionLatencyMs === 'number') ? r.detectionLatencyMs : 0;
+      var correctedSec = ((r.explicitDriftMs - latAdj) / 1000).toFixed(3);
       driftSpan.textContent = dsec >= 0
-        ? ('本次发现挂钟已漂移 ' + dsec.toFixed(1) + ' 秒(落后)')
-        : ('本次发现挂钟领先 ' + Math.abs(dsec).toFixed(1) + ' 秒');
+        ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
+        : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
     } else {
       driftSpan.textContent = '';
     }
@@ -3211,8 +3215,8 @@
     var st = lastCollapsedBySession[sessionId];
     if(!st){ return { cls:'st-pending', text:'参与统计: 尚未计算' }; }
     if(st.status === 'anchor'){
-      var sec = (st.avgY / 1000).toFixed(2);
-      return { cls:'st-anchor', text:'参与统计: 已合并为锚点 · 锚点时间 ' + shortDT(st.meanT) + ' · 相位值 ' + Math.round(st.avgY) + 'ms(' + sec + 's)' };
+      var sec = (st.avgY / 1000).toFixed(3);
+      return { cls:'st-anchor', text:'参与统计: 已合并为锚点 · 锚点时间 ' + shortDT(st.meanT) + ' · 相位值 ' + sec + '秒(已扣除检测延迟)' };
     }
     if(st.status === 'raw'){
       return { cls:'st-raw', text:'参与统计: 当前总样本不足，本组未合并，' + memberCount + '条按原始记录分别参与' };
@@ -3360,9 +3364,11 @@
         mDrift.id = 'drift-' + m.id;
         if(m.explicitDriftMs !== null && m.explicitDriftMs !== undefined){
           var mds = m.explicitDriftMs / 1000;
+          var mLatAdj = (typeof m.detectionLatencyMs === 'number') ? m.detectionLatencyMs : 0;
+          var mCorrectedSec = ((m.explicitDriftMs - mLatAdj) / 1000).toFixed(3);
           mDrift.textContent = mds >= 0
-            ? ('本次发现挂钟已漂移 ' + mds.toFixed(1) + ' 秒(落后)')
-            : ('本次发现挂钟领先 ' + Math.abs(mds).toFixed(1) + ' 秒');
+            ? ('已漂移 ' + mds.toFixed(3) + '秒(落后) 扣除延迟后=' + mCorrectedSec + '秒')
+            : ('已领先 ' + Math.abs(mds).toFixed(3) + '秒 扣除延迟后=' + mCorrectedSec + '秒');
         }
         mClockRow.appendChild(mLabel); mClockRow.appendChild(mInput); mClockRow.appendChild(mDrift);
         item.appendChild(mClockRow);
