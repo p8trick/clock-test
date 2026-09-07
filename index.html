@@ -338,6 +338,10 @@
     background:#1a1e25; color:var(--ink); border:1px solid var(--panel-edge);
     border-radius:6px; padding:3px 6px; font-family:var(--mono); font-size:12px; color-scheme:dark;
   }
+  /* v4.15.0：挂钟显示时间改成自动填入(用当前漂移模型估算)，用颜色区分"系统自己猜的"
+     和"用户手动看过/改过确认的"——不追求自动填入100%正确，手动修改是兜底手段。 */
+  .clockinput.autofilled{ color:var(--accent); border-color:var(--accent); }
+  .clockinput.confirmed{ color:var(--good); border-color:var(--good); }
   .driftresult{font-size:11px; color:var(--accent); font-weight:600;}
   .calbtn{
     background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
@@ -421,7 +425,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.13.7</span>
+      <span class="versiontag" id="versionTag">v4.15.0</span>
     </div>
 
     <div id="timePanel">
@@ -1443,11 +1447,20 @@
     if(changed){ saveHistory(); }
   }
 
+  // v4.15.0：根据记录当前状态决定挂钟输入框该显示哪种颜色——
+  // 空值不特殊上色；系统自动猜的显示橙色(autofilled)；用户确认/手动改过的显示绿色(confirmed)，
+  // 老数据(v4.15.0之前录入、没有这个字段)默认按"用户手动填的"处理，因为原本就是手动输入。
+  function clockInputStateClass(r){
+    if(!r.clockDisplay){ return ''; }
+    return r.clockDisplayAutoFilled ? 'autofilled' : 'confirmed';
+  }
+
   function setClockDisplay(id, hhmm){
     var rec = null;
     for(var i=0;i<records.length;i++){
       if(records[i].id === id){
         rec = records[i];
+        rec.clockDisplayAutoFilled = false; // 用户手动动过这个字段(不管是清空还是改值)，不再算"系统自动猜的"
         if(!hhmm){
           rec.clockDisplay = '';
           rec.explicitDriftMs = null;
@@ -1465,6 +1478,8 @@
       }
     }
     saveRecords();
+    var inputEl = document.getElementById('clockinput-' + id);
+    if(inputEl && rec){ inputEl.className = 'clockinput ' + clockInputStateClass(rec); }
     var driftEl = document.getElementById('drift-' + id);
     if(driftEl && rec){
       if(rec.explicitDriftMs !== null && rec.explicitDriftMs !== undefined){
@@ -1680,8 +1695,23 @@
       clockDisplay: '',
       explicitDriftMs: null,
       detectionLatencyMs: (typeof detectionLatencyMs === 'number' && detectionLatencyMs > 0) ? detectionLatencyMs : null,
-      sessionId: sessionId || null
+      sessionId: sessionId || null,
+      clockDisplayAutoFilled: false
     };
+    // v4.15.0：新记录先用当前漂移模型自动猜一个"挂钟显示"，依据就是统计页
+    // "本周期已漂移进度"用的同一条回归线(computeProjectionAt)，代入这条记录
+    // 实际捕获的时刻算出预测漂移量，反推此刻挂钟大概显示什么，省得每次手动输入。
+    // 模型数据不够(还没ok)就什么都不填，退回纯手动——不为了这种情况另写兜底逻辑，
+    // 手动修正本身就是设计好的兜底手段，不要求自动填入100%正确。
+    var proj = computeProjectionAt(rec.season, t);
+    if(proj.ok){
+      var latAdjGuess = rec.detectionLatencyMs || 0;
+      var predictedRawDriftMs = proj.projectedYms + latAdjGuess;
+      var pd = new Date(t - predictedRawDriftMs);
+      rec.clockDisplay = pad(pd.getHours(),2) + ':' + pad(pd.getMinutes(),2);
+      rec.explicitDriftMs = predictedRawDriftMs;
+      rec.clockDisplayAutoFilled = true;
+    }
     insertRecordSorted(rec);
     saveRecords();
     renderLog();
@@ -3140,7 +3170,8 @@
     clockLabel.textContent = '挂钟显示';
     var clockInput = document.createElement('input');
     clockInput.type = 'time';
-    clockInput.className = 'clockinput';
+    clockInput.id = 'clockinput-' + r.id;
+    clockInput.className = 'clockinput ' + clockInputStateClass(r);
     clockInput.value = r.clockDisplay || '';
     clockInput.disabled = !!locked;
     clockInput.addEventListener('change', function(){ setClockDisplay(r.id, clockInput.value); });
@@ -3354,7 +3385,8 @@
         mLabel.textContent = '挂钟显示';
         var mInput = document.createElement('input');
         mInput.type = 'time';
-        mInput.className = 'clockinput';
+        mInput.id = 'clockinput-' + m.id;
+        mInput.className = 'clockinput ' + clockInputStateClass(m);
         mInput.value = m.clockDisplay || '';
         mInput.disabled = !!locked;
         mInput.addEventListener('click', function(e){ e.stopPropagation(); });
