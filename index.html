@@ -425,7 +425,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.15.0</span>
+      <span class="versiontag" id="versionTag">v4.16.0</span>
     </div>
 
     <div id="timePanel">
@@ -1707,7 +1707,20 @@
     if(proj.ok){
       var latAdjGuess = rec.detectionLatencyMs || 0;
       var predictedRawDriftMs = proj.projectedYms + latAdjGuess;
-      var pd = new Date(t - predictedRawDriftMs);
+      // v4.15.1修复：原来直接对两个很大的毫秒时间戳(t和t-predictedRawDriftMs)做浮点减法
+      // 再取分钟，在漂移量正好卡在分钟边界附近时，大数浮点减法精度丢失会导致取整分钟
+      // 跟旁边显示的"已漂移X秒"文案对不上(挂钟显示猜成上一分钟，但漂移秒数还是对的)。
+      // 改成纯整数分钟计数：先把漂移拆成"整分钟数+零头毫秒"，再跟捕获时刻自己这一分钟
+      // 已经过去的毫秒数比较——如果捕获时刻自己才过了没多久、比漂移零头还少，说明挂钟
+      // 还没跳过来，要多退1分钟。这样退出来的分钟和predictedRawDriftMs在数学上完全等价
+      // (不是近似)，且不经过大数减法，不会再出现边界抖动。
+      var driftWholeMin = Math.floor(predictedRawDriftMs / 60000);
+      var driftRemainderMs = predictedRawDriftMs - driftWholeMin * 60000;
+      var tRemainderMs = t % 60000;
+      if(tRemainderMs < driftRemainderMs){ driftWholeMin += 1; }
+      var tMinuteBucket = Math.floor(t / 60000);
+      var clockMinuteBucket = tMinuteBucket - driftWholeMin;
+      var pd = new Date(clockMinuteBucket * 60000);
       rec.clockDisplay = pad(pd.getHours(),2) + ':' + pad(pd.getMinutes(),2);
       rec.explicitDriftMs = predictedRawDriftMs;
       rec.clockDisplayAutoFilled = true;
@@ -1812,6 +1825,71 @@
       applyROIStyle();
       resetDetectionBaseline();
     });
+  }
+
+  // ==== v4.16.0 摄像头页操作声效 ====
+  // 用Web Audio API现场合成，不依赖外部音频文件，跟"单文件HTML PWA"的原则保持一致。
+  // iOS Safari要求AudioContext必须在用户手势内创建/resume——"开始监测"按钮点击本身
+  // 就是一次用户手势，在playStartSound()触发时顺带唤醒/resume一次即可；之后连拍等
+  // 由检测循环自动触发的声效复用同一个已解锁的AudioContext，不需要每次都靠新的用户手势。
+  // 三处声效调用全部放在各自捕获逻辑(addRecordAtTime/session记录/state更新)完全跑完之后
+  // 才触发，且Web Audio的node创建和start()本身是非阻塞的，不会拖慢下一帧的触发检测速度。
+  var soundCtx = null;
+  function getSoundCtx(){
+    if(!soundCtx){
+      try{ soundCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ return null; }
+    }
+    if(soundCtx.state === 'suspended'){ soundCtx.resume().catch(function(){}); }
+    return soundCtx;
+  }
+  function playTone(freq, startDelay, durationSec, waveType, gainPeak){
+    var ctx = getSoundCtx();
+    if(!ctx){ return; }
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = waveType || 'sine';
+    osc.frequency.value = freq;
+    var t0 = ctx.currentTime + (startDelay || 0);
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(gainPeak || 0.2, t0 + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + durationSec);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + durationSec + 0.02);
+  }
+  // "开始监测"按下：轻快上扬双音，跟按钮变红/文案变"停止监测"的视觉反馈呼应
+  function playStartSound(){
+    playTone(880, 0, 0.09, 'sine', 0.18);
+    playTone(1320, 0.09, 0.10, 'sine', 0.16);
+  }
+  // 连拍模式每次抓拍：模拟快门声，两个极短噪声脉冲叠一起，跟提示音明显区分开
+  function playShutterSound(){
+    var ctx = getSoundCtx();
+    if(!ctx){ return; }
+    var t0 = ctx.currentTime;
+    [0, 0.045].forEach(function(delay){
+      var bufSize = Math.floor(ctx.sampleRate * 0.02);
+      var buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      var data = buf.getChannelData(0);
+      for(var i=0;i<bufSize;i++){ data[i] = (Math.random()*2-1) * (1 - i/bufSize); }
+      var src = ctx.createBufferSource();
+      src.buffer = buf;
+      var gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.25, t0+delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0+delay+0.02);
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(t0+delay);
+    });
+  }
+  // 快捷模式单次捕获结束 / 连拍模式整组结束：三音上行完成提示音，跟快门声区分，
+  // 一听就知道"这轮结束了"而不是"还在拍"
+  function playCompleteSound(){
+    playTone(660, 0, 0.08, 'sine', 0.16);
+    playTone(880, 0.08, 0.08, 'sine', 0.16);
+    playTone(1100, 0.16, 0.14, 'sine', 0.18);
   }
 
   var cameraStream = null;
@@ -2117,6 +2195,7 @@
     } else {
       if(devState === 'READY'){ devStartExperiment(); }
       armCameraDetection();
+      playStartSound();
     }
   }
 
@@ -2426,6 +2505,7 @@
       lastCameraRecordId = rec.id;
 
       if(isBurstActive && burstCaptureIndex < BURST_TARGET_COUNT){
+        playShutterSound();
         cooldownTimer = setTimeout(function(){
           armCameraDetection();
         }, 3000);
@@ -2433,6 +2513,7 @@
       }
 
       if(isBurstActive){
+        playShutterSound();
         computeSessionContinuity(sessionIdForThisCapture);
         var metaDone = sessionMeta[sessionIdForThisCapture];
         var burstMemberIds = records.filter(function(r){ return r.sessionId === sessionIdForThisCapture; }).map(function(r){ return r.id; });
@@ -2447,9 +2528,11 @@
         burstSessionId = null;
         burstCaptureIndex = 0;
         renderLog();
+        playCompleteSound();
       } else {
         cameraSessionCaptures.unshift({ kind:'single', id: rec.id, t: t });
         renderCameraSessionList();
+        playCompleteSound();
       }
     }
 
