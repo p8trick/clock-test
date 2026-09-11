@@ -430,7 +430,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.17.3</span>
+      <span class="versiontag" id="versionTag">v4.17.5</span>
     </div>
 
     <div id="timePanel">
@@ -4494,13 +4494,16 @@
       // 复用跟Tuya预测列表完全相同的折叠/展开交互模式(同款按钮样式、同款状态管理方式)。
       var trendIsExpanded = !!trendExpanded[season];
       var recent = trendIsExpanded ? hist.slice(-10) : hist.slice(-4);
+      // v4.17.5：改成最新的排最前面，不用展开也能第一眼看到最新那次——
+      // hist本身还是按写入顺序(旧→新)存的，只在这里显示前把要渲染的这一段倒过来。
+      var recentDesc = recent.slice().reverse();
       // v4.10.4：不再靠清空数据来区分"校准点切换前后"，改成按每条快照自带的
       // calBoundaryId分组渲染，组间插入一道分割线(⋯校准点切换⋯)，两侧数据都
       // 完整保留、都能看到，只是视觉上标出"这里发生过一次校准点变更"，不代表
       // 数据被抹掉。旧数据(没有calBoundaryId字段，v4.10.4之前写入的)按undefined
       // 处理，只要连续几条的calBoundaryId相同就不插分割线，缺字段时天然归成一组。
       var segments = [];
-      recent.forEach(function(h){
+      recentDesc.forEach(function(h){
         var last = segments.length ? segments[segments.length-1] : null;
         if(last && last.boundaryId === h.calBoundaryId){
           last.items.push(h);
@@ -4508,10 +4511,11 @@
           segments.push({ boundaryId: h.calBoundaryId, items: [h] });
         }
       });
+      // 组内也是新→旧，箭头方向跟着换成"←"，避免"→"暗示时间正向前进造成误读
       var trendHtml = segments.map(function(seg){
-        return seg.items.map(function(h){ return h.driftSecPerDay.toFixed(3); }).join(' \u2192 ');
+        return seg.items.map(function(h){ return h.driftSecPerDay.toFixed(3); }).join(' \u2190 ');
       }).join(' <span class="trendsep">⋯校准点切换⋯</span> ');
-      html += '<div class="trendline">收敛趋势(近' + recent.length + '次测量): ' + trendHtml + ' 秒/天</div>';
+      html += '<div class="trendline">收敛趋势(近' + recent.length + '次测量，最新→最旧): ' + trendHtml + ' 秒/天</div>';
       if(hist.length > 4){
         html += '<button class="predExpandBtn" id="trendExpandBtn-' + season + '">' +
           (trendIsExpanded ? '收起' : ('展开全部' + hist.length + '次(最多10次)')) + '</button>';
