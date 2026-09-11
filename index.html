@@ -347,6 +347,7 @@
   .bundlehead .statline.st-clockpending{color:var(--ink-dim);}
   .burstspacingwarn{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--bad);}
   .sessioncardclockpending{font-size:10px; color:var(--ink-dim);}
+  .calpendingwarn{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--bad);}
   .calbtn{
     background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
     font-size:10px; padding:3px 8px; border-radius:5px; font-family:inherit; white-space:nowrap;
@@ -429,7 +430,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.17.2</span>
+      <span class="versiontag" id="versionTag">v4.17.3</span>
     </div>
 
     <div id="timePanel">
@@ -1506,6 +1507,12 @@
     }
     if(rec && rec.sessionId){
       refreshBundleStatusInPlace(rec.sessionId);
+    } else if(rec){
+      var calWarnElSingle = document.getElementById('calpendingwarn-' + id);
+      if(calWarnElSingle){
+        calWarnElSingle.textContent = (rec.isCalibration && !rec.clockDisplay)
+          ? '⚠ 校准点挂钟时间还没填，暂不参与统计，请尽快填好让校准点回归统计' : '';
+      }
     }
     renderStats();
     updateDriftHistoryForRecord(id);
@@ -3324,6 +3331,16 @@
       btnrow.appendChild(tempBtn);
     }
     left.appendChild(lt); left.appendChild(ld); left.appendChild(clockRow); left.appendChild(note); left.appendChild(btnrow);
+    // v4.17.3：校准点自己的挂钟时间被清空/还没填时，星标还留在这条上，但它已经不
+    // 贡献数据了(getActiveRecords会把它筛掉，活跃区间实际从后面第一条有效数据算起)。
+    // 这行提示一直挂在DOM里(平时是空文字)，好让setClockDisplay之后能原地patch它，
+    // 不用为了刷新这一行提示又去整行重渲染。
+    var calPendingWarn = document.createElement('div');
+    calPendingWarn.id = 'calpendingwarn-' + r.id;
+    calPendingWarn.className = 'calpendingwarn';
+    calPendingWarn.textContent = (r.isCalibration && !r.clockDisplay)
+      ? '⚠ 校准点挂钟时间还没填，暂不参与统计，请尽快填好让校准点回归统计' : '';
+    left.appendChild(calPendingWarn);
     var del = document.createElement('button');
     if(locked){
       del.className = 'lx lx-locked';
@@ -3416,6 +3433,13 @@
     if(warnEl){
       var spacingIssues = burstSpacingIssues(members);
       warnEl.textContent = spacingIssues.length ? ('⚠ 挂钟间隔异常：' + spacingIssues.join('；')) : '';
+    }
+    var calWarnEl = document.getElementById('calpendingwarn-session-' + sessionId);
+    if(calWarnEl){
+      var sessionIsCalNow = members.some(function(r){ return r.isCalibration; });
+      var fillInfoNow = burstClockFillInfo(members);
+      calWarnEl.textContent = (sessionIsCalNow && !fillInfoNow.allFilled)
+        ? '⚠ 校准点挂钟时间还没填完，本组暂不参与统计，请尽快填好让校准点回归统计' : '';
     }
   }
 
@@ -3520,6 +3544,12 @@
     left.appendChild(lt); left.appendChild(ld); left.appendChild(statLine);
     left.appendChild(spacingWarnEl);
     left.appendChild(note); left.appendChild(calRow);
+    var calPendingWarnS = document.createElement('div');
+    calPendingWarnS.id = 'calpendingwarn-session-' + sessionId;
+    calPendingWarnS.className = 'calpendingwarn';
+    calPendingWarnS.textContent = (sessionIsCal && !fillInfo.allFilled)
+      ? '⚠ 校准点挂钟时间还没填完，本组暂不参与统计，请尽快填好让校准点回归统计' : '';
+    left.appendChild(calPendingWarnS);
 
     var expandBtn = document.createElement('button');
     expandBtn.className = 'bundleExpandBtn';
