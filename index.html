@@ -343,6 +343,10 @@
   .clockinput.autofilled{ color:var(--accent); border-color:var(--accent); }
   .clockinput.confirmed{ color:var(--good); border-color:var(--good); }
   .driftresult{font-size:11px; color:var(--accent); font-weight:600;}
+  .driftresult.pending{color:var(--ink-dim); font-weight:400;}
+  .bundlehead .statline.st-clockpending{color:var(--ink-dim);}
+  .burstspacingwarn{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--bad);}
+  .sessioncardclockpending{font-size:10px; color:var(--ink-dim);}
   .calbtn{
     background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
     font-size:10px; padding:3px 8px; border-radius:5px; font-family:inherit; white-space:nowrap;
@@ -425,7 +429,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.16.1</span>
+      <span class="versiontag" id="versionTag">v4.17.0</span>
     </div>
 
     <div id="timePanel">
@@ -727,7 +731,7 @@
         <h4>统计与季节模型</h4>
         <p style="margin-top:0;">至少3条记录才会计算漂移趋势，间隔越长(建议约1周一次)、点数越多越准。手动校正过挂钟后，给校正后第一条记录点"设为校准点"，之前数据会被排除。</p>
         <p>季节模型：室温影响漂移速率，夏冬分开建模，近期记录权重更高(约5周半衰期)。校准点全局生效，但对表后各季节仍从各自最近数据重新起算。</p>
-        <p>挂钟显示时间：填入按下按钮那一刻挂钟显示的HH:MM，app会算出实际漂移秒数，优先级高于自动估算且不受60秒周期限制；不填则自动估算。连拍3条可分别填，缺的用自动估算补上。</p>
+        <p>挂钟显示时间：填入按下按钮那一刻挂钟显示的HH:MM，app会算出实际漂移秒数。不再自动填入或估算(v4.15.0~v4.16.1那套自动猜测已下线，实机验证时准时不准，不可靠)——抓拍后这一栏是空的，数据先标"等待输入挂钟时间"，暂不进入统计/收敛；填完才正式计入。连拍3张必须整组填完才算数，缺一张整组仍是待定状态；填完后app会检查相邻两张挂钟是否恰好相差1分钟，对不上会提示核对。</p>
         <p>置信星级：综合数据量、时间跨度、拟合优度换算，仅供参考。<b>提示：</b>同一天多次单独记录对提升星级帮助有限，拉开测量间隔(不同天/周)更有效；同一天想降噪用连拍模式(3次)即可，会自动折叠成一个点。</p>
         <p>统计卡片"参与计算N条 · 跨度X天"里的跨度天数，是这批数据实际覆盖的时间范围(用未捏合的原始时间戳计算)，不足1天显示"不足1天"。</p>
       </div>
@@ -1478,23 +1482,33 @@
       }
     }
     saveRecords();
-    var inputEl = document.getElementById('clockinput-' + id);
-    if(inputEl && rec){ inputEl.className = 'clockinput ' + clockInputStateClass(rec); }
-    var driftEl = document.getElementById('drift-' + id);
-    if(driftEl && rec){
-      if(rec.explicitDriftMs !== null && rec.explicitDriftMs !== undefined){
-        var dsec = rec.explicitDriftMs / 1000;
-        var latAdj = (typeof rec.detectionLatencyMs === 'number') ? rec.detectionLatencyMs : 0;
-        var correctedSec = ((rec.explicitDriftMs - latAdj) / 1000).toFixed(3);
-        driftEl.textContent = dsec >= 0
-          ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
-          : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
-      } else {
-        driftEl.textContent = '';
+    if(rec && rec.sessionId){
+      // v4.17.0：连拍组的"是否全填完/间隔对不对"依赖组内全部成员的状态，
+      // 不是单条patch能覆盖的，这里直接整个log区重渲染一次；change事件本来就是
+      // 输入框失焦后才触发，此时重渲染不会打断用户正在打字。
+      renderLog();
+    } else {
+      var inputEl = document.getElementById('clockinput-' + id);
+      if(inputEl && rec){ inputEl.className = 'clockinput ' + clockInputStateClass(rec); }
+      var driftEl = document.getElementById('drift-' + id);
+      if(driftEl && rec){
+        if(rec.explicitDriftMs !== null && rec.explicitDriftMs !== undefined){
+          var dsec = rec.explicitDriftMs / 1000;
+          var latAdj = (typeof rec.detectionLatencyMs === 'number') ? rec.detectionLatencyMs : 0;
+          var correctedSec = ((rec.explicitDriftMs - latAdj) / 1000).toFixed(3);
+          driftEl.className = 'driftresult';
+          driftEl.textContent = dsec >= 0
+            ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
+            : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
+        } else {
+          driftEl.className = 'driftresult pending';
+          driftEl.textContent = '等待输入挂钟时间 · 暂不参与统计';
+        }
       }
     }
     renderStats();
     updateDriftHistoryForRecord(id);
+    renderCameraSessionList();
   }
 
   var SEG_IDS = ['segY','segMo','segD','segH','segMi','segS','segMs'];
@@ -1698,33 +1712,12 @@
       sessionId: sessionId || null,
       clockDisplayAutoFilled: false
     };
-    // v4.15.0：新记录先用当前漂移模型自动猜一个"挂钟显示"，依据就是统计页
-    // "本周期已漂移进度"用的同一条回归线(computeProjectionAt)，代入这条记录
-    // 实际捕获的时刻算出预测漂移量，反推此刻挂钟大概显示什么，省得每次手动输入。
-    // 模型数据不够(还没ok)就什么都不填，退回纯手动——不为了这种情况另写兜底逻辑，
-    // 手动修正本身就是设计好的兜底手段，不要求自动填入100%正确。
-    var proj = computeProjectionAt(rec.season, t);
-    if(proj.ok){
-      var latAdjGuess = rec.detectionLatencyMs || 0;
-      var predictedRawDriftMs = proj.projectedYms + latAdjGuess;
-      // v4.15.1修复：原来直接对两个很大的毫秒时间戳(t和t-predictedRawDriftMs)做浮点减法
-      // 再取分钟，在漂移量正好卡在分钟边界附近时，大数浮点减法精度丢失会导致取整分钟
-      // 跟旁边显示的"已漂移X秒"文案对不上(挂钟显示猜成上一分钟，但漂移秒数还是对的)。
-      // 改成纯整数分钟计数：先把漂移拆成"整分钟数+零头毫秒"，再跟捕获时刻自己这一分钟
-      // 已经过去的毫秒数比较——如果捕获时刻自己才过了没多久、比漂移零头还少，说明挂钟
-      // 还没跳过来，要多退1分钟。这样退出来的分钟和predictedRawDriftMs在数学上完全等价
-      // (不是近似)，且不经过大数减法，不会再出现边界抖动。
-      var driftWholeMin = Math.floor(predictedRawDriftMs / 60000);
-      var driftRemainderMs = predictedRawDriftMs - driftWholeMin * 60000;
-      var tRemainderMs = t % 60000;
-      if(tRemainderMs < driftRemainderMs){ driftWholeMin += 1; }
-      var tMinuteBucket = Math.floor(t / 60000);
-      var clockMinuteBucket = tMinuteBucket - driftWholeMin;
-      var pd = new Date(clockMinuteBucket * 60000);
-      rec.clockDisplay = pad(pd.getHours(),2) + ':' + pad(pd.getMinutes(),2);
-      rec.explicitDriftMs = predictedRawDriftMs;
-      rec.clockDisplayAutoFilled = true;
-    }
+    // v4.17.0：移除挂钟时间自动填入。v4.15.0~v4.16.1这套"用回归模型反推挂钟显示"的
+    // 方案，即便v4.15.1修完了取整分钟的算法bug，仍然会因为回归模型本身的预测误差
+    // (不是代码问题，是拟合残差)偶尔猜错整整1分钟——多次实机验证下来时准时不准，没法信。
+    // 改回纯手动：clockDisplay/explicitDriftMs保持空值，等用户在下面手动填入HH:MM，
+    // 具体走nearestDisplayedTimestamp()那条唯一路径(见setClockDisplay)，不会再有
+    // "自动填的值"和"手动改的值"两条算法各算各的、互相对不上的问题。
     insertRecordSorted(rec);
     saveRecords();
     renderLog();
@@ -3054,7 +3047,15 @@
       var key = item.kind === 'burst' ? ('b:' + item.sessionId) : ('r:' + item.id);
       var isPending = (pendingSessionDeleteId === key);
       var label;
+      // v4.17.0：抓拍后挂钟时间不再自动填，这里提示一下还没填、暂不进统计，
+      // 跟下面删除按钮的"pending"(等待二次确认)是两回事，这里换个类名避免混淆。
+      var clockNotFilled;
       if(item.kind === 'burst'){
+        var filledCount = item.ids.filter(function(rid){
+          var rr = records.filter(function(x){ return x.id === rid; })[0];
+          return rr && !!rr.clockDisplay;
+        }).length;
+        clockNotFilled = filledCount < item.ids.length;
         label = '连拍×' + item.ids.length + ' · 最后一次 ' + timeStr;
         if(item.quality){
           var extraNote = item.qualityReason ? (' · ' + item.qualityReason)
@@ -3062,8 +3063,16 @@
           label += '<br><span class="continuitytag q-' + item.quality + '" style="margin-left:0;">' +
             item.qualityLabel + extraNote + '</span>';
         }
+        if(clockNotFilled){
+          label += '<br><span class="sessioncardclockpending">等待输入挂钟时间(已填' + filledCount + '/' + item.ids.length + ') · 暂不参与统计</span>';
+        }
       } else {
+        var rr2 = records.filter(function(x){ return x.id === item.id; })[0];
+        clockNotFilled = !(rr2 && rr2.clockDisplay);
         label = timeStr;
+        if(clockNotFilled){
+          label += '<br><span class="sessioncardclockpending">等待输入挂钟时间 · 暂不参与统计</span>';
+        }
       }
       var delText = isPending ? '确认删除？' : (item.kind === 'burst' ? '删除整组' : '×');
       html += '<div class="sessionCard"><span>' + label + '</span>' +
@@ -3279,7 +3288,8 @@
         ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
         : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
     } else {
-      driftSpan.textContent = '';
+      driftSpan.className = 'driftresult pending';
+      driftSpan.textContent = '等待输入挂钟时间 · 暂不参与统计';
     }
     clockRow.appendChild(clockLabel);
     clockRow.appendChild(clockInput);
@@ -3354,6 +3364,34 @@
     return { cls:'st-pending', text:'参与统计: 尚未计算' };
   }
 
+  // v4.17.0：连拍组"1组"必须全部填完挂钟时间才正式计入统计，这里给折叠头一句更明确的话，
+  // 区分"完全没填"和"填了一部分"，跟formatSessionStatsLine那套"已经在算了"的状态分开说。
+  function burstClockFillInfo(members){
+    var filled = members.filter(function(m){ return !!m.clockDisplay; }).length;
+    return { filled: filled, total: members.length, allFilled: filled === members.length };
+  }
+
+  // v4.17.0：连拍设计上每张之间挂钟应该正好跳1分钟(如00:15→00:16→00:17)，
+  // 检查相邻两张都已填的情况下间隔是不是恰好1分钟(支持跨小时/跨天翻转)，
+  // 揪出"挂钟看错/敲错分钟数"这种人工录入失误，跟漏拍连续性检测(computeSessionContinuity，
+  // 基于实际抓拍时间戳)是两回事——那个查的是"抓拍本身连不连续"，这个查的是"人填的挂钟数字对不对"。
+  function burstSpacingIssues(members){
+    var issues = [];
+    for(var i=1;i<members.length;i++){
+      var prev = members[i-1], cur = members[i];
+      if(!prev.clockDisplay || !cur.clockDisplay){ continue; }
+      var pParts = prev.clockDisplay.split(':');
+      var cParts = cur.clockDisplay.split(':');
+      var pMin = parseInt(pParts[0],10)*60 + parseInt(pParts[1],10);
+      var cMin = parseInt(cParts[0],10)*60 + parseInt(cParts[1],10);
+      var diff = ((cMin - pMin) % 1440 + 1440) % 1440;
+      if(diff !== 1){
+        issues.push('第' + i + '→' + (i+1) + '张 ' + prev.clockDisplay + '→' + cur.clockDisplay + '(相差' + diff + '分钟，应为1)');
+      }
+    }
+    return issues;
+  }
+
   function renderBundleCard(sessionId, members, locked, isLatestSession){
     var meta = sessionMeta[sessionId];
     var expanded = !!expandedSessionIds[sessionId];
@@ -3402,10 +3440,23 @@
       ld.appendChild(heldTagB);
     }
 
+    var fillInfo = burstClockFillInfo(members);
     var statLine = document.createElement('div');
-    var statInfo = formatSessionStatsLine(sessionId, members.length);
-    statLine.className = 'statline ' + statInfo.cls;
-    statLine.textContent = statInfo.text;
+    if(fillInfo.allFilled){
+      var statInfo = formatSessionStatsLine(sessionId, members.length);
+      statLine.className = 'statline ' + statInfo.cls;
+      statLine.textContent = statInfo.text;
+    } else {
+      statLine.className = 'statline st-clockpending';
+      statLine.textContent = '等待输入挂钟时间 · 本组暂不参与统计(已填' + fillInfo.filled + '/' + fillInfo.total + ')';
+    }
+    var spacingIssues = burstSpacingIssues(members);
+    var spacingWarnEl = null;
+    if(spacingIssues.length){
+      spacingWarnEl = document.createElement('div');
+      spacingWarnEl.className = 'burstspacingwarn';
+      spacingWarnEl.textContent = '⚠ 挂钟间隔异常：' + spacingIssues.join('；');
+    }
 
     var note = document.createElement('input');
     note.className = 'noteinput';
@@ -3437,7 +3488,9 @@
       calRow.appendChild(tempBtnS);
     }
 
-    left.appendChild(lt); left.appendChild(ld); left.appendChild(statLine); left.appendChild(note); left.appendChild(calRow);
+    left.appendChild(lt); left.appendChild(ld); left.appendChild(statLine);
+    if(spacingWarnEl){ left.appendChild(spacingWarnEl); }
+    left.appendChild(note); left.appendChild(calRow);
 
     var expandBtn = document.createElement('button');
     expandBtn.className = 'bundleExpandBtn';
@@ -3494,6 +3547,9 @@
           mDrift.textContent = mds >= 0
             ? ('已漂移 ' + mds.toFixed(3) + '秒(落后) 扣除延迟后=' + mCorrectedSec + '秒')
             : ('已领先 ' + Math.abs(mds).toFixed(3) + '秒 扣除延迟后=' + mCorrectedSec + '秒');
+        } else {
+          mDrift.className = 'driftresult pending';
+          mDrift.textContent = '等待输入';
         }
         mClockRow.appendChild(mLabel); mClockRow.appendChild(mInput); mClockRow.appendChild(mDrift);
         item.appendChild(mClockRow);
@@ -3924,6 +3980,17 @@
     });
   }
 
+  // v4.17.0：挂钟时间还没手动填好的记录，暂不参与统计(不进回归/不算收敛/不进锚点)。
+  // 单条捕获：自己没填就是自己pending。连拍组："1组"要么全进要么全不进——组内哪怕
+  // 只有1张没填，整组3张都算pending，不会出现"组内2张已经在拉回归线、1张还没填"这种
+  // 半吊子状态混进统计表。
+  function recordAwaitingClockEntry(r){
+    if(r.sessionId){
+      return records.some(function(x){ return x.sessionId === r.sessionId && !x.clockDisplay; });
+    }
+    return !r.clockDisplay;
+  }
+
   function getActiveRecords(season){
     var sorted = records.slice().sort(function(a,b){ return a.t - b.t; });
     if(tempHeldOut){
@@ -3946,6 +4013,7 @@
       if(sorted[i].isCalibration){ lastCalIdx = i; }
     }
     var afterCal = lastCalIdx >= 0 ? sorted.slice(lastCalIdx) : sorted;
+    afterCal = afterCal.filter(function(r){ return !recordAwaitingClockEntry(r); });
     if(!season){ return afterCal; }
     return afterCal.filter(function(r){ return (r.season || 'summer') === season; });
   }
