@@ -429,7 +429,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.17.1</span>
+      <span class="versiontag" id="versionTag">v4.17.2</span>
     </div>
 
     <div id="timePanel">
@@ -1497,8 +1497,8 @@
         var correctedSec = ((rec.explicitDriftMs - latAdj) / 1000).toFixed(3);
         driftEl.className = 'driftresult';
         driftEl.textContent = dsec >= 0
-          ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
-          : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
+          ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 减延迟=' + correctedSec + '秒')
+          : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 减延迟=' + correctedSec + '秒');
       } else {
         driftEl.className = 'driftresult pending';
         driftEl.textContent = rec.sessionId ? '等待输入' : '等待输入挂钟时间 · 暂不参与统计';
@@ -3286,8 +3286,8 @@
       var latAdj = (typeof r.detectionLatencyMs === 'number') ? r.detectionLatencyMs : 0;
       var correctedSec = ((r.explicitDriftMs - latAdj) / 1000).toFixed(3);
       driftSpan.textContent = dsec >= 0
-        ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
-        : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
+        ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 减延迟=' + correctedSec + '秒')
+        : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 减延迟=' + correctedSec + '秒');
     } else {
       driftSpan.className = 'driftresult pending';
       driftSpan.textContent = '等待输入挂钟时间 · 暂不参与统计';
@@ -3574,8 +3574,8 @@
           var mLatAdj = (typeof m.detectionLatencyMs === 'number') ? m.detectionLatencyMs : 0;
           var mCorrectedSec = ((m.explicitDriftMs - mLatAdj) / 1000).toFixed(3);
           mDrift.textContent = mds >= 0
-            ? ('已漂移 ' + mds.toFixed(3) + '秒(落后) 扣除延迟后=' + mCorrectedSec + '秒')
-            : ('已领先 ' + Math.abs(mds).toFixed(3) + '秒 扣除延迟后=' + mCorrectedSec + '秒');
+            ? ('已漂移 ' + mds.toFixed(3) + '秒(落后) 减延迟=' + mCorrectedSec + '秒')
+            : ('已领先 ' + Math.abs(mds).toFixed(3) + '秒 减延迟=' + mCorrectedSec + '秒');
         } else {
           mDrift.className = 'driftresult pending';
           mDrift.textContent = '等待输入';
