@@ -429,7 +429,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.17.0</span>
+      <span class="versiontag" id="versionTag">v4.17.1</span>
     </div>
 
     <div id="timePanel">
@@ -1482,29 +1482,30 @@
       }
     }
     saveRecords();
-    if(rec && rec.sessionId){
-      // v4.17.0：连拍组的"是否全填完/间隔对不对"依赖组内全部成员的状态，
-      // 不是单条patch能覆盖的，这里直接整个log区重渲染一次；change事件本来就是
-      // 输入框失焦后才触发，此时重渲染不会打断用户正在打字。
-      renderLog();
-    } else {
-      var inputEl = document.getElementById('clockinput-' + id);
-      if(inputEl && rec){ inputEl.className = 'clockinput ' + clockInputStateClass(rec); }
-      var driftEl = document.getElementById('drift-' + id);
-      if(driftEl && rec){
-        if(rec.explicitDriftMs !== null && rec.explicitDriftMs !== undefined){
-          var dsec = rec.explicitDriftMs / 1000;
-          var latAdj = (typeof rec.detectionLatencyMs === 'number') ? rec.detectionLatencyMs : 0;
-          var correctedSec = ((rec.explicitDriftMs - latAdj) / 1000).toFixed(3);
-          driftEl.className = 'driftresult';
-          driftEl.textContent = dsec >= 0
-            ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
-            : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
-        } else {
-          driftEl.className = 'driftresult pending';
-          driftEl.textContent = '等待输入挂钟时间 · 暂不参与统计';
-        }
+    // v4.17.1修复：v4.17.0这里对连拍组走的是renderLog()整体重渲染，但iOS原生时间选择器
+    // 每拨一格就会触发一次change(不是等你两格都调完才触发)，重渲染会把用户正在操作的
+    // 那个输入框DOM节点整个换掉，表现成"一松手就被强制关闭、直接提交当前滚到的值"。
+    // 改成跟单条记录一样的原地patch(输入框/漂移文字用id直接找到、改className和文字)，
+    // 连拍组额外多一步：单独原地刷新组头的"参与统计"状态行和间隔警告行，不碰输入框本身。
+    var inputEl = document.getElementById('clockinput-' + id);
+    if(inputEl && rec){ inputEl.className = 'clockinput ' + clockInputStateClass(rec); }
+    var driftEl = document.getElementById('drift-' + id);
+    if(driftEl && rec){
+      if(rec.explicitDriftMs !== null && rec.explicitDriftMs !== undefined){
+        var dsec = rec.explicitDriftMs / 1000;
+        var latAdj = (typeof rec.detectionLatencyMs === 'number') ? rec.detectionLatencyMs : 0;
+        var correctedSec = ((rec.explicitDriftMs - latAdj) / 1000).toFixed(3);
+        driftEl.className = 'driftresult';
+        driftEl.textContent = dsec >= 0
+          ? ('已漂移 ' + dsec.toFixed(3) + '秒(落后) 扣除延迟后=' + correctedSec + '秒')
+          : ('已领先 ' + Math.abs(dsec).toFixed(3) + '秒 扣除延迟后=' + correctedSec + '秒');
+      } else {
+        driftEl.className = 'driftresult pending';
+        driftEl.textContent = rec.sessionId ? '等待输入' : '等待输入挂钟时间 · 暂不参与统计';
       }
+    }
+    if(rec && rec.sessionId){
+      refreshBundleStatusInPlace(rec.sessionId);
     }
     renderStats();
     updateDriftHistoryForRecord(id);
@@ -3392,6 +3393,32 @@
     return issues;
   }
 
+  // v4.17.1：原地更新连拍组的"参与统计"状态行 + 间隔警告行，不重建整张卡片的DOM。
+  // 之前改一个挂钟输入框就renderLog()整体重渲染，iOS原生时间选择器还在滚动中时
+  // 锚定的输入框节点被换掉，表现成"一松手就被强制关闭、直接提交当前值"——这里改成
+  // 只找这两个id对应的元素改textContent/className，输入框本身的DOM节点全程不动。
+  function refreshBundleStatusInPlace(sessionId){
+    var members = records.filter(function(r){ return r.sessionId === sessionId; }).sort(function(a,b){ return a.t - b.t; });
+    if(!members.length){ return; }
+    var statLineEl = document.getElementById('statline-' + sessionId);
+    if(statLineEl){
+      var fillInfo = burstClockFillInfo(members);
+      if(fillInfo.allFilled){
+        var statInfo = formatSessionStatsLine(sessionId, members.length);
+        statLineEl.className = 'statline ' + statInfo.cls;
+        statLineEl.textContent = statInfo.text;
+      } else {
+        statLineEl.className = 'statline st-clockpending';
+        statLineEl.textContent = '等待输入挂钟时间 · 本组暂不参与统计(已填' + fillInfo.filled + '/' + fillInfo.total + ')';
+      }
+    }
+    var warnEl = document.getElementById('spacingwarn-' + sessionId);
+    if(warnEl){
+      var spacingIssues = burstSpacingIssues(members);
+      warnEl.textContent = spacingIssues.length ? ('⚠ 挂钟间隔异常：' + spacingIssues.join('；')) : '';
+    }
+  }
+
   function renderBundleCard(sessionId, members, locked, isLatestSession){
     var meta = sessionMeta[sessionId];
     var expanded = !!expandedSessionIds[sessionId];
@@ -3442,6 +3469,7 @@
 
     var fillInfo = burstClockFillInfo(members);
     var statLine = document.createElement('div');
+    statLine.id = 'statline-' + sessionId;
     if(fillInfo.allFilled){
       var statInfo = formatSessionStatsLine(sessionId, members.length);
       statLine.className = 'statline ' + statInfo.cls;
@@ -3450,13 +3478,14 @@
       statLine.className = 'statline st-clockpending';
       statLine.textContent = '等待输入挂钟时间 · 本组暂不参与统计(已填' + fillInfo.filled + '/' + fillInfo.total + ')';
     }
+    // v4.17.1：这个警告条一直挂在DOM里(哪怕暂时没问题、内容是空的)，不再用"有问题才创建
+    // 节点"的写法——这样后面setClockDisplay要更新它时可以直接原地改textContent，
+    // 不需要把整张卡片destroy掉重建，避免打断正在操作中的iOS原生时间选择器。
     var spacingIssues = burstSpacingIssues(members);
-    var spacingWarnEl = null;
-    if(spacingIssues.length){
-      spacingWarnEl = document.createElement('div');
-      spacingWarnEl.className = 'burstspacingwarn';
-      spacingWarnEl.textContent = '⚠ 挂钟间隔异常：' + spacingIssues.join('；');
-    }
+    var spacingWarnEl = document.createElement('div');
+    spacingWarnEl.id = 'spacingwarn-' + sessionId;
+    spacingWarnEl.className = 'burstspacingwarn';
+    spacingWarnEl.textContent = spacingIssues.length ? ('⚠ 挂钟间隔异常：' + spacingIssues.join('；')) : '';
 
     var note = document.createElement('input');
     note.className = 'noteinput';
@@ -3489,7 +3518,7 @@
     }
 
     left.appendChild(lt); left.appendChild(ld); left.appendChild(statLine);
-    if(spacingWarnEl){ left.appendChild(spacingWarnEl); }
+    left.appendChild(spacingWarnEl);
     left.appendChild(note); left.appendChild(calRow);
 
     var expandBtn = document.createElement('button');
