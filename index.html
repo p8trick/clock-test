@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<script>var APP_VERSION = '4.19.0'; // ←←← 全项目唯一需要手改的版本号：样式/脚本引用的 ?v= 和页面右上角版本标签都由它生成</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>校准计时器 Clock Calibrator</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta id="appleTitleMeta" name="apple-mobile-web-app-title" content="校准计时器">
+<meta name="theme-color" content="#0b0d10">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.json">
+<script>document.write('<link rel="stylesheet" href="style.css?v=' + APP_VERSION + '">');</script>
+</head>
+<body>
+<div id="app">
+
+  <div id="screenCapture" class="screen">
+    <div class="minibar">
+      <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
+        <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
+      </button>
+      <span class="versiontag" id="versionTag"></span><script>document.getElementById('versionTag').textContent = 'v' + APP_VERSION;</script>
+    </div>
+
+    <div id="timePanel">
+      <span class="datestr" id="datestr">----年--月--日</span>
+      <span class="timestr" id="timestr">--:--:--<span class="ms" id="msstr">.---</span></span>
+    </div>
+
+    <div class="navArea">
+      <button id="openSettingsBtn" class="navBtn"><span class="navicon">⚙️</span>设置</button>
+      <button id="openHelpBtn" class="navBtn"><span class="navicon">❓</span>帮助</button>
+      <button id="openStatsBtn" class="navBtn"><span class="navicon">📊</span>统计</button>
+      <button id="openCameraBigBtn" class="navPrimaryBtn"><span class="navicon">📷</span>摄像头精确捕获</button>
+    </div>
+  </div>
+
+  <div id="screenCamera" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="cameraBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">摄像头精确捕获</span>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button id="devExportBtn" class="iconbtn" style="display:none;">💾导出</button>
+        <button id="devModeBtn" class="iconbtn">🛠️Dev</button>
+        <button id="cameraHelpBtn" class="iconbtn">❓帮助</button>
+      </div>
+    </div>
+
+    <div class="cameraStage">
+      <video id="cameraVideo" playsinline muted autoplay></video>
+      <div class="roiGuide" id="roiGuide">
+        <div class="roiResizeHandle" id="roiResizeHandle"></div>
+        <canvas id="gridOverlayCanvas" style="display:none;"></canvas>
+      </div>
+      <button class="roiResetBtn" id="roiResetBtn">重置ROI</button>
+      <div class="cameraStatusBadge" id="cameraStatusBadge">未启动</div>
+      <div class="camToast" id="camToast" style="display:none;"></div>
+      <div class="cameraTimeOverlay" id="cameraTimeOverlay">--:--:--<span class="cameraMs" id="cameraMsOverlay">.---</span></div>
+      <button class="btKeyStatus notready" id="btKeyStatusBtn">⌨ 检测中...</button>
+      <button class="camFloatBtn camFloatBtnRight" id="gridOverlayToggleBtn">网格</button>
+    </div>
+
+    <button class="diagToggleBtn" id="cameraParamsToggleBtn">拍摄参数 ▾</button>
+    <div class="section" id="cameraParamsDetail" style="display:none;">
+      <div class="tuneRow">
+        <span class="zoomlabel">触发阈值</span>
+        <input type="range" id="sensitivitySlider" min="0" max="50" step="1" value="10" style="flex:1;">
+        <span id="sensitivityVal" class="zoomval">10.0</span>
+      </div>
+      <div class="tuneRow">
+        <span class="zoomlabel">防抖容差</span>
+        <input type="range" id="shakeToleranceSlider" min="0" max="4" value="2" style="flex:1;">
+        <span id="shakeToleranceVal" class="zoomval">2px</span>
+      </div>
+      <div class="burstModeRow">
+        <button class="burstModeBtn active" id="quickModeBtn">快捷模式</button>
+        <button class="burstModeBtn" id="burstModeBtn">连拍模式(3次)</button>
+      </div>
+      <div class="burstModeRow">
+        <button class="burstModeBtn" id="gridDensityCoarseBtn">网格:粗</button>
+        <button class="burstModeBtn active" id="gridDensityMediumBtn">网格:中</button>
+        <button class="burstModeBtn" id="gridDensityFineBtn">网格:细</button>
+      </div>
+    </div>
+
+    <div class="paramsMetaRow" id="paramsMetaRow">
+      <span class="cameraParamsSummaryText" id="cameraParamsSummaryText"></span>
+      <div class="diffMeterWrap" id="diffMeterWrap">
+        <div class="diffMeterBar">
+          <div class="diffMeterFill" id="diffMeterFill"></div>
+          <div class="diffMeterThreshold" id="diffMeterThresholdMarker"></div>
+        </div>
+        <div class="diffMeterLabel" id="diffMeterLabel">-- / --</div>
+      </div>
+    </div>
+
+    <div class="cameraBigBtnRow">
+      <button class="bigCamBtn bigCamBtn-primary" id="cameraStartBtn">开始监测</button>
+      <button class="bigCamBtn" id="cameraManualBtn">手动立即截取</button>
+    </div>
+
+    <div class="zoomRow" id="hwZoomRow" style="display:none;">
+      <span class="zoomlabel">硬件变焦</span>
+      <input type="range" id="hwZoomSlider" style="flex:1;">
+      <span id="hwZoomVal" class="zoomval">1.0x</span>
+    </div>
+
+    <div id="cameraSessionListWrap" style="display:none;"></div>
+
+    <div class="cameraBigBtnRow" id="focusBtnRow" style="display:none;">
+      <button class="bigCamBtn" id="focusLockBtn">尝试锁定对焦</button>
+    </div>
+
+    <div class="section">
+      <div class="diaglive" id="estLatencyDisplay">系统估算延迟: --</div>
+      <button class="diagToggleBtn" id="diagToggleBtn">查看诊断详情 ▾</button>
+      <div class="cameraDiagDetail" id="cameraDiagDetail" style="display:none;"></div>
+    </div>
+
+    <canvas id="cameraCanvas" style="display:none;"></canvas>
+  </div>
+
+  <div id="screenSettings" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="backBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">设置与记录</span>
+    </div>
+
+    <div class="section">
+      <h4>季节模型</h4>
+      <div class="seasonrow">
+        <button class="seasonbtn" id="seasonSummerBtn">☀️ 夏季</button>
+        <button class="seasonbtn" id="seasonWinterBtn">❄️ 冬季</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>时间同步</h4>
+      <button class="iconbtn" id="resyncBtn" style="width:100%;">重新同步</button>
+      <p style="margin-top:10px;">勾选想启用的时间源，至少2个来源互相一致才会用于修正本机时间，否则保守地信任本机。关掉一直失败的来源可以加快同步速度。</p>
+      <div id="sourceToggleList"></div>
+      <label class="mtitle" style="margin-top:12px;">最近一次同步诊断</label>
+      <div id="sourceDiagList"><div class="diagempty">尚未同步</div></div>
+    </div>
+
+    <div class="section">
+      <h4>继电器执行延迟补偿</h4>
+      <p style="margin-top:0;">Tuya继电器从收到指令到真正按下按键完成+1分钟动作，本身有延迟。统计页"继电器建议触发时刻"列表会自动提前扣除这段时间，让继电器实际执行完成的那一刻正好补满60秒，避免每个周期都残留几秒误差。</p>
+      <div class="delayrow">
+        <input type="text" inputmode="decimal" id="delaySecInput" class="seg" style="flex:0 0 70px;">
+        <span style="font-size:12px;color:var(--ink-dim);">秒</span>
+        <button class="iconbtn" id="delaySaveBtn" style="margin-left:auto;">保存</button>
+      </div>
+      <label class="mtitle" style="margin-top:12px;">继电器安装状态</label>
+      <p style="margin-top:0;">观察模式下漂移允许自然超过60秒继续累积，不代表异常；已安装模式仅作状态标记，用于导出JSON时附带背景信息，不影响任何计算。</p>
+      <div class="seasonrow">
+        <button class="seasonbtn" id="relayObserveBtn">🔧 观察模式(未安装)</button>
+        <button class="seasonbtn" id="relayInstalledBtn">⚡ 已安装(自动运行)</button>
+      </div>
+      <label class="mtitle" style="margin-top:12px;">未维护提醒阈值</label>
+      <p style="margin-top:0;">观察模式下，本周期累计漂移超过这个分钟数还没有新校准点介入，统计页会用红色警示提醒——大概率是忘了回来维护。</p>
+      <div class="delayrow">
+        <input type="text" inputmode="decimal" id="staleThresholdInput" class="seg" style="flex:0 0 70px;">
+        <span style="font-size:12px;color:var(--ink-dim);">分钟</span>
+        <button class="iconbtn" id="staleThresholdSaveBtn" style="margin-left:auto;">保存</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>记录管理</h4>
+      <button class="iconbtn" id="manualAddBtn">+ 手动补录一条历史记录(如已过去的校准时刻)</button>
+      <div class="manualform" id="manualForm">
+        <label class="mtitle">补录时刻(可精确到毫秒，每格只填数字，分隔符固定不会被删掉)</label>
+        <div class="segrow">
+          <input type="text" inputmode="numeric" maxlength="4" class="seg seg-y" id="segY" placeholder="YYYY">
+          <span class="segsep">-</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segMo" placeholder="MM">
+          <span class="segsep">-</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segD" placeholder="DD">
+        </div>
+        <div class="segrow" style="margin-top:8px;">
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segH" placeholder="HH">
+          <span class="segsep">:</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segMi" placeholder="MM">
+          <span class="segsep">:</span>
+          <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="segS" placeholder="SS">
+          <span class="segsep">.</span>
+          <input type="text" inputmode="numeric" maxlength="3" class="seg seg-s3" id="segMs" placeholder="mmm">
+        </div>
+        <button class="iconbtn" id="manualFillNowBtn" style="width:100%; margin-top:8px;">填入当前</button>
+        <div class="chkrow" style="margin-top:8px;">
+          <label for="manualLatencyInput" style="font-size:12px; color:var(--ink-dim); margin-right:8px;">扣除系统延迟(ms，可留空)</label>
+          <input type="number" min="0" step="1" id="manualLatencyInput" class="clockinput" style="width:80px;" placeholder="0">
+        </div>
+        <div class="mbtnrow">
+          <button class="iconbtn" id="manualCancelBtn">取消</button>
+          <button class="iconbtn" id="manualConfirmBtn">确认添加</button>
+        </div>
+      </div>
+      <div class="toolrow">
+        <button class="iconbtn" id="exportBtn">导出CSV</button>
+        <button class="iconbtn" id="clearBtn">清空记录</button>
+      </div>
+      <div class="toolrow">
+        <button class="iconbtn" id="exportBackupBtn">导出完整备份(JSON)</button>
+        <button class="iconbtn" id="importBackupBtn">导入完整备份(JSON)</button>
+      </div>
+      <div class="toolrow">
+        <button class="iconbtn" id="exportAnalysisMDBtn">导出AI分析(Markdown)</button>
+      </div>
+      <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
+      <p style="margin-top:8px;">完整备份(backupVersion 2)包含全部原始记录、已封存的数据包、校准切换日志三部分，用于在Safari标签页版本和"添加到主屏幕"PWA版本之间搬迁数据——iOS这两者是完全独立隔离的存储空间，不会自动同步。导入采用合并方式，记录按ID、数据包按ID、切换日志按记录ID+时间戳分别去重，不会覆盖或清空当前已有数据。旧版(v1)备份文件仍可正常导入，只是不含数据包和切换日志两部分。</p>
+      <p style="margin-top:8px;">AI分析导出：把每个历史数据包(重新按当前算法计算出的漂移速率/拟合优度/星级)和当前活跃统计段(同样含星级)一次性打包，专门用来丢给AI做趋势分析、跨包对比、论证年度算法这类用途；跟"完整备份"的区别是它含现成算好的汇总结论，不是只有原始记录。汇总结论整理成人也能顺手看一眼的条目，文末仍附完整JSON方便AI深挖细节。</p>
+    </div>
+
+  </div>
+
+  <div id="clearAllModal" class="modaloverlay" style="display:none;">
+    <div class="modalcard">
+      <h4>永久清空全部数据</h4>
+      <div class="modalsummary" id="clearAllSummary"></div>
+      <button class="iconbtn" id="clearAllBackupNowBtn" style="width:100%; margin-top:12px;">📦 先导出完整备份</button>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="iconbtn" id="clearAllCancelBtn" style="flex:1;">取消</button>
+        <button class="iconbtn" id="clearAllConfirmBtn" style="flex:1; border-color:var(--bad); color:var(--bad);" disabled>永久清空</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screenStats" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="statsBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">漂移统计</span>
+    </div>
+
+    <div class="summaryline" id="summaryLine" style="text-align:center; margin-top:2px;"></div>
+
+    <div class="section">
+      <h4>漂移统计</h4>
+      <div id="statsPanel"></div>
+      <button class="iconbtn" id="clearDriftHistoryBtn" style="width:100%; margin-top:10px;">清空收敛趋势记录</button>
+      <button class="iconbtn" id="openProjectionBtn" style="width:100%; margin-top:8px;">🔍 推算任意时间点</button>
+      <button class="iconbtn" id="openCompareBtn" style="width:100%; margin-top:8px;">📊 多期数据包对比</button>
+    </div>
+
+    <div class="section">
+      <h4>历史记录</h4>
+      <div id="log"><div class="logempty">尚无记录</div></div>
+    </div>
+  </div>
+
+  <div id="screenProjection" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="projectionBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">推算任意时间点</span>
+    </div>
+
+    <div class="section">
+      <h4>🔍 推算任意时间点</h4>
+      <div style="font-size:11px; color:var(--ink-dim); margin-bottom:8px;">基于当前生效模型(季节切换按钮选的那个)的回归线，纯计算不留档，算完自己记，到点了拍照人工比对</div>
+      <div class="segrow">
+        <input type="text" inputmode="numeric" maxlength="4" class="seg seg-y" id="projSegY" placeholder="YYYY">
+        <span class="segsep">-</span>
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegMo" placeholder="MM">
+        <span class="segsep">-</span>
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegD" placeholder="DD">
+      </div>
+      <div class="segrow" style="margin-top:8px;">
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegH" placeholder="HH">
+        <span class="segsep">:</span>
+        <input type="text" inputmode="numeric" maxlength="2" class="seg seg-s2" id="projSegMi" placeholder="MM">
+      </div>
+      <button class="iconbtn" id="projFillNowBtn" style="width:100%; margin-top:8px;">填入当前</button>
+      <button class="iconbtn" id="projCalcBtn" style="width:100%; margin-top:8px;">计算该时刻推算漂移量</button>
+      <div id="projResult" class="statsline" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="screenCompare" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="compareBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">多期数据包对比</span>
+    </div>
+
+    <div class="section">
+      <h4>漂移走势</h4>
+      <div class="comparechartwrap"><canvas id="compareChart" style="width:100%; display:block;"></canvas></div>
+      <p style="margin:6px 0 0;">走势图只画出能算出漂移率的期次；样本不足的期次不参与连线，只在下方列表里如实标注"样本不足"。</p>
+    </div>
+
+    <div class="section">
+      <h4>数据包列表</h4>
+      <div id="comparePkgList"><div class="logempty">尚无已封存的数据包</div></div>
+    </div>
+  </div>
+
+  <div id="pkgDeleteModal" class="modaloverlay" style="display:none;">
+    <div class="modalcard">
+      <h4>永久删除数据包</h4>
+      <div class="modalsummary" id="pkgDeleteSummary"></div>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="iconbtn" id="pkgDeleteCancelBtn" style="flex:1;">取消</button>
+        <button class="iconbtn" id="pkgDeleteConfirmBtn" style="flex:1; border-color:var(--bad); color:var(--bad);" disabled>永久删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screenHelp" class="screen" style="display:none;">
+    <div class="settopbar">
+      <button id="helpBackBtn" class="iconbtn">‹ 返回</button>
+      <span class="settitle">帮助</span>
+    </div>
+
+    <div id="helpContent"></div>
+
+  </div>
+
+</div>
+
+<script>['help','data','camera','ui','app'].forEach(function(n){ document.write('<script src="' + n + '.js?v=' + APP_VERSION + '"><\/script>'); });</script>
+</body>
+</html>

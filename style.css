@@ -1,0 +1,413 @@
+  :root{
+    --bg:#0b0d10;
+    --panel:#12151a;
+    --panel-edge:#1d2128;
+    --ink:#e9edf2;
+    --ink-dim:#7c8593;
+    --accent:#ff8a3d;
+    --accent-dim:#8a5330;
+    --good:#4fd48a;
+    --bad:#ff5c5c;
+    /* v4.17.9/10：不使用 safe-area-inset-bottom，底部留白自己掌控。--gap-bottom=非滚动页(主页/摄像头/推算/对比)底部留白；设置/统计/帮助三个滚动页不留底部空白，直接铺到屏幕底 */
+    --gap-bottom:16px;
+    --mono:'SF Mono','Menlo','Consolas','Roboto Mono',monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100vh;
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',sans-serif;
+    overscroll-behavior:none; user-select:none; -webkit-user-select:none;
+  }
+  /* v4.17.6：iOS standalone 下 100dvh 实测偏小(背景盖不到屏幕底)，只用 100vh，不要再加 dvh 覆盖 */
+  #app{
+    height:100vh;
+    display:flex; flex-direction:column;
+    padding: max(10px, env(safe-area-inset-top)) 12px 0;
+  }
+  .screen{flex:1; min-height:0; display:flex; flex-direction:column; padding-bottom:var(--gap-bottom);}
+
+  .minibar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11px; color:var(--ink-dim); letter-spacing:.03em; flex:0 0 auto; padding:2px 4px 8px;
+  }
+  .syncstatusbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font:inherit; font-size:11px; padding:6px 10px; border-radius:8px;
+    display:flex; align-items:center; gap:2px;
+  }
+  .syncstatusbtn:active{background:var(--panel-edge);}
+  .refreshglyph{margin-left:5px; font-size:13px; color:var(--ink-dim);}
+  .syncdot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle;}
+  .sync-ok{background:var(--good); box-shadow:0 0 6px var(--good);}
+  .sync-bad{background:var(--bad); box-shadow:0 0 6px var(--bad);}
+  .sync-wait{background:var(--ink-dim);}
+
+  .iconbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:11px; padding:5px 10px; border-radius:6px; font-family:inherit;
+  }
+  .iconbtn:active{background:var(--panel-edge); color:var(--ink);}
+  .iconbtn:disabled{opacity:.4;}
+
+  /* v4.1.13 终极清空强提示弹窗——轻量自定义弹窗，不用原生confirm/alert，
+     这个按钮只存在于设置页，不涉及摄像头页那种视频流+蓝牙焦点守卫的连续性任务，
+     没有原生阻塞式弹窗会打断检测循环的风险。 */
+  .modaloverlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.6);
+    display:flex; align-items:center; justify-content:center;
+    z-index:500; padding:20px;
+  }
+  .modalcard{
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:12px;
+    padding:16px; max-width:420px; width:100%; max-height:80vh; overflow-y:auto;
+  }
+  .modalcard h4{margin-top:0; color:var(--bad);}
+  .modalsummary{font-size:12.5px; line-height:1.7; color:var(--ink-dim);}
+  .modalsummary b{color:var(--ink);}
+
+  .seasonrow{display:flex; gap:6px;}
+  .seasonbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:12px; padding:8px 12px; border-radius:8px; font-family:inherit; flex:1;
+  }
+  .seasonbtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.08);}
+
+  .starwrap{position:relative; display:inline-block; font-size:15px; letter-spacing:2px; height:16px; vertical-align:middle;}
+  .star-bg{color:#2a2f38; white-space:nowrap;}
+  .star-fg{position:absolute; top:0; left:0; overflow:hidden; white-space:nowrap; color:var(--accent);}
+
+  .modelblock{margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--panel-edge);}
+  .modelblock:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+  .modelhead{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
+  .modelname{font-size:12px; color:var(--ink-dim); letter-spacing:.03em;}
+  .modelname.iscurrent{color:var(--accent);}
+  .predlist{font-size:12px; color:var(--ink); line-height:1.9; margin-top:2px;}
+  .predlist b{color:var(--ink); font-weight:600;}
+  .predrel{color:var(--ink-dim); font-size:11px;}
+  .predExpandBtn{background:none; border:1px solid var(--panel-edge); color:var(--accent); font-size:11px; padding:3px 8px; border-radius:6px; margin-top:4px;}
+  .progresswrap{margin-top:8px;}
+  .progresslabel{font-size:11px; color:var(--ink-dim); margin-bottom:4px;}
+  .progressbar{height:8px; background:#1a1e25; border-radius:4px; overflow:hidden; border:1px solid var(--panel-edge);}
+  .progressfill{height:100%; background:var(--good); border-radius:4px; transition:width .3s;}
+  .progressfill.over1{background:#ffd93d;}
+  .progressfill.over2{background:var(--bad);}
+  .stalewarn{color:var(--bad) !important; font-weight:600;}
+  .stalewarn-lvl2{color:#fff !important; background:var(--bad); font-weight:700; padding:3px 8px; border-radius:6px; display:inline-block;}
+  .stalewarn-lvl3{color:#fff !important; background:#7a0d0d; font-weight:700; padding:3px 8px; border-radius:6px; display:inline-block; border:1px solid #ff5c5c;}
+  .delayrow{display:flex; align-items:center; gap:8px; margin-top:8px;}
+  .sourcetogglerow{display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--panel-edge); font-size:12px; color:var(--ink-dim);}
+  .sourcetogglerow:last-child{border-bottom:none;}
+  .sourcetogglerow label{flex:1;}
+  .diagempty{color:var(--ink-dim); font-size:11px; padding:6px 0;}
+  .diagrow{font-size:11px; font-family:var(--mono); padding:4px 0; line-height:1.5;}
+  .precaldivider, .precalsummary{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink-dim); padding:8px 4px; border-top:1px dashed var(--panel-edge); border-bottom:1px dashed var(--panel-edge); margin:4px 0;}
+  .precalToggleBtn{background:none; border:1px solid var(--panel-edge); color:var(--accent); font-size:11px; padding:3px 10px; border-radius:6px; flex-shrink:0;}
+  .diag-ok{color:var(--good);}
+  .diag-bad{color:var(--bad);}
+
+  .cameraStage{
+    position:relative; width:100%; aspect-ratio:3/4; background:#000;
+    border-radius:14px; overflow:hidden; margin-top:4px; flex:0 0 auto;
+  }
+  #cameraVideo{width:100%; height:100%; object-fit:cover; display:block;}
+  .roiGuide{
+    position:absolute; top:35%; left:15%; width:70%; height:20%;
+    border:2px solid var(--accent); border-radius:8px; box-shadow:0 0 0 2000px rgba(0,0,0,.35);
+    touch-action:none; cursor:move;
+  }
+  .roiResizeHandle{
+    position:absolute; right:-14px; bottom:-14px; width:28px; height:28px;
+    background:var(--accent); border-radius:50%; border:2px solid #1a0f04;
+    touch-action:none; cursor:nwse-resize;
+  }
+  .roiResetBtn{
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.6); color:var(--ink); font-size:11px; padding:5px 10px;
+    border-radius:6px; border:none; font-family:inherit;
+  }
+  .cameraStatusBadge{
+    position:absolute; top:10px; left:10px; background:rgba(0,0,0,.6); color:var(--ink);
+    font-size:11px; padding:5px 10px; border-radius:6px; font-family:var(--mono);
+  }
+  .camToast{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.85); color:var(--ink); font-size:12px; padding:9px 16px;
+    border-radius:10px; max-width:90%; text-align:center; transition:opacity .3s;
+    border:1px solid var(--panel-edge);
+  }
+  .cameraTimeOverlay{
+    position:absolute; top:10px; right:10px; background:rgba(0,0,0,.6); color:var(--ink);
+    font-size:19px; font-weight:600; padding:6px 12px; border-radius:8px; font-family:var(--mono);
+    font-variant-numeric:tabular-nums;
+  }
+  .cameraTimeOverlay .cameraMs{color:var(--accent); font-size:.6em;}
+  .camFloatBtn{
+    position:absolute; bottom:10px; background:rgba(0,0,0,.65); color:var(--ink);
+    font-size:12px; padding:9px 14px; border-radius:10px; border:1px solid rgba(255,138,61,.5);
+    font-family:inherit;
+  }
+  .camFloatBtnLeft{left:10px;}
+  .camFloatBtnRight{right:10px; border-color:var(--panel-edge);}
+  .camFloatBtn:active{background:rgba(255,138,61,.3);}
+  .camFloatBtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.18);}
+  #gridOverlayCanvas{position:absolute; inset:0; width:100%; height:100%; pointer-events:none;}
+  .cameraStatusBadge.armed{color:var(--bad); font-weight:600;}
+  .cameraStatusBadge.captured{
+    font-size:20px; font-weight:700; padding:12px 20px; color:#fff;
+    background:var(--accent); box-shadow:0 0 0 4px rgba(255,138,61,.3);
+  }
+  .btKeyStatus{
+    position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.6); color:var(--ink-dim);
+    font-size:10px; padding:4px 9px; border-radius:6px; font-family:inherit; border:none;
+  }
+  .btKeyStatus.ready{ color:#8ee08e; }
+  .btKeyStatus.notready{ color:#ff8a3d; }
+  .btKeyStatus:active{ background:rgba(255,138,61,.3); }
+  .diaglive{font-size:12px; color:var(--ink-dim); font-family:var(--mono); margin-top:10px; text-align:center;}
+  .diagToggleBtn{
+    display:block; margin:8px auto 0; background:none; border:none; color:var(--ink-dim);
+    font-size:11px; font-family:inherit; padding:4px;
+  }
+  .cameraDiagDetail{
+    margin-top:6px; padding:10px; background:#0e1116; border:1px solid var(--panel-edge);
+    border-radius:8px; font-size:11px; font-family:var(--mono); color:var(--ink-dim);
+  }
+  .cameraDiagDetail .diagrow{padding:2px 0;}
+  .cameraBigBtnRow{display:flex; gap:8px; margin-top:10px;}
+  .bigCamBtn{
+    flex:1; padding:18px 8px; border-radius:12px; border:1px solid var(--panel-edge);
+    background:var(--panel); color:var(--ink); font-size:14px; font-weight:600; font-family:inherit;
+  }
+  .bigCamBtn:active{background:var(--panel-edge);}
+  .bigCamBtn-primary{background:var(--accent); color:#1a0f04; border-color:var(--accent);}
+  .bigCamBtn-primary:active{background:#e57630;}
+  .bigCamBtn-stop{background:var(--bad); color:#fff; border-color:var(--bad);}
+  .bigCamBtn-stop:active{background:#e04545;}
+  .zoomRow{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:11px; color:var(--ink-dim);}
+  .tuneRow{display:flex; align-items:center; gap:10px; margin-top:10px;}
+  .tuneRow .zoomlabel{font-size:13px; color:var(--ink); font-weight:600; flex:0 0 auto; white-space:nowrap;}
+  .tuneRow .zoomval{width:28px; font-size:13px;}
+  .diffMeterWrap{margin-top:0;}
+  .diffMeterBar{position:relative; height:15px; background:#1a1e25; border:1px solid var(--panel-edge); border-radius:6px; overflow:hidden;}
+  .diffMeterFill{position:absolute; top:0; left:0; bottom:0; width:0%; background:var(--good); transition:width .05s linear, background .1s linear;}
+  .diffMeterFill.triggered{background:var(--accent);}
+  .diffMeterFill.overWarn{background:#ffd93d; transition:width .05s linear;}
+  .diffMeterFill.overDanger{background:var(--bad); transition:width .05s linear;}
+  .diffMeterThreshold{position:absolute; top:0; bottom:0; width:3px; background:#fff; left:0%;}
+  .diffMeterLabel{margin-top:3px; text-align:center; font-size:11px; font-family:var(--mono); color:var(--ink-dim);}
+  .paramsMetaRow{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:8px;}
+  .cameraParamsSummaryText{
+    flex:1 1 150px; min-width:128px; font-size:11.5px; color:var(--ink-dim); font-family:var(--mono);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .paramsMetaRow .diffMeterWrap{flex:1 1 130px; min-width:110px;}
+  .burstModeRow{display:flex; gap:6px; margin-top:8px;}
+  .burstModeBtn{
+    flex:1; background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:11px; padding:6px 4px; border-radius:8px; font-family:inherit;
+  }
+  .burstModeBtn.active{border-color:var(--accent); color:var(--accent); background:rgba(255,138,61,.08);}
+  .zoomlabel{flex:0 0 auto; white-space:nowrap;}
+  .zoomval{flex:0 0 auto; width:34px; text-align:right; font-family:var(--mono);}
+  .trendline{font-size:11px; color:var(--ink-dim); margin-top:6px; font-family:var(--mono);}
+  .trendsep{color:var(--accent); font-family:inherit;}
+
+  .sessionListTitle{font-size:11px; color:var(--ink-dim); letter-spacing:.03em; margin:10px 2px 6px;}
+  .sessionCard{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:10px;
+    padding:9px 10px; margin-bottom:6px; font-family:var(--mono); font-size:12.5px; color:var(--ink);
+  }
+  .sessionCard span{flex:1 1 auto; min-width:0; line-height:1.5;}
+  .sessionCard:last-child{margin-bottom:0;}
+  .sessionCardDel{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-family:inherit; font-size:11px; padding:4px 9px; border-radius:6px; flex:0 0 auto;
+  }
+  .sessionCardDel.pending{color:var(--bad); border-color:var(--bad);}
+
+  .versiontag{font-size:11px; color:var(--ink-dim); font-family:var(--mono); letter-spacing:.02em;}
+
+  #timePanel{
+    flex:0 0 20vh; min-height:96px; margin-top:2px;
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:20px;
+    display:flex; flex-direction:column; justify-content:center; align-items:center;
+    gap:.4em; padding:8px 10px;
+  }
+  .datestr{font-size:16px; color:var(--ink-dim); letter-spacing:.04em; font-family:var(--mono);}
+  .timestr{
+    font-family:var(--mono); font-weight:600; letter-spacing:.01em;
+    font-size:clamp(32px, 12vw, 58px); line-height:1; color:var(--ink);
+    font-variant-numeric:tabular-nums; -webkit-font-feature-settings:"tnum";
+    display:inline-flex; align-items:baseline;
+  }
+  .timestr .ms{font-size:.42em; color:var(--accent); margin-left:.15em;}
+
+  .navArea{flex:1 1 0; display:flex; flex-direction:column; gap:10px; margin-top:16px; min-height:0;}
+  .navBtn{
+    flex:1; width:100%; background:var(--panel); border:1px solid var(--panel-edge); color:var(--ink-dim);
+    border-radius:16px; padding:10px 18px; font-family:inherit; font-size:16px;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .navBtn .navicon{font-size:20px;}
+  .navBtn:active{background:#1a1f27; color:var(--ink); border-color:var(--accent-dim);}
+  .navPrimaryBtn{
+    flex:1.3; width:100%; border:none; border-radius:16px; padding:10px 18px;
+    background:var(--accent); color:#1a0f04; font-size:18px; font-weight:700;
+    font-family:inherit; letter-spacing:.02em;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .navPrimaryBtn:active{background:#e57630;}
+
+  .helptable{width:100%; border-collapse:collapse; font-size:12px; margin-top:4px;}
+  .helptable th, .helptable td{
+    text-align:left; padding:7px 8px; border-bottom:1px solid var(--panel-edge);
+  }
+  .helptable th{color:var(--ink-dim); font-weight:600; font-size:11px; letter-spacing:.03em;}
+  .helptable td{color:var(--ink); font-family:var(--mono);}
+  .helptable td.desc{font-family:inherit; color:var(--ink-dim);}
+  .helptable tr:last-child td{border-bottom:none;}
+  .section h5{margin:14px 0 6px; color:var(--ink-dim); font-size:11px; letter-spacing:.03em; font-weight:600;}
+  .section h5:first-child{margin-top:0;}
+
+  .settopbar{display:flex; align-items:center; gap:10px; flex:0 0 auto; padding:2px 2px 10px;}
+  .settitle{font-size:14px; font-weight:600; color:var(--ink);}
+  #screenSettings, #screenStats{overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:0;}
+  #screenHelp{padding-bottom:0;}
+  #helpContent{flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  .section{
+    margin-top:12px; padding:14px; background:var(--panel);
+    border:1px solid var(--panel-edge); border-radius:12px;
+  }
+  .section h4{margin:0 0 10px; color:var(--ink); font-size:12px; letter-spacing:.03em;}
+  .section p{margin:4px 0; line-height:1.6; font-size:12px; color:var(--ink-dim);}
+  .section code{color:var(--accent); font-family:var(--mono);}
+
+  .toolrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .toolrow .iconbtn{flex:1 1 40%; padding:9px 4px; font-size:11.5px;}
+
+  #manualAddBtn{width:100%;}
+  .manualform{display:none; margin-top:10px; padding:12px; background:#0e1116; border:1px solid var(--panel-edge); border-radius:12px;}
+  .manualform.open{display:block;}
+  .manualform label.mtitle{font-size:11px; color:var(--ink-dim); display:block; margin-bottom:8px; line-height:1.5;}
+  .segrow{display:flex; align-items:center; gap:2px;}
+  .seg{
+    min-width:0; flex:1 1 0; text-align:center; background:#1a1e25; color:var(--ink);
+    border:1px solid var(--panel-edge); border-radius:6px; padding:10px 2px;
+    font-family:var(--mono); font-size:15px; color-scheme:dark;
+  }
+  .seg:focus{border-color:var(--accent); outline:none;}
+  .seg-s3{flex:1.4 1 0;}
+  .segsep{color:var(--ink-dim); font-family:var(--mono); font-size:14px; padding:0 2px; flex:0 0 auto;}
+  .manualform .chkrow{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-dim); margin-top:10px;}
+  .manualform .mbtnrow{display:flex; gap:8px; margin-top:12px;}
+  .manualform .mbtnrow button{flex:1;}
+
+  #log{margin-top:4px;}
+  .logempty{color:var(--ink-dim); font-size:13px; text-align:center; padding:20px 10px;}
+  .logrow{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--panel-edge); font-size:13px;
+  }
+  .logrow:last-child{border-bottom:none;}
+  .logrow .lt{font-family:var(--mono); color:var(--ink);}
+  .logrow .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px;}
+  .logrow .seasontag{display:inline-block; font-size:10px; padding:1px 5px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
+  .logrow .lx{background:none; border:none; color:var(--ink-dim); font-size:16px; padding:4px 8px; white-space:nowrap;}
+  .logrow .lx.lxconfirm{background:var(--bad); color:#fff; font-size:11px; font-weight:600; border-radius:6px; padding:5px 9px;}
+  .logrow.calmarked{background:rgba(255,138,61,.06);}
+  .noteinput{
+    width:100%; background:transparent; border:none; color:var(--ink-dim);
+    font-size:11px; font-family:inherit; padding:2px 0 0; outline:none;
+  }
+  .logbtnrow{display:flex; gap:8px; margin-top:4px;}
+  .clockrow{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;}
+  .clocklabel{font-size:11px; color:var(--ink-dim);}
+  .clockinput{
+    background:#1a1e25; color:var(--ink); border:1px solid var(--panel-edge);
+    border-radius:6px; padding:3px 6px; font-family:var(--mono); font-size:12px; color-scheme:dark;
+  }
+  /* v4.15.0：挂钟显示时间改成自动填入(用当前漂移模型估算)，用颜色区分"系统自己猜的"
+     和"用户手动看过/改过确认的"——不追求自动填入100%正确，手动修改是兜底手段。 */
+  .clockinput.autofilled{ color:var(--accent); border-color:var(--accent); }
+  .clockinput.confirmed{ color:var(--good); border-color:var(--good); }
+  .driftresult{font-size:11px; color:var(--accent); font-weight:600;}
+  .driftresult.pending{color:var(--ink-dim); font-weight:400;}
+  .bundlehead .statline.st-clockpending{color:var(--ink-dim);}
+  .burstspacingwarn{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--bad);}
+  .sessioncardclockpending{font-size:10px; color:var(--ink-dim);}
+  .noisenote{font-size:11px; margin-top:3px; line-height:1.6; color:var(--ink-dim);}
+  .calpendingwarn{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--bad);}
+  .calbtn{
+    background:none; border:1px solid var(--panel-edge); color:var(--ink-dim);
+    font-size:10px; padding:3px 8px; border-radius:5px; font-family:inherit; white-space:nowrap;
+  }
+  .calbtn.calactive{border-color:var(--accent); color:var(--accent);}
+  .calbtn.calmarked-locked{cursor:default;}
+  .calbtn.calbtn-locked{color:var(--ink-dim); opacity:.6; cursor:default;}
+  .calbtn.tempheldoutbtn-active{border-color:#e8c547; color:#e8c547;}
+  .lx.lx-locked{color:var(--ink-dim); opacity:.4; cursor:default;}
+  .logrow.tempheldout, .bundlecard.tempheldout{opacity:.55;}
+  .tempheldouttag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid #e8c547; color:#e8c547;}
+
+  .bundlecard{border-bottom:1px solid var(--panel-edge); padding:10px 0;}
+  .bundlecard:last-child{border-bottom:none;}
+  .bundlecard.calmarked{background:rgba(255,138,61,.06);}
+  .bundlehead{display:flex; justify-content:space-between; align-items:flex-start;}
+  .bundlehead .lt{font-family:var(--mono); color:var(--ink); font-size:13px;}
+  .bundlehead .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:3px; line-height:1.6;}
+  .bundlehead .statline{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--ink-dim);}
+  .bundlehead .statline.st-anchor{color:var(--good);}
+  .bundlehead .statline.st-raw{color:#e8c547;}
+  .bundlehead .statline.st-excluded{color:var(--ink-dim);}
+  .bundlehead .noteinput{margin-top:4px;}
+  .bundlehead .bundleheadcalrow{margin-top:5px;}
+  .continuitytag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid var(--panel-edge); color:var(--ink-dim);}
+  .continuitytag.warn{border-color:var(--bad); color:var(--bad);}
+  .continuitytag.q-excellent{border-color:var(--good); color:var(--good);}
+  .continuitytag.q-fail{border-color:var(--bad); color:var(--bad);}
+  .bundleExpandBtn{
+    position:relative; cursor:pointer; /* 配合下面::before扩展点击热区，不影响实际圆圈视觉大小 */
+    background:none; border:1.5px solid var(--ink-dim); border-radius:50%;
+    color:var(--ink); font-size:14px; line-height:1;
+    width:26px; height:26px; flex:0 0 26px;
+    display:flex; align-items:center; justify-content:center;
+    padding:0; margin-left:8px;
+  }
+  /* v4.12.4：圆圈本身26px直径，实际点按太容易点空/点偏。用一个不可见的
+     ::before伪元素把可点击范围往四周各扩13px(直径约52px，接近视觉圆圈的2倍)，
+     不改变按钮看起来的大小，只是让手指更容易点中。 */
+  .bundleExpandBtn::before{
+    content:''; position:absolute; top:-13px; right:-13px; bottom:-13px; left:-13px;
+  }
+  .bundleExpandBtn:active{background:var(--panel-edge);}
+  .bundlebody{margin-top:8px; padding-left:10px; border-left:2px solid var(--panel-edge);}
+  /* v4.3.1：连拍会话展开区(蓝)跟数据包展开区(橙)分别加淡色底色，
+     黑底上单靠缩进不容易一眼分清是哪种展开，颜色能让人扫一眼就分辨类型。
+     橙色跟对比页走势图用的同一色系，强化"数据包=橙色系"的视觉语言。 */
+  .bundlebody.burstbody{background:rgba(61,166,255,.07); border-left-color:rgba(61,166,255,.45);}
+  .bundlebody.pkgbody{background:rgba(255,138,61,.07); border-left-color:rgba(255,138,61,.45);}
+
+  /* v4.3.0 多期数据包对比页——数据源直接读全局 dataPackages，不做任何本地缓存/快照，
+     删除动作统一走 deletePackageById()，删完立刻反向刷新统计表页的 renderLog()，
+     保证两个页面任何时候看到的都是同一份数组，不会出现"这边删了那边还留着"的窗口期。 */
+  .comparechartwrap{background:#0d0f13; border:1px solid var(--panel-edge); border-radius:10px; padding:8px; margin-bottom:4px;}
+  .comparechartempty{color:var(--ink-dim); font-size:12px; text-align:center; padding:24px 10px;}
+  .pkgcomparerow{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; border-bottom:1px solid var(--panel-edge); padding:10px 0;}
+  .pkgcomparerow:last-child{border-bottom:none;}
+  .pkgcomparerow .info{flex:1; min-width:0;}
+  .pkgcomparerow .lt{font-family:var(--mono); color:var(--ink); font-size:13px;}
+  .pkgcomparerow .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:3px; line-height:1.6;}
+  .pkgdelbtn{background:none; border:1px solid var(--panel-edge); color:var(--bad); font-size:11px; padding:5px 10px; border-radius:6px; flex-shrink:0; font-family:inherit;}
+  .pkgdelbtn:active{background:rgba(255,92,92,.12);}
+  .pkgdelwarn{color:var(--bad); font-weight:600;}
+  .bundleitem{padding:6px 0; font-size:12px;}
+  .bundleitem .lt{font-family:var(--mono); color:var(--ink); font-size:12px;}
+  .bundleitem .ld{font-family:var(--mono); color:var(--ink-dim); font-size:11px; margin-top:2px;}
+  .bundleitem.missedgap{color:var(--bad);}
+  .bundlebtnrow{display:flex; gap:8px; margin-top:8px;}
+
+  .statstitle{font-size:11px; color:var(--ink-dim); letter-spacing:.03em; margin-bottom:8px;}
+  .statsline{font-size:13px; color:var(--ink); line-height:1.7;}
+  .statsbig{font-size:16px; font-weight:700; color:var(--accent); margin:2px 0;}
