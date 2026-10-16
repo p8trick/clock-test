@@ -22,6 +22,8 @@
     --accent-dim:#8a5330;
     --good:#4fd48a;
     --bad:#ff5c5c;
+    /* v4.17.9/10：不使用 safe-area-inset-bottom，底部留白自己掌控。--gap-bottom=非滚动页(主页/摄像头/推算/对比)底部留白；设置/统计/帮助三个滚动页不留底部空白，直接铺到屏幕底 */
+    --gap-bottom:16px;
     --mono:'SF Mono','Menlo','Consolas','Roboto Mono',monospace;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -35,9 +37,9 @@
   #app{
     height:100vh;
     display:flex; flex-direction:column;
-    padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
+    padding: max(10px, env(safe-area-inset-top)) 12px 0;
   }
-  .screen{flex:1; min-height:0; display:flex; flex-direction:column;}
+  .screen{flex:1; min-height:0; display:flex; flex-direction:column; padding-bottom:var(--gap-bottom);}
 
   .minibar{
     display:flex; justify-content:space-between; align-items:center;
@@ -285,7 +287,8 @@
 
   .settopbar{display:flex; align-items:center; gap:10px; flex:0 0 auto; padding:2px 2px 10px;}
   .settitle{font-size:14px; font-weight:600; color:var(--ink);}
-  #screenSettings, #screenStats{overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  #screenSettings, #screenStats{overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:0;}
+  #screenHelp{padding-bottom:0;}
   #helpContent{flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;}
   .section{
     margin-top:12px; padding:14px; background:var(--panel);
@@ -431,7 +434,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.17.8</span>
+      <span class="versiontag" id="versionTag">v4.17.10</span>
     </div>
 
     <div id="timePanel">
