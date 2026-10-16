@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta id="appleTitleMeta" name="apple-mobile-web-app-title" content="校准计时器">
 <meta name="theme-color" content="#0b0d10">
-<link id="favicon" rel="icon" href="">
-<link id="appleicon" rel="apple-touch-icon" href="">
-<link id="manifestLink" rel="manifest" href="">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.json">
 <style>
   :root{
     --bg:#0b0d10;
@@ -26,13 +26,14 @@
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{
-    margin:0; padding:0; height:100%;
+    margin:0; padding:0; height:100vh;
     background:var(--bg); color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',sans-serif;
     overscroll-behavior:none; user-select:none; -webkit-user-select:none;
   }
+  /* v4.17.6：iOS standalone 下 100dvh 实测偏小(背景盖不到屏幕底)，只用 100vh，不要再加 dvh 覆盖 */
   #app{
-    height:100vh; height:100dvh;
+    height:100vh;
     display:flex; flex-direction:column;
     padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
   }
@@ -430,7 +431,7 @@
       <button id="syncStatusBtn" class="syncstatusbtn" aria-label="点击重新同步">
         <span id="syncdot" class="syncdot sync-wait"></span><span id="syncstatus">正在同步...</span><span class="refreshglyph">↻</span>
       </button>
-      <span class="versiontag" id="versionTag">v4.17.5</span>
+      <span class="versiontag" id="versionTag">v4.17.8</span>
     </div>
 
     <div id="timePanel">
@@ -4919,29 +4920,6 @@
     closeClearAllModal();
   }
 
-  function buildIconDataUrl(){
-    var canvas = document.createElement('canvas');
-    canvas.width = 192; canvas.height = 192;
-    var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#0b0d10';
-    ctx.fillRect(0,0,192,192);
-    ctx.strokeStyle = '#ff8a3d';
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    ctx.arc(96,96,72,0,Math.PI*2);
-    ctx.stroke();
-    ctx.strokeStyle = '#e9edf2';
-    ctx.lineWidth = 8;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(96,96); ctx.lineTo(96,50);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(96,96); ctx.lineTo(128,110);
-    ctx.stroke();
-    return canvas.toDataURL('image/png');
-  }
-
   function getLocalizedAppName(){
     var lang = ((navigator.language || (navigator.languages && navigator.languages[0]) || 'en') + '').toLowerCase();
     if(lang.indexOf('zh') === 0){
@@ -4951,37 +4929,10 @@
   }
 
   function setupPWA(){
-    var iconUrl = buildIconDataUrl();
-    document.getElementById('favicon').href = iconUrl;
-    document.getElementById('appleicon').href = iconUrl;
-
     var appNames = getLocalizedAppName();
     document.title = appNames.name;
     var appleTitleMeta = document.getElementById('appleTitleMeta');
     if(appleTitleMeta){ appleTitleMeta.setAttribute('content', appNames.shortName); }
-
-    var manifest = {
-      name: appNames.name,
-      short_name: appNames.shortName,
-      start_url: './',
-      display: 'standalone',
-      background_color: '#0b0d10',
-      theme_color: '#0b0d10',
-      icons: [{ src: iconUrl, sizes: '192x192', type: 'image/png' }]
-    };
-    var manifestBlob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
-    document.getElementById('manifestLink').href = URL.createObjectURL(manifestBlob);
-
-    if('serviceWorker' in navigator){
-      var swCode = [
-        "self.addEventListener('install', function(e){ self.skipWaiting(); });",
-        "self.addEventListener('activate', function(e){ self.clients.claim(); });",
-        "self.addEventListener('fetch', function(e){});"
-      ].join('\n');
-      var swBlob = new Blob([swCode], {type:'application/javascript'});
-      var swUrl = URL.createObjectURL(swBlob);
-      navigator.serviceWorker.register(swUrl).catch(function(){});
-    }
   }
 
   function renderSeasonButtons(){
