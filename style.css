@@ -337,6 +337,8 @@
   .bundlehead .statline.st-clockpending{color:var(--ink-dim);}
   .burstspacingwarn{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--bad);}
   .sessioncardclockpending{font-size:10px; color:var(--ink-dim);}
+  .sincelast{text-align:center; font-size:13px; color:var(--ink-dim); margin-top:4px; line-height:1.6;}
+  .sincelast b{color:var(--accent); font-weight:700;}
   .noisenote{font-size:11px; margin-top:3px; line-height:1.6; color:var(--ink-dim);}
   .calpendingwarn{font-family:var(--mono); font-size:11px; margin-top:3px; line-height:1.6; color:var(--bad);}
   .calbtn{
