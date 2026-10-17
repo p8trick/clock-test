@@ -1537,7 +1537,51 @@
     renderStats();
   }
 
+  // v4.19.2：统计页顶部"距上次抓拍多久"——进统计页一眼看出多久没记录。
+  // 格式规则：<1分钟→不到1分钟；<1小时→x分钟；<1天→x小时y分钟；<1个月→x天y小时；
+  // ≥1个月→x个月y天(不再显示小时)；≥1年→x年y个月(不再显示天)。月份按日历月算，不是固定30天。
+  function addMonthsClamped(d, n){
+    var y = d.getFullYear(), m = d.getMonth() + n;
+    var lastDay = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(d.getDate(), lastDay), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+  }
+
+  function formatElapsedSince(t, now){
+    var MIN = 60000, HOUR = 3600000, DAY = 86400000;
+    var ms = now - t;
+    if(ms < MIN){ return '不到1分钟'; }
+    var a = new Date(t), b = new Date(now);
+    var months = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+    while(months > 0 && addMonthsClamped(a, months).getTime() > now){ months--; }
+    if(months >= 12){
+      var yrs = Math.floor(months / 12), restM = months % 12;
+      return yrs + '年' + (restM ? (restM + '个月') : '');
+    }
+    if(months >= 1){
+      var restD = Math.floor((now - addMonthsClamped(a, months).getTime()) / DAY);
+      return months + '个月' + (restD ? (restD + '天') : '');
+    }
+    var days = Math.floor(ms / DAY);
+    if(days >= 1){
+      var hrs = Math.floor((ms % DAY) / HOUR);
+      return days + '天' + (hrs ? (hrs + '小时') : '');
+    }
+    var h = Math.floor(ms / HOUR);
+    var mi = Math.floor((ms % HOUR) / MIN);
+    if(h >= 1){ return h + '小时' + (mi ? (mi + '分钟') : ''); }
+    return mi + '分钟';
+  }
+
+  function renderSinceLastLine(){
+    var el = document.getElementById('sinceLastLine');
+    if(!el){ return; }
+    if(!records.length){ el.textContent = '⏱ 还没有抓拍记录'; return; }
+    var lastT = records.reduce(function(mx, r){ return r.t > mx ? r.t : mx; }, records[0].t);
+    el.innerHTML = '⏱ 距上次抓拍 <b>' + formatElapsedSince(lastT, nowCorrected()) + '</b>';
+  }
+
   function renderStats(){
+    renderSinceLastLine();
     var el = document.getElementById('statsPanel');
     var html = renderModelBlock(seasonMode, true);
     var otherSeason = seasonMode === 'summer' ? 'winter' : 'summer';
