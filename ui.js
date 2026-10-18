@@ -1772,13 +1772,16 @@
     // v4.1.13: backupVersion 2 —— 补上 v1 遗漏的 dataPackages(已封存数据包)和
     // calibrationSwitchLog(校准切换日志)，否则在Safari标签页/PWA之间搬迁数据时，
     // 已经打包的期次会在新环境里变回散装记录，包边界信息永久丢失。
+    // v4.19.3: backupVersion 3 —— 补上连拍会话元信息sessionMeta(含用户填的整组备注)。
+    // 此前不含它，删除PWA重装后导入，连拍卡片会显示"会话数据不完整"。
     var payload = {
-      backupVersion: 2,
+      backupVersion: 3,
       exportedAt: Date.now(),
       recordCount: records.length,
       records: records,
       dataPackages: dataPackages,
-      calibrationSwitchLog: calibrationSwitchLog
+      calibrationSwitchLog: calibrationSwitchLog,
+      sessionMeta: sessionMeta
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     shareOrDownloadBlob(blob, 'clock-full-backup-' + Date.now() + '.json', 'application/json');
@@ -1849,6 +1852,28 @@
         saveCalSwitchLog();
       }
 
+      // v4.19.3: 恢复连拍会话元信息。先合并备份里的sessionMeta(保留整组备注等，只补本机没有的)，
+      // 再对仍缺元信息的会话(v2旧备份、或备份缺项)按记录重算。重算不改记录本身；
+      // 只有备注无法从记录推出，所以v2备份导入后整组备注会是空的。
+      var metaRestored = 0, metaRebuilt = 0;
+      if(data.sessionMeta && typeof data.sessionMeta === 'object' && !Array.isArray(data.sessionMeta)){
+        var sidsInRecords = {};
+        records.forEach(function(r){ if(r.sessionId){ sidsInRecords[r.sessionId] = true; } });
+        Object.keys(data.sessionMeta).forEach(function(sid){
+          if(sidsInRecords[sid] && !sessionMeta[sid] && data.sessionMeta[sid] && typeof data.sessionMeta[sid] === 'object'){
+            sessionMeta[sid] = data.sessionMeta[sid];
+            metaRestored++;
+          }
+        });
+      }
+      var missingSids = {};
+      records.forEach(function(r){ if(r.sessionId && !sessionMeta[r.sessionId]){ missingSids[r.sessionId] = true; } });
+      Object.keys(missingSids).forEach(function(sid){
+        computeSessionContinuity(sid);
+        if(sessionMeta[sid]){ metaRebuilt++; }
+      });
+      saveSessionMeta();
+
       renderLog();
       renderStats();
       var msg = '导入完成：新增 ' + added + ' 条记录，跳过 ' + skipped + ' 条重复/无效记录。';
@@ -1857,6 +1882,9 @@
       }
       if(Array.isArray(data.calibrationSwitchLog)){
         msg += ' 校准切换日志新增 ' + logAdded + ' 条。';
+      }
+      if(metaRestored || metaRebuilt){
+        msg += ' 连拍会话信息恢复 ' + metaRestored + ' 组，按记录重算 ' + metaRebuilt + ' 组。';
       }
       msg += ' 设置(季节/延迟补偿/收敛趋势等)不受导入影响。';
       alert(msg);
